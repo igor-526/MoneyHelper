@@ -1,0 +1,54 @@
+name: moneyhelper
+
+services:
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: moneyhelper-backend
+    restart: always
+    env_file:
+      - path: ../backend/.env
+        required: true
+    expose:
+      - "8000"
+    ports:
+      - "${EXPOSE_APP_PORT}:8000"
+    volumes:
+      - ../backend/src:/app/src:${DEV_MOUNT:-ro}
+    working_dir: /app/
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - moneyhelper_network
+
+  backend-migration:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    image: moneyhelper-backend-migration:latest
+    container_name: moneyhelper-backend-migration
+    restart: "no"
+    env_file:
+      - path: ../backend/.env
+        required: true
+    volumes:
+      - ../backend/src:/app/src:${DEV_MOUNT:-ro}
+    working_dir: /app/src
+    command: >
+      sh -c 'if [ "$$SKIP_MIGRATIONS" = "true" ]; then
+        echo "Миграции пропущены (SKIP_MIGRATIONS=true)";
+        exit 0;
+      else
+        uv run --no-sync alembic -c alembic.ini upgrade head;
+      fi'
+    networks:
+      - moneyhelper_network
+
+networks:
+  moneyhelper_network:
+    external: true

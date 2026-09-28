@@ -1,0 +1,94 @@
+/* Цвета страницы до загрузки antd и для экрана ошибки; совпадают с фоном темы antd (colorBgLayout) */
+:root {
+  --app-bg: #f5f5f5;
+  --app-fg: rgba(0, 0, 0, 0.88);
+  --app-surface: #ffffff;
+  --app-border: rgba(5, 5, 5, 0.12);
+  --app-primary: #1677ff;
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --app-bg: #000000;
+  --app-fg: rgba(255, 255, 255, 0.85);
+  --app-surface: #141414;
+  --app-border: rgba(253, 253, 253, 0.12);
+  --app-primary: #1668dc;
+  color-scheme: dark;
+}
+
+/* Если скрипт темы не сработал, следуем системной настройке */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --app-bg: #000000;
+    --app-fg: rgba(255, 255, 255, 0.85);
+    --app-surface: #141414;
+    --app-border: rgba(253, 253, 253, 0.12);
+    --app-primary: #1668dc;
+    color-scheme: dark;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100dvh;
+}
+
+body {
+  background: var(--app-bg);
+  color: var(--app-fg);
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans",
+    sans-serif;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  overflow-x: hidden;
+}
+
+a,
+button,
+[role="button"] {
+  touch-action: manipulation;
+}
+
+/* Экран ошибки (ErrorBoundary): не зависит от antd */
+.fatal {
+  display: flex;
+  min-height: 100dvh;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
+  text-align: center;
+}
+
+.fatal h1 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.fatal p {
+  margin: 0;
+  max-width: 420px;
+}
+
+.fatal button {
+  min-height: 44px;
+  min-width: 180px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--app-primary);
+  color: #ffffff;
+  font-size: 16px;
+  cursor: pointer;
+}

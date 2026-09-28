@@ -1,0 +1,42 @@
+.shell {
+  --tab-bar-height: 60px;
+  min-height: 100dvh;
+  background: var(--shell-bg);
+  padding-top: env(safe-area-inset-top);
+}
+
+/* Отступ снизу, чтобы фиксированная панель не перекрывала последний элемент */
+.main {
+  padding: 16px 16px calc(var(--tab-bar-height) + env(safe-area-inset-bottom) + 16px);
+}
+
+.tabBar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 900;
+  display: flex;
+  height: calc(var(--tab-bar-height) + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
+  background: var(--bar-bg);
+  border-top: 1px solid var(--bar-border);
+}
+
+.item {
+  display: flex;
+  flex: 1;
+  min-width: 44px;
+  min-height: 44px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: var(--item-color);
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.active {
+  color: var(--item-active);
+}

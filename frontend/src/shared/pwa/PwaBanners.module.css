@@ -1,0 +1,22 @@
+.stack {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+  pointer-events: none;
+}
+
+.stack > * {
+  pointer-events: auto;
+}
+
+/* Над нижней панелью навигации (высота панели + безопасная зона) */
+.aboveTabBar {
+  bottom: calc(var(--tab-bar-height, 60px) + env(safe-area-inset-bottom));
+  padding-bottom: 8px;
+}

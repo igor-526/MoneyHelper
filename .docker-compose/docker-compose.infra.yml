@@ -1,0 +1,27 @@
+name: moneyhelper
+
+services:
+  db:
+    image: postgres:16
+    container_name: moneyhelper-db
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    expose:
+      - 5432
+    ports:
+      - "${EXPOSE_DB_PORT}:5432"
+    volumes:
+      - moneyhelper_db_data:/var/lib/postgresql/data
+    networks:
+      - moneyhelper_network
+
+networks:
+  moneyhelper_network:
+    external: true
+
+volumes:
+  moneyhelper_db_data:
+    name: moneyhelper_db_data

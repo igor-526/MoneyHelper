@@ -1,0 +1,77 @@
+.idea/
+.dumps/
+*.log
+.DS_Store
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+.venv-*/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+.env
+.env.*
+!.env.example
+# Исходники сервисов — отдельные git-репозитории (см. services.manifest)
+/services/
+# Оркестратор — отдельный git-репозиторий, не часть eqSiteCMS (см. docs/tasks/agent_orchestration)
+/orchestrator/
+.claude/skills/api-researcher/task_*
+*/.obsidian/
+.kube/
+.directory
+/docs/parsings/
+
+# Редакторы и ОС
+.vscode/
+*.swp
+*.swo
+*~
+Thumbs.db
+
+# Claude Code: локальные настройки не коммитятся
+.claude/settings.local.json
+
+# Backend (Python)
+.coverage.*
+coverage.xml
+.tox/
+.nox/
+.hypothesis/
+.pyre/
+.dmypy.json
+dmypy.json
+*.egg
+.eggs/
+pip-log.txt
+
+# Локальные данные Docker-сервисов
+pgdata/
+
+# Frontend (React + Vite)
+dist/
+build/
+frontend/coverage/
+frontend/.vite/
+*.tsbuildinfo
+.eslintcache
+.stylelintcache
+.parcel-cache/
+.cache/
+.npm/
+.pnpm-store/
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
