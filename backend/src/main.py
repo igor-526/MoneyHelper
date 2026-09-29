@@ -3,12 +3,15 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from api.auth import router as auth_router
+from api.currencies import router as currencies_router
 from api.errors import register_error_handlers
+from seeds import SEED_DEFINITIONS
 from settings import settings
 from utils.configure_cors import configure_cors
 from utils.configure_sentry import configure_sentry
-from utils.database import close_database
+from utils.database import close_database, engine
 from utils.origin_check_middleware import OriginCheckMiddleware
+from utils.seeding import run_seeding
 from utils.unhandled_error_middleware import UnhandledErrorMiddleware
 
 configure_sentry()
@@ -16,6 +19,8 @@ configure_sentry()
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    if settings.seeding_enabled:
+        await run_seeding(engine, SEED_DEFINITIONS)
     yield
     await close_database()
 
@@ -28,6 +33,7 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     application.include_router(auth_router)
+    application.include_router(currencies_router)
 
     register_error_handlers(application)
     # Порядок важен: последний добавленный middleware — самый внешний. Обработчик 500 и проверка Origin

@@ -47,7 +47,7 @@ extend-exclude = [".github", ".helm"]
 select = ["E", "F", "I", "UP", "B", "ASYNC"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["api", "core", "depends", "models", "repositories", "settings", "utils"]
+known-first-party = ["api", "core", "depends", "models", "repositories", "seeds", "settings", "utils"]
 
 [tool.ruff.format]
 quote-style = "double"

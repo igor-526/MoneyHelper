@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     cookie_domain: str | None = Field(default=None, alias="COOKIE_DOMAIN")
     cookie_samesite: Literal["lax", "strict", "none"] = Field(default="lax", alias="COOKIE_SAMESITE")
     registration_enabled: bool = Field(default=False, alias="REGISTRATION_ENABLED")
+    seeding_enabled: bool = Field(default=True, alias="SEEDING_ENABLED")
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

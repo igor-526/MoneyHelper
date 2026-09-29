@@ -21,6 +21,7 @@ src/
 ├── models/          # SQLAlchemy Core tables
 ├── repositories/    # реализации repository protocols
 ├── migration/       # Alembic
+├── seeds/           # справочные данные (JSON) и их SeedDefinition
 ├── utils/           # База данных и инфраструктурные утилиты
 ├── main.py
 └── settings.py
@@ -65,6 +66,8 @@ make test
 - `JWT_SECRET`, `ACCESS_TOKEN_TTL_MINUTES` (15), `REFRESH_TOKEN_TTL_DAYS` (30), `COOKIE_SECURE`, `COOKIE_DOMAIN`,
   `COOKIE_SAMESITE`, `REGISTRATION_ENABLED` — авторизация; токены не хранятся на сервере (см. AGENTS.md, раздел
   «Авторизация»). Вне `development` `JWT_SECRET` обязателен и должен быть не короче 32 символов.
+- `SEEDING_ENABLED` (по умолчанию `true`) — заполнение справочников из `src/seeds/*.json` при старте приложения
+  (см. AGENTS.md, раздел «Сидирование»); в тестах отключается.
 
 ## API
 
@@ -77,6 +80,7 @@ make test
 | POST | `/api/auth/logout` | Выход, гасит сессию на всех устройствах |
 | POST | `/api/auth/password` | Смена пароля |
 | GET | `/api/auth/me` | Текущий пользователь |
+| GET | `/api/currencies` | Постраничный справочник валют |
 
 Пакеты `api`, `core`, `depends`, `models` и `repositories` оставлены как точки расширения для новых бизнес-фич.
 

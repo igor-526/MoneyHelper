@@ -1,0 +1,5 @@
+[
+  {"id": "5f7c7b9e-a33c-4d66-9a0b-eee6f3e98a81", "code": "CNY", "name": "Китайский юань", "decimal_places": 2},
+  {"id": "1c9586e7-c3d6-465b-8efb-81f74a2dc28b", "code": "RUB", "name": "Российский рубль", "decimal_places": 2},
+  {"id": "ab66dc61-9873-4b46-a2d7-51e04e85a6af", "code": "USDT", "name": "USDT", "decimal_places": 2}
+]

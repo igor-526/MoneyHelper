@@ -1,0 +1,79 @@
+from uuid import uuid4
+
+import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from core.entities import Currency
+from repositories.currency import CurrencyRepository
+
+pytestmark = pytest.mark.infrastructure
+
+
+def make_currency(code: str = "RUB", name: str = "Российский рубль", decimal_places: int = 2) -> Currency:
+    return Currency(id=uuid4(), code=code, name=name, decimal_places=decimal_places)
+
+
+async def test_upsert_many_inserts_new_records(db_session: AsyncSession) -> None:
+    repo = CurrencyRepository(db_session)
+    currencies = [make_currency("RUB"), make_currency("CNY"), make_currency("USDT")]
+
+    await repo.upsert_many(currencies)
+    await db_session.flush()
+
+    assert await repo.count() == 3
+
+
+async def test_list_is_sorted_by_code(db_session: AsyncSession) -> None:
+    repo = CurrencyRepository(db_session)
+    await repo.upsert_many([make_currency("RUB"), make_currency("CNY"), make_currency("USDT")])
+    await db_session.flush()
+
+    items = await repo.list(limit=20, offset=0)
+
+    assert [item.code for item in items] == ["CNY", "RUB", "USDT"]
+
+
+async def test_list_applies_pagination(db_session: AsyncSession) -> None:
+    repo = CurrencyRepository(db_session)
+    await repo.upsert_many([make_currency("RUB"), make_currency("CNY"), make_currency("USDT")])
+    await db_session.flush()
+
+    items = await repo.list(limit=1, offset=1)
+
+    assert [item.code for item in items] == ["RUB"]
+
+
+async def test_upsert_many_updates_existing_record_by_id(db_session: AsyncSession) -> None:
+    repo = CurrencyRepository(db_session)
+    currency = make_currency("RUB", name="Рубль")
+    await repo.upsert_many([currency])
+    await db_session.flush()
+
+    updated = Currency(id=currency.id, code="RUB", name="Российский рубль", decimal_places=2)
+    await repo.upsert_many([updated])
+    await db_session.flush()
+
+    items = await repo.list(limit=20, offset=0)
+    assert len(items) == 1
+    assert items[0].name == "Российский рубль"
+
+
+async def test_upsert_many_does_not_delete_records_missing_from_batch(db_session: AsyncSession) -> None:
+    repo = CurrencyRepository(db_session)
+    kept = make_currency("CNY")
+    await repo.upsert_many([kept, make_currency("RUB")])
+    await db_session.flush()
+
+    await repo.upsert_many([kept])
+    await db_session.flush()
+
+    assert await repo.count() == 2
+
+
+async def test_upsert_many_with_empty_sequence_is_noop(db_session: AsyncSession) -> None:
+    repo = CurrencyRepository(db_session)
+
+    await repo.upsert_many([])
+    await db_session.flush()
+
+    assert await repo.count() == 0
