@@ -1,3 +1,4 @@
+from .category_repository import InMemoryCategoryRepository
 from .clock import FixedClock
 from .currency_repository import InMemoryCurrencyRepository
 from .id_generator import SequentialIdGenerator
@@ -11,6 +12,7 @@ __all__ = [
     "FakePasswordHasher",
     "FakeTokenService",
     "FixedClock",
+    "InMemoryCategoryRepository",
     "InMemoryCurrencyRepository",
     "InMemoryRepository",
     "InMemoryUserRepository",

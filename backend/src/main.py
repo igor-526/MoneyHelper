@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from api.auth import router as auth_router
+from api.categories import router as categories_router
 from api.currencies import router as currencies_router
 from api.errors import register_error_handlers
 from api.icons import router as icons_router
@@ -35,6 +36,7 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     application.include_router(auth_router)
+    application.include_router(categories_router)
     application.include_router(currencies_router)
     application.include_router(icons_router)
     application.include_router(wallets_router)
