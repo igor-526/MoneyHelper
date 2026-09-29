@@ -1,3 +1,4 @@
+from .analytics import LegRecord, TopupLegRecord
 from .base import Entity, TimestampMixin
 from .category import Category, CategoryType
 from .currency import Currency
@@ -11,7 +12,9 @@ __all__ = [
     "CategoryType",
     "Currency",
     "Entity",
+    "LegRecord",
     "TimestampMixin",
+    "TopupLegRecord",
     "Transaction",
     "TransactionLeg",
     "Transfer",

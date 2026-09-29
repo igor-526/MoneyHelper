@@ -704,3 +704,220 @@ async def test_balance_delta_empty_for_wallet_without_transactions(db_session: A
     balances = await repo.balance_delta(wallet.id, user.id)
 
     assert balances == {}
+
+
+async def test_list_legs_for_analytics_filters_by_date_range(db_session: AsyncSession) -> None:
+    user = await make_user(db_session)
+    currency = await make_currency(db_session)
+    wallet = await make_wallet(db_session, user.id, (currency.id,))
+    category = await make_category(db_session, user.id, CategoryType.INCOME)
+    repo = TransactionRepository(db_session)
+    early = make_transaction(
+        user.id, wallet.id, category.id, currency.id, occurred_at=datetime(2026, 1, 1, tzinfo=UTC)
+    )
+    late = make_transaction(user.id, wallet.id, category.id, currency.id, occurred_at=datetime(2026, 6, 1, tzinfo=UTC))
+    await repo.add(early)
+    await repo.add(late)
+    await db_session.flush()
+
+    legs = await repo.list_legs_for_analytics(
+        user.id,
+        date_from=datetime(2025, 12, 1, tzinfo=UTC),
+        date_to=datetime(2026, 2, 1, tzinfo=UTC),
+        wallet_id=None,
+        category_id=None,
+        currency_id=None,
+        type=None,
+    )
+
+    assert len(legs) == 1
+    assert legs[0].wallet_id == wallet.id
+    assert legs[0].category_id == category.id
+    assert legs[0].currency_id == currency.id
+    assert legs[0].amount == Decimal("100.00")
+    assert legs[0].category_type == CategoryType.INCOME
+
+
+async def test_list_legs_for_analytics_filters_by_wallet_category_currency_type(db_session: AsyncSession) -> None:
+    user = await make_user(db_session)
+    rub = await make_currency(db_session, "RUB")
+    cny = await make_currency(db_session, "CNY")
+    wallet_a = await make_wallet(db_session, user.id, (rub.id, cny.id))
+    wallet_b = await make_wallet(db_session, user.id, (rub.id,))
+    income = await make_category(db_session, user.id, CategoryType.INCOME)
+    expense = await make_category(db_session, user.id, CategoryType.EXPENSE)
+    repo = TransactionRepository(db_session)
+    matching = make_transaction(user.id, wallet_a.id, income.id, rub.id, amount=Decimal("10.00"))
+    await repo.add(matching)
+    await repo.add(make_transaction(user.id, wallet_a.id, income.id, cny.id, amount=Decimal("20.00")))
+    await repo.add(make_transaction(user.id, wallet_a.id, expense.id, rub.id, amount=Decimal("30.00")))
+    await repo.add(make_transaction(user.id, wallet_b.id, income.id, rub.id, amount=Decimal("40.00")))
+    await db_session.flush()
+
+    legs = await repo.list_legs_for_analytics(
+        user.id,
+        date_from=datetime(2025, 1, 1, tzinfo=UTC),
+        date_to=datetime(2027, 1, 1, tzinfo=UTC),
+        wallet_id=wallet_a.id,
+        category_id=income.id,
+        currency_id=rub.id,
+        type=CategoryType.INCOME,
+    )
+
+    assert len(legs) == 1
+    assert legs[0].amount == Decimal("10.00")
+
+
+async def test_list_legs_for_analytics_isolated_by_user(db_session: AsyncSession) -> None:
+    owner = await make_user(db_session)
+    other = await make_user(db_session)
+    currency = await make_currency(db_session)
+    wallet_owner = await make_wallet(db_session, owner.id, (currency.id,))
+    wallet_other = await make_wallet(db_session, other.id, (currency.id,))
+    category_owner = await make_category(db_session, owner.id, CategoryType.INCOME)
+    category_other = await make_category(db_session, other.id, CategoryType.INCOME)
+    repo = TransactionRepository(db_session)
+    await repo.add(make_transaction(owner.id, wallet_owner.id, category_owner.id, currency.id, amount=Decimal("5.00")))
+    await repo.add(
+        make_transaction(other.id, wallet_other.id, category_other.id, currency.id, amount=Decimal("999.00"))
+    )
+    await db_session.flush()
+
+    legs = await repo.list_legs_for_analytics(
+        owner.id,
+        date_from=datetime(2025, 1, 1, tzinfo=UTC),
+        date_to=datetime(2027, 1, 1, tzinfo=UTC),
+        wallet_id=None,
+        category_id=None,
+        currency_id=None,
+        type=None,
+    )
+
+    assert len(legs) == 1
+    assert legs[0].amount == Decimal("5.00")
+
+
+async def test_list_legs_for_analytics_includes_all_legs_of_multi_leg_transaction(db_session: AsyncSession) -> None:
+    user = await make_user(db_session)
+    rub = await make_currency(db_session, "RUB")
+    cny = await make_currency(db_session, "CNY")
+    wallet = await make_wallet(db_session, user.id, (rub.id, cny.id))
+    category = await make_category(db_session, user.id, CategoryType.INCOME)
+    repo = TransactionRepository(db_session)
+    await repo.add(
+        make_topup(
+            user.id,
+            wallet.id,
+            category.id,
+            (
+                TransactionLeg(currency_id=rub.id, amount=Decimal("10000.00")),
+                TransactionLeg(currency_id=cny.id, amount=Decimal("780.00")),
+            ),
+        )
+    )
+    await db_session.flush()
+
+    legs = await repo.list_legs_for_analytics(
+        user.id,
+        date_from=datetime(2025, 1, 1, tzinfo=UTC),
+        date_to=datetime(2027, 1, 1, tzinfo=UTC),
+        wallet_id=None,
+        category_id=None,
+        currency_id=None,
+        type=None,
+    )
+
+    amounts_by_currency = {leg.currency_id: leg.amount for leg in legs}
+    assert amounts_by_currency == {rub.id: Decimal("10000.00"), cny.id: Decimal("780.00")}
+
+
+async def test_list_topup_legs_for_rates_returns_only_multi_leg_transactions(db_session: AsyncSession) -> None:
+    user = await make_user(db_session)
+    rub = await make_currency(db_session, "RUB")
+    cny = await make_currency(db_session, "CNY")
+    wallet = await make_wallet(db_session, user.id, (rub.id, cny.id))
+    category = await make_category(db_session, user.id, CategoryType.INCOME)
+    repo = TransactionRepository(db_session)
+    await repo.add(make_transaction(user.id, wallet.id, category.id, rub.id, amount=Decimal("50.00")))
+    await repo.add(
+        make_topup(
+            user.id,
+            wallet.id,
+            category.id,
+            (
+                TransactionLeg(currency_id=rub.id, amount=Decimal("10000.00")),
+                TransactionLeg(currency_id=cny.id, amount=Decimal("780.00")),
+            ),
+        )
+    )
+    await db_session.flush()
+
+    legs = await repo.list_topup_legs_for_rates(
+        user.id, date_from=datetime(2025, 1, 1, tzinfo=UTC), date_to=datetime(2027, 1, 1, tzinfo=UTC)
+    )
+
+    transaction_ids = {leg.transaction_id for leg in legs}
+    assert len(transaction_ids) == 1
+    amounts_by_currency = {leg.currency_id: leg.amount for leg in legs}
+    assert amounts_by_currency == {rub.id: Decimal("10000.00"), cny.id: Decimal("780.00")}
+
+
+async def test_list_topup_legs_for_rates_filters_by_date_range(db_session: AsyncSession) -> None:
+    user = await make_user(db_session)
+    rub = await make_currency(db_session, "RUB")
+    cny = await make_currency(db_session, "CNY")
+    wallet = await make_wallet(db_session, user.id, (rub.id, cny.id))
+    category = await make_category(db_session, user.id, CategoryType.INCOME)
+    repo = TransactionRepository(db_session)
+    await repo.add(
+        make_topup(
+            user.id,
+            wallet.id,
+            category.id,
+            (
+                TransactionLeg(currency_id=rub.id, amount=Decimal("10000.00")),
+                TransactionLeg(currency_id=cny.id, amount=Decimal("780.00")),
+            ),
+            occurred_at=datetime(2026, 6, 1, tzinfo=UTC),
+        )
+    )
+    await db_session.flush()
+
+    legs = await repo.list_topup_legs_for_rates(
+        user.id, date_from=datetime(2025, 1, 1, tzinfo=UTC), date_to=datetime(2026, 1, 1, tzinfo=UTC)
+    )
+
+    assert legs == []
+
+
+async def test_list_topup_legs_for_rates_isolated_by_user(db_session: AsyncSession) -> None:
+    owner = await make_user(db_session)
+    other = await make_user(db_session)
+    rub = await make_currency(db_session, "RUB")
+    cny = await make_currency(db_session, "CNY")
+    wallet_other = await make_wallet(db_session, other.id, (rub.id, cny.id))
+    category_other = await make_category(db_session, other.id, CategoryType.INCOME)
+    repo = TransactionRepository(db_session)
+    await repo.add(
+        make_topup(
+            other.id,
+            wallet_other.id,
+            category_other.id,
+            (
+                TransactionLeg(currency_id=rub.id, amount=Decimal("10.00")),
+                TransactionLeg(currency_id=cny.id, amount=Decimal("1.00")),
+            ),
+        )
+    )
+    await db_session.flush()
+
+    legs = await repo.list_topup_legs_for_rates(
+        owner.id, date_from=datetime(2025, 1, 1, tzinfo=UTC), date_to=datetime(2027, 1, 1, tzinfo=UTC)
+    )
+
+    assert legs == []
+    # Санити-проверка: пополнение действительно существует, просто принадлежит другому пользователю.
+    other_legs = await repo.list_topup_legs_for_rates(
+        other.id, date_from=datetime(2025, 1, 1, tzinfo=UTC), date_to=datetime(2027, 1, 1, tzinfo=UTC)
+    )
+    assert len(other_legs) == 2

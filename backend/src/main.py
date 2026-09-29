@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from api.analytics import router as analytics_router
 from api.auth import router as auth_router
 from api.balances import wallet_balances_router
 from api.categories import router as categories_router
@@ -38,6 +39,7 @@ def create_app() -> FastAPI:
     async def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    application.include_router(analytics_router)
     application.include_router(auth_router)
     application.include_router(categories_router)
     application.include_router(currencies_router)

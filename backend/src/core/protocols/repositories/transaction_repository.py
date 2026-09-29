@@ -4,13 +4,33 @@ from decimal import Decimal
 from typing import Protocol
 from uuid import UUID
 
-from core.entities import CategoryType, Transaction, TransactionLeg
+from core.entities import CategoryType, LegRecord, TopupLegRecord, Transaction, TransactionLeg
 
 
 class TransactionRepository(Protocol):
     async def add(self, transaction: Transaction) -> Transaction: ...
 
     async def get_by_id(self, transaction_id: UUID, user_id: UUID) -> Transaction | None: ...
+
+    # Объявлены раньше `list`/`count`: имя `list` внутри тела класса начинает ссылаться на одноимённый метод
+    # сразу после его определения (см. тот же приём и комментарий в `repositories/transaction.py` и
+    # `tests/fakes/transaction_repository.py`), поэтому bare-аннотация `-> list[LegRecord]` ниже перестала бы
+    # резолвиться к встроенному generic-типу, если бы шла после `async def list(...)`.
+    async def list_legs_for_analytics(
+        self,
+        user_id: UUID,
+        *,
+        date_from: datetime,
+        date_to: datetime,
+        wallet_id: UUID | None,
+        category_id: UUID | None,
+        currency_id: UUID | None,
+        type: CategoryType | None,
+    ) -> list[LegRecord]: ...
+
+    async def list_topup_legs_for_rates(
+        self, user_id: UUID, *, date_from: datetime, date_to: datetime
+    ) -> list[TopupLegRecord]: ...
 
     async def list(
         self,

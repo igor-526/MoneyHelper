@@ -1,3 +1,4 @@
+from .analytics_dimension import AnalyticsDimension
 from .balance_contributor import BalanceContributor
 from .clock import Clock
 from .id_generator import IdGenerator
@@ -13,6 +14,7 @@ from .repositories import (
 from .tokens import TokenIssuer, TokenVerifier
 
 __all__ = [
+    "AnalyticsDimension",
     "BalanceContributor",
     "CategoryRepository",
     "Clock",

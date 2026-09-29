@@ -4,7 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from core.entities import CategoryType, Transaction, TransactionLeg
+from core.entities import CategoryType, LegRecord, TopupLegRecord, Transaction, TransactionLeg
 from tests.fakes.category_repository import InMemoryCategoryRepository
 
 
@@ -55,6 +55,64 @@ class InMemoryTransactionRepository:
     async def get_by_id(self, transaction_id: UUID, user_id: UUID) -> Transaction | None:
         transaction = self._transactions.get(transaction_id)
         return transaction if transaction is not None and transaction.user_id == user_id else None
+
+    # Объявлены раньше `list`/`count` — та же причина, что и у `_filter` выше.
+    async def list_legs_for_analytics(
+        self,
+        user_id: UUID,
+        *,
+        date_from: datetime,
+        date_to: datetime,
+        wallet_id: UUID | None,
+        category_id: UUID | None,
+        currency_id: UUID | None,
+        type: CategoryType | None,
+    ) -> list[LegRecord]:
+        records = []
+        for transaction in self._transactions.values():
+            if transaction.user_id != user_id:
+                continue
+            if transaction.occurred_at < date_from or transaction.occurred_at > date_to:
+                continue
+            if wallet_id is not None and transaction.wallet_id != wallet_id:
+                continue
+            if category_id is not None and transaction.category_id != category_id:
+                continue
+            category = await self._categories.get_by_id(transaction.category_id, user_id)
+            if category is None:
+                continue
+            if type is not None and category.type != type:
+                continue
+            for leg in transaction.legs:
+                if currency_id is not None and leg.currency_id != currency_id:
+                    continue
+                records.append(
+                    LegRecord(
+                        wallet_id=transaction.wallet_id,
+                        category_id=transaction.category_id,
+                        currency_id=leg.currency_id,
+                        amount=leg.amount,
+                        category_type=category.type,
+                    )
+                )
+        return records
+
+    async def list_topup_legs_for_rates(
+        self, user_id: UUID, *, date_from: datetime, date_to: datetime
+    ) -> list[TopupLegRecord]:
+        records = []
+        for transaction in self._transactions.values():
+            if transaction.user_id != user_id:
+                continue
+            if transaction.occurred_at < date_from or transaction.occurred_at > date_to:
+                continue
+            if len(transaction.legs) <= 1:
+                continue
+            for leg in transaction.legs:
+                records.append(
+                    TopupLegRecord(transaction_id=transaction.id, currency_id=leg.currency_id, amount=leg.amount)
+                )
+        return records
 
     async def list(
         self,

@@ -10,7 +10,7 @@ from sqlalchemy import delete as sa_delete
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.entities import CategoryType, Transaction, TransactionLeg
+from core.entities import CategoryType, LegRecord, TopupLegRecord, Transaction, TransactionLeg
 from models import categories, currencies, transaction_legs, transactions
 
 
@@ -56,6 +56,85 @@ class TransactionRepository:
             return None
         legs = await self._load_legs(transaction_id)
         return _map_row(row, legs)
+
+    # `list_legs_for_analytics`/`list_topup_legs_for_rates` объявлены раньше `list`/`count` в теле класса:
+    # имя `list` внутри тела класса начинает ссылаться на одноимённый метод сразу после его определения
+    # (Python вычисляет аннотации `def` эагерно в пространстве имён класса), поэтому бare-аннотация
+    # `-> list[LegRecord]` ниже перестала бы резолвиться к встроенному generic-типу, если бы шла после
+    # `async def list(...)` (тот же приём уже применён в `tests/fakes/transaction_repository.py`).
+    async def list_legs_for_analytics(
+        self,
+        user_id: UUID,
+        *,
+        date_from: datetime,
+        date_to: datetime,
+        wallet_id: UUID | None,
+        category_id: UUID | None,
+        currency_id: UUID | None,
+        type: CategoryType | None,
+    ) -> list[LegRecord]:
+        query = (
+            select(
+                transactions.c.wallet_id,
+                transactions.c.category_id,
+                transaction_legs.c.currency_id,
+                transaction_legs.c.amount,
+                categories.c.type,
+            )
+            .select_from(
+                transaction_legs.join(transactions, transactions.c.id == transaction_legs.c.transaction_id).join(
+                    categories, categories.c.id == transactions.c.category_id
+                )
+            )
+            .where(
+                transactions.c.user_id == user_id,
+                transactions.c.occurred_at >= date_from,
+                transactions.c.occurred_at <= date_to,
+            )
+        )
+        if wallet_id is not None:
+            query = query.where(transactions.c.wallet_id == wallet_id)
+        if category_id is not None:
+            query = query.where(transactions.c.category_id == category_id)
+        if currency_id is not None:
+            query = query.where(transaction_legs.c.currency_id == currency_id)
+        if type is not None:
+            query = query.where(categories.c.type == type)
+        rows = await self._session.execute(query)
+        return [
+            LegRecord(
+                wallet_id=row.wallet_id,
+                category_id=row.category_id,
+                currency_id=row.currency_id,
+                amount=row.amount,
+                category_type=row.type,
+            )
+            for row in rows
+        ]
+
+    async def list_topup_legs_for_rates(
+        self, user_id: UUID, *, date_from: datetime, date_to: datetime
+    ) -> list[TopupLegRecord]:
+        topup_ids = (
+            select(transaction_legs.c.transaction_id)
+            .select_from(transaction_legs.join(transactions, transactions.c.id == transaction_legs.c.transaction_id))
+            .where(
+                transactions.c.user_id == user_id,
+                transactions.c.occurred_at >= date_from,
+                transactions.c.occurred_at <= date_to,
+            )
+            .group_by(transaction_legs.c.transaction_id)
+            .having(func.count() > 1)
+        )
+        rows = await self._session.execute(
+            select(transaction_legs.c.transaction_id, transaction_legs.c.currency_id, transaction_legs.c.amount).where(
+                transaction_legs.c.transaction_id.in_(topup_ids)
+            )
+        )
+        return [
+            TopupLegRecord(transaction_id=row.transaction_id, currency_id=row.currency_id, amount=row.amount)
+            for row in rows
+        ]
 
     async def list(
         self,
