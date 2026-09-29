@@ -1,4 +1,5 @@
-import { Card, Flex, Typography } from "antd";
+import { Button, Card, Flex, Typography } from "antd";
+import { Link } from "react-router-dom";
 import { ChangePasswordForm } from "./ChangePasswordForm";
 import { InstallSection } from "./InstallSection";
 import { LogoutButton } from "./LogoutButton";
@@ -12,6 +13,11 @@ export function SettingsPage() {
       </Typography.Title>
       <Card title="Тема оформления">
         <ThemeSwitch />
+      </Card>
+      <Card title="Категории">
+        <Link to="/categories">
+          <Button type="primary">Открыть</Button>
+        </Link>
       </Card>
       <Card title="Смена пароля">
         <ChangePasswordForm />

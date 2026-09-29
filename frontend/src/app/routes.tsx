@@ -3,6 +3,7 @@ import { GuestOnly } from "@/features/auth/GuestOnly";
 import { LoginPage } from "@/features/auth/LoginPage";
 import { RegisterPage } from "@/features/auth/RegisterPage";
 import { RequireAuth } from "@/features/auth/RequireAuth";
+import { CategoriesPage } from "@/features/categories/CategoriesPage";
 import { HealthPage } from "@/features/health/HealthPage";
 import { SettingsPage } from "@/features/settings/SettingsPage";
 import { WalletsPage } from "@/features/wallets/WalletsPage";
@@ -30,6 +31,7 @@ export const routes: RouteObject[] = [
     children: [
       { index: true, element: <HealthPage /> },
       { path: "wallets", element: <WalletsPage /> },
+      { path: "categories", element: <CategoriesPage /> },
       { path: "settings", element: <SettingsPage /> },
       { path: "*", element: <NotFoundPage /> },
     ],

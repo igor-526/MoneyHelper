@@ -12,7 +12,12 @@ const RETRY_WAIT = { timeout: 4000 };
 const healthy = () => new FakeApiClient(withSession(() => ({ status: "ok" })));
 const EMPTY_PAGE = { items: [], total: 0, limit: 100, offset: 0 };
 const withWallets: FakeHandler = (request) => {
-  if (request.path === "/api/wallets" || request.path === "/api/currencies") return EMPTY_PAGE;
+  if (
+    request.path === "/api/wallets" ||
+    request.path === "/api/currencies" ||
+    request.path === "/api/categories"
+  )
+    return EMPTY_PAGE;
   return { status: "ok" };
 };
 const failing = (error: ApiError) =>
@@ -82,6 +87,18 @@ describe("маршруты", () => {
     expect(await screen.findByRole("heading", { name: "Настройки" })).toBeInTheDocument();
   });
 
+  it("блок «Категории» на странице настроек виден и ссылка ведёт на /categories", async () => {
+    renderApp({
+      apiClient: new FakeApiClient(withSession(withWallets)),
+      path: "/settings",
+    });
+    await screen.findByRole("heading", { name: "Настройки" });
+
+    await userEvent.click(screen.getByRole("link", { name: "Открыть" }));
+
+    expect(await screen.findByRole("heading", { name: "Категории" })).toBeInTheDocument();
+  });
+
   it("навигация переключает страницы", async () => {
     renderApp({ apiClient: healthy() });
     const nav = await screen.findByRole("navigation", { name: "Основная навигация" });
@@ -103,6 +120,14 @@ describe("маршруты", () => {
 
   it("без сессии прямой переход на /wallets ведёт на /login", async () => {
     renderApp({ apiClient: new FakeApiClient(withSession(() => ({}), null)), path: "/wallets" });
+    expect(await screen.findByRole("heading", { name: "Вход" })).toBeInTheDocument();
+  });
+
+  it("без сессии прямой переход на /categories ведёт на /login", async () => {
+    renderApp({
+      apiClient: new FakeApiClient(withSession(() => ({}), null)),
+      path: "/categories",
+    });
     expect(await screen.findByRole("heading", { name: "Вход" })).toBeInTheDocument();
   });
 
