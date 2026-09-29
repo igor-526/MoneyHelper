@@ -5,6 +5,7 @@ import { RegisterPage } from "@/features/auth/RegisterPage";
 import { RequireAuth } from "@/features/auth/RequireAuth";
 import { HealthPage } from "@/features/health/HealthPage";
 import { SettingsPage } from "@/features/settings/SettingsPage";
+import { WalletsPage } from "@/features/wallets/WalletsPage";
 import { AppLayout } from "./layout/AppLayout";
 import { NotFoundPage } from "./NotFoundPage";
 import { RouteErrorElement } from "./RouteErrorElement";
@@ -28,6 +29,7 @@ export const routes: RouteObject[] = [
     errorElement: <RouteErrorElement />,
     children: [
       { index: true, element: <HealthPage /> },
+      { path: "wallets", element: <WalletsPage /> },
       { path: "settings", element: <SettingsPage /> },
       { path: "*", element: <NotFoundPage /> },
     ],

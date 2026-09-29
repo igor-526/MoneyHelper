@@ -2,7 +2,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "@/shared/api";
-import { FakeApiClient } from "@/test/FakeApiClient";
+import { type FakeHandler, FakeApiClient } from "@/test/FakeApiClient";
 import { renderApp } from "@/test/renderApp";
 import { withSession } from "@/test/session";
 
@@ -10,6 +10,11 @@ import { withSession } from "@/test/session";
 const RETRY_WAIT = { timeout: 4000 };
 
 const healthy = () => new FakeApiClient(withSession(() => ({ status: "ok" })));
+const EMPTY_PAGE = { items: [], total: 0, limit: 100, offset: 0 };
+const withWallets: FakeHandler = (request) => {
+  if (request.path === "/api/wallets" || request.path === "/api/currencies") return EMPTY_PAGE;
+  return { status: "ok" };
+};
 const failing = (error: ApiError) =>
   new FakeApiClient(
     withSession((request) => {
@@ -84,8 +89,20 @@ describe("маршруты", () => {
     expect(await screen.findByRole("heading", { name: "Настройки" })).toBeInTheDocument();
   });
 
+  it("пункт «Кошельки» виден авторизованному пользователю и ведёт на /wallets", async () => {
+    renderApp({ apiClient: new FakeApiClient(withSession(withWallets)) });
+    const nav = await screen.findByRole("navigation", { name: "Основная навигация" });
+    await userEvent.click(within(nav).getByRole("link", { name: /Кошельки/ }));
+    expect(await screen.findByText("Кошельков пока нет")).toBeInTheDocument();
+  });
+
   it("без сессии защищённый маршрут ведёт на /login", async () => {
     renderApp({ apiClient: new FakeApiClient(withSession(() => ({}), null)), path: "/settings" });
+    expect(await screen.findByRole("heading", { name: "Вход" })).toBeInTheDocument();
+  });
+
+  it("без сессии прямой переход на /wallets ведёт на /login", async () => {
+    renderApp({ apiClient: new FakeApiClient(withSession(() => ({}), null)), path: "/wallets" });
     expect(await screen.findByRole("heading", { name: "Вход" })).toBeInTheDocument();
   });
 

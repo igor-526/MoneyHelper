@@ -9,6 +9,7 @@ export interface NavItem {
 /** Пункты навигации задаются конфигурацией; на телефоне нижняя панель вмещает не более 5 пунктов. */
 export const navItems: readonly NavItem[] = [
   { key: "home", path: "/", label: "Главная", icon: "house" },
+  { key: "wallets", path: "/wallets", label: "Кошельки", icon: "wallet" },
   { key: "settings", path: "/settings", label: "Настройки", icon: "settings" },
 ];
 
