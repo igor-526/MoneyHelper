@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import Row, func, select
 from sqlalchemy.dialects.postgresql import insert
@@ -47,3 +48,10 @@ class CurrencyRepository:
             },
         )
         await self._session.execute(statement)
+
+    async def missing_ids(self, currency_ids: Sequence[UUID]) -> set[UUID]:
+        if not currency_ids:
+            return set()
+        rows = await self._session.execute(select(currencies.c.id).where(currencies.c.id.in_(currency_ids)))
+        existing_ids = {row.id for row in rows}
+        return {currency_id for currency_id in currency_ids if currency_id not in existing_ids}

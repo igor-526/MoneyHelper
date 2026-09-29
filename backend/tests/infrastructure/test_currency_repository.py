@@ -77,3 +77,28 @@ async def test_upsert_many_with_empty_sequence_is_noop(db_session: AsyncSession)
     await db_session.flush()
 
     assert await repo.count() == 0
+
+
+async def test_missing_ids_with_all_known_ids_returns_empty_set(db_session: AsyncSession) -> None:
+    repo = CurrencyRepository(db_session)
+    rub, cny = make_currency("RUB"), make_currency("CNY")
+    await repo.upsert_many([rub, cny])
+    await db_session.flush()
+
+    assert await repo.missing_ids([rub.id, cny.id]) == set()
+
+
+async def test_missing_ids_returns_only_unknown_ids(db_session: AsyncSession) -> None:
+    repo = CurrencyRepository(db_session)
+    rub = make_currency("RUB")
+    await repo.upsert_many([rub])
+    await db_session.flush()
+    unknown_id = uuid4()
+
+    assert await repo.missing_ids([rub.id, unknown_id]) == {unknown_id}
+
+
+async def test_missing_ids_with_empty_input_returns_empty_set(db_session: AsyncSession) -> None:
+    repo = CurrencyRepository(db_session)
+
+    assert await repo.missing_ids([]) == set()

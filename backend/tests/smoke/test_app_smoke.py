@@ -33,6 +33,8 @@ def test_auth_routes_are_registered() -> None:
         "/api/auth/me",
         "/api/currencies",
         "/api/icons",
+        "/api/wallets",
+        "/api/wallets/{wallet_id}",
     ]:
         assert path in paths, path
 

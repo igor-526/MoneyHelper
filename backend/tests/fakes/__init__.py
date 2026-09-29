@@ -5,6 +5,7 @@ from .password_hasher import FakePasswordHasher
 from .repository import InMemoryRepository
 from .tokens import FakeTokenService
 from .user_repository import InMemoryUserRepository
+from .wallet_repository import InMemoryWalletRepository
 
 __all__ = [
     "FakePasswordHasher",
@@ -13,5 +14,6 @@ __all__ = [
     "InMemoryCurrencyRepository",
     "InMemoryRepository",
     "InMemoryUserRepository",
+    "InMemoryWalletRepository",
     "SequentialIdGenerator",
 ]

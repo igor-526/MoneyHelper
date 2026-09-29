@@ -19,9 +19,15 @@ context: |
   рассчитан на будущие справочники. Категории — плоский список. Удаление — физическое.
   Iconpack реализован (изменение iconpack): закрытый курируемый реестр имён иконок Lucide (23 штуки, kebab-case) в
   backend/src/core/icons.json — единственный источник правды, не таблица БД; core/icons.py строит ALLOWED_ICONS,
-  core/schemas/icon.py даёт переиспользуемый тип IconName для будущих схем кошельков и категорий (008, 009); GET
-  /api/icons отдаёт список без авторизации. Frontend не запрашивает список по сети (статическая карта имя →
-  компонент для PWA precache/tree-shaking), а синхронизируется vitest-тестом, читающим тот же JSON с диска.
+  core/schemas/icon.py даёт переиспользуемый тип IconName; GET /api/icons отдаёт список без авторизации. Frontend
+  не запрашивает список по сети (статическая карта имя → компонент для PWA precache/tree-shaking), а
+  синхронизируется vitest-тестом, читающим тот же JSON с диска.
+  Кошельки реализованы (изменение wallets): таблицы wallets и wallet_currencies (M2M к currencies, составной PK,
+  ON DELETE CASCADE у user_id/wallet_id, ON DELETE RESTRICT у currency_id), миграция 20260929_0004. WalletRepository
+  фильтрует по wallet_id И user_id в одном запросе — чужой кошелёк везде 404, никогда 403. CRUD через
+  /api/wallets* под авторизацией; PUT — только полная замена name/icon/currency_ids (без PATCH); иконка проверяется
+  IconName, валюты — новым методом CurrencyRepository.missing_ids. Удаление кошелька физическое и безусловное —
+  задел на защиту от операций (010) зафиксирован в design.md изменения wallets, не реализован.
   Дорожная карта: docs/tasks/002_roadmap.md; задачи: docs/tasks/003_*.md … 012_*.md.
   Архитектура обязательно следует SOLID по правилам из AGENTS.md.
 

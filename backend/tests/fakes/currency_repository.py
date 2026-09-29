@@ -18,3 +18,6 @@ class InMemoryCurrencyRepository:
     async def upsert_many(self, currencies: Sequence[Currency]) -> None:
         for currency in currencies:
             self._currencies[currency.id] = currency
+
+    async def missing_ids(self, currency_ids: Sequence[UUID]) -> set[UUID]:
+        return {currency_id for currency_id in currency_ids if currency_id not in self._currencies}
