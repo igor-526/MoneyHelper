@@ -37,19 +37,31 @@ context: |
   IntegrityError без предварительного SELECT, по образцу UserRepository). Удаление категории (DELETE
   /api/categories/{id}) отклоняется 409 (ConflictError), если по категории есть операции (010) — иначе физическое;
   набор категорий по умолчанию для нового пользователя не реализован (вне рамок).
-  Доходы и расходы реализованы (изменение transactions): таблицы transactions (wallet_id/category_id — ON DELETE
-  RESTRICT) и transaction_legs (transaction_id — ON DELETE CASCADE, currency_id — ON DELETE RESTRICT, MONEY,
-  CheckConstraint amount > 0), миграция 20260929_0006. Тип операции (income/expense) не хранится отдельным полем —
-  определяется JOIN'ом с categories.type. На уровне домена/API операция плоская (одна валюта+сумма на операцию) —
-  задел на несколько ног у transaction_legs под многовалютные пополнения (011), схема БД уже это допускает.
-  TransactionRepository фильтрует по transaction_id И user_id в одном запросе — чужая операция везде 404.
-  CRUD через /api/transactions* под авторизацией: PUT — только полная замена (без PATCH), список — фильтры
-  (wallet_id/category_id/type/date_from/date_to), сортировка occurred_at DESC, id DESC (новые сначала — в отличие
-  от created_at ASC у wallets/categories). Новое исключение ConflictError (409) — «нельзя удалить/изменить, ресурс
-  используется» (отдельно от AlreadyExistsError, который про уникальность). Валюта операции обязана входить в
-  currency_ids кошелька; сумма положительна и не превышает decimal_places валюты — без округления, ошибка 400.
-  Баланс — GET /api/wallets/{wallet_id}/balances, вычисляется на лету агрегирующим запросом (без кэша) по всем
-  валютам кошелька, включая нулевые.
+  Доходы и расходы реализованы (изменение transactions, 010): таблицы transactions (wallet_id/category_id — ON
+  DELETE RESTRICT) и transaction_legs (transaction_id — ON DELETE CASCADE, currency_id — ON DELETE RESTRICT,
+  MONEY, CheckConstraint amount > 0), миграция 20260929_0006. Тип операции (income/expense) не хранится отдельным
+  полем — определяется JOIN'ом с categories.type. TransactionRepository фильтрует по transaction_id И user_id в
+  одном запросе — чужая операция везде 404. CRUD через /api/transactions* под авторизацией: PUT — только полная
+  замена (без PATCH), список — фильтры (wallet_id/category_id/type/date_from/date_to), сортировка occurred_at
+  DESC, id DESC (новые сначала — в отличие от created_at ASC у wallets/categories). Исключение ConflictError (409)
+  — «нельзя удалить/изменить, ресурс используется» (отдельно от AlreadyExistsError, который про уникальность).
+  Валюта операции обязана входить в currency_ids кошелька; сумма положительна и не превышает decimal_places
+  валюты — без округления, ошибка 400.
+  Пополнения и переводы реализованы (изменение transfers, 011): Transaction стала ногозависимой (legs:
+  tuple[TransactionLeg, ...] вместо плоских currency_id/amount) — задел 010 реализован; TransactionRepository
+  агрегирует ноги батч-запросом без N+1 (по образцу WalletRepository._load_currency_ids_map). Обычные
+  POST/PUT /api/transactions остались плоскими (создают/заменяют ровно одну ногу); новый POST
+  /api/transactions/topups создаёт пополнение с несколькими ногами — категория обязана быть income, набор валют
+  ног обязан ровно совпадать с currency_ids кошелька (без недостачи/излишка/дублей), курс не хранится отдельным
+  полем — выводится из сохранённых сумм ног. PUT /api/transactions/{id} не редактирует пополнение на месте (только
+  полная замена одной ногой) — изменить можно удалением и созданием заново. Новая сущность transfers (таблица,
+  миграция 20260929_0007; from_wallet_id/to_wallet_id/currency_id — ON DELETE RESTRICT; CheckConstraint на
+  положительность суммы и на различие кошельков) — НЕ пара связанных transactions (сохраняет чистую семантику
+  category.type = доход/расход), а отдельный вертикальный срез с полным CRUD /api/transfers*; перевод — одна
+  валюта без конвертации, допустим только если входит в currency_ids обоих кошельков. Баланс кошелька
+  (GET /api/wallets/{wallet_id}/balances, теперь в api/balances.py) вычисляется BalanceService, суммирующим вклад
+  операций и переводов через протокол-стратегию BalanceContributor (balance_delta) — на лету, без кэша, по всем
+  валютам кошелька, включая нулевые; расширяется добавлением contributor'а, без ветвления по типу источника.
   Дорожная карта: docs/tasks/002_roadmap.md; задачи: docs/tasks/003_*.md … 012_*.md.
   Архитектура обязательно следует SOLID по правилам из AGENTS.md.
 

@@ -4,18 +4,20 @@ from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
 
-from core.entities import Category, CategoryType, Currency, Transaction
+from core.entities import Category, CategoryType, Currency, Transaction, TransactionLeg, Transfer
 from core.exceptions import ConflictError
 from depends.auth import get_current_user
 from depends.category import get_category_repository
 from depends.currency import get_currency_repository
 from depends.transaction import get_transaction_repository
+from depends.transfer import get_transfer_repository
 from depends.wallet import get_wallet_repository
 from main import create_app
 from tests.fakes import (
     InMemoryCategoryRepository,
     InMemoryCurrencyRepository,
     InMemoryTransactionRepository,
+    InMemoryTransferRepository,
     InMemoryWalletRepository,
 )
 
@@ -26,6 +28,7 @@ def make_client(
     currencies: InMemoryCurrencyRepository | None = None,
     categories: InMemoryCategoryRepository | None = None,
     transactions: InMemoryTransactionRepository | None = None,
+    transfers: InMemoryTransferRepository | None = None,
     user_id: UUID | None = None,
     authenticated: bool = True,
 ) -> TestClient:
@@ -33,12 +36,14 @@ def make_client(
     currencies = currencies if currencies is not None else InMemoryCurrencyRepository()
     categories = categories if categories is not None else InMemoryCategoryRepository()
     transactions = transactions if transactions is not None else InMemoryTransactionRepository(categories)
+    transfers = transfers if transfers is not None else InMemoryTransferRepository()
     user_id = user_id if user_id is not None else uuid4()
     app = create_app()
     app.dependency_overrides[get_wallet_repository] = lambda: wallets
     app.dependency_overrides[get_currency_repository] = lambda: currencies
     app.dependency_overrides[get_category_repository] = lambda: categories
     app.dependency_overrides[get_transaction_repository] = lambda: transactions
+    app.dependency_overrides[get_transfer_repository] = lambda: transfers
     if authenticated:
         app.dependency_overrides[get_current_user] = lambda: user_id
     return TestClient(app)
@@ -204,16 +209,24 @@ async def test_delete_unknown_wallet_returns_404() -> None:
 
 
 class RestrictingWalletRepository(InMemoryWalletRepository):
-    """Симулирует `ON DELETE RESTRICT` `transactions.wallet_id` (реальный `WalletRepository` перехватывает
-    `IntegrityError` и поднимает `ConflictError` — см. design.md `transactions`)."""
+    """Симулирует `ON DELETE RESTRICT` `transactions.wallet_id`/`transfers.from_wallet_id`/`to_wallet_id`
+    (реальный `WalletRepository` перехватывает `IntegrityError` и поднимает `ConflictError` — см. design.md
+    `transactions`/`transfers`)."""
 
-    def __init__(self, transactions: InMemoryTransactionRepository) -> None:
+    def __init__(
+        self,
+        transactions: InMemoryTransactionRepository | None = None,
+        transfers: InMemoryTransferRepository | None = None,
+    ) -> None:
         super().__init__()
         self._transaction_repo = transactions
+        self._transfer_repo = transfers
 
     async def delete(self, wallet_id: UUID, user_id: UUID) -> bool:
-        if await self._transaction_repo.references_wallet(wallet_id):
+        if self._transaction_repo is not None and await self._transaction_repo.references_wallet(wallet_id):
             raise ConflictError("Кошелёк нельзя удалить: есть операции")
+        if self._transfer_repo is not None and await self._transfer_repo.references_wallet(wallet_id):
+            raise ConflictError("Кошелёк нельзя удалить: есть переводы")
         return await super().delete(wallet_id, user_id)
 
 
@@ -221,7 +234,7 @@ async def test_delete_wallet_with_transactions_returns_409() -> None:
     currencies, rub, _ = await seeded_currencies()
     categories = InMemoryCategoryRepository()
     transactions = InMemoryTransactionRepository(categories)
-    wallets = RestrictingWalletRepository(transactions)
+    wallets = RestrictingWalletRepository(transactions=transactions)
     user_id = uuid4()
     client = make_client(
         wallets=wallets, currencies=currencies, categories=categories, transactions=transactions, user_id=user_id
@@ -243,6 +256,33 @@ async def test_delete_wallet_with_transactions_returns_409() -> None:
             user_id=user_id,
             wallet_id=UUID(wallet_id),
             category_id=category.id,
+            legs=(TransactionLeg(currency_id=rub.id, amount=Decimal("10")),),
+            occurred_at=datetime(2026, 1, 1, tzinfo=UTC),
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+    )
+
+    response = client.delete(f"/api/wallets/{wallet_id}")
+
+    assert response.status_code == 409
+    assert client.get(f"/api/wallets/{wallet_id}").status_code == 200
+    assert await transactions.get_by_id(transaction.id, user_id) is not None
+
+
+async def test_delete_wallet_with_transfer_returns_409() -> None:
+    currencies, rub, _ = await seeded_currencies()
+    transfers = InMemoryTransferRepository()
+    wallets = RestrictingWalletRepository(transfers=transfers)
+    user_id = uuid4()
+    client = make_client(wallets=wallets, currencies=currencies, transfers=transfers, user_id=user_id)
+    wallet_id = client.post("/api/wallets", json=wallet_payload([rub.id])).json()["id"]
+    other_wallet_id = client.post("/api/wallets", json=wallet_payload([rub.id], name="Второй")).json()["id"]
+    transfer = await transfers.add(
+        Transfer(
+            id=uuid4(),
+            user_id=user_id,
+            from_wallet_id=UUID(wallet_id),
+            to_wallet_id=UUID(other_wallet_id),
             currency_id=rub.id,
             amount=Decimal("10"),
             occurred_at=datetime(2026, 1, 1, tzinfo=UTC),
@@ -254,7 +294,7 @@ async def test_delete_wallet_with_transactions_returns_409() -> None:
 
     assert response.status_code == 409
     assert client.get(f"/api/wallets/{wallet_id}").status_code == 200
-    assert await transactions.get_by_id(transaction.id, user_id) is not None
+    assert await transfers.get_by_id(transfer.id, user_id) is not None
 
 
 class TestUserIsolation:

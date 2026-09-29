@@ -1,8 +1,9 @@
+from collections.abc import Sequence
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from core.entities import CategoryType, Transaction
+from core.entities import CategoryType, Currency, Transaction, TransactionLeg, Wallet
 from core.exceptions import ClientError, NotFoundError
 from core.protocols import (
     CategoryRepository,
@@ -12,6 +13,7 @@ from core.protocols import (
     TransactionRepository,
     WalletRepository,
 )
+from core.services.money_validation import ensure_amount_precision
 
 NOT_FOUND_MESSAGE = "Операция не найдена"
 WALLET_NOT_FOUND_MESSAGE = "Кошелёк не найден"
@@ -54,8 +56,39 @@ class TransactionService:
             user_id=user_id,
             wallet_id=wallet_id,
             category_id=category_id,
-            currency_id=currency_id,
-            amount=amount,
+            legs=(TransactionLeg(currency_id=currency_id, amount=amount),),
+            occurred_at=occurred_at if occurred_at is not None else now,
+            created_at=now,
+        )
+        return await self._transactions.add(transaction)
+
+    async def create_topup(
+        self,
+        user_id: UUID,
+        *,
+        wallet_id: UUID,
+        category_id: UUID,
+        legs: Sequence[TransactionLeg],
+        occurred_at: datetime | None,
+    ) -> Transaction:
+        wallet = await self._wallets.get_by_id(wallet_id, user_id)
+        if wallet is None:
+            raise NotFoundError(WALLET_NOT_FOUND_MESSAGE)
+        category = await self._categories.get_by_id(category_id, user_id)
+        if category is None:
+            raise NotFoundError(CATEGORY_NOT_FOUND_MESSAGE)
+        if category.type is not CategoryType.INCOME:
+            raise ClientError("Пополнение возможно только с категорией дохода")
+        await self._ensure_legs_match_wallet_currencies(wallet, legs)
+        for leg in legs:
+            await self._validate_leg_amount(leg.currency_id, leg.amount)
+        now = self._clock.now()
+        transaction = Transaction(
+            id=self._ids.new(),
+            user_id=user_id,
+            wallet_id=wallet_id,
+            category_id=category_id,
+            legs=tuple(legs),
             occurred_at=occurred_at if occurred_at is not None else now,
             created_at=now,
         )
@@ -116,8 +149,7 @@ class TransactionService:
             user_id,
             wallet_id=wallet_id,
             category_id=category_id,
-            currency_id=currency_id,
-            amount=amount,
+            legs=(TransactionLeg(currency_id=currency_id, amount=amount),),
             occurred_at=occurred_at if occurred_at is not None else now,
             now=now,
         )
@@ -130,16 +162,9 @@ class TransactionService:
         if not deleted:
             raise NotFoundError(NOT_FOUND_MESSAGE)
 
-    async def get_wallet_balances(self, wallet_id: UUID, user_id: UUID) -> list[tuple[UUID, Decimal]]:
-        wallet = await self._wallets.get_by_id(wallet_id, user_id)
-        if wallet is None:
-            raise NotFoundError(WALLET_NOT_FOUND_MESSAGE)
-        balances = await self._transactions.balances(wallet_id, user_id)
-        return [(currency_id, balances.get(currency_id, Decimal("0"))) for currency_id in wallet.currency_ids]
-
     async def _validate_transaction_input(
         self, user_id: UUID, *, wallet_id: UUID, category_id: UUID, currency_id: UUID, amount: Decimal
-    ) -> None:
+    ) -> Wallet:
         wallet = await self._wallets.get_by_id(wallet_id, user_id)
         if wallet is None:
             raise NotFoundError(WALLET_NOT_FOUND_MESSAGE)
@@ -148,12 +173,38 @@ class TransactionService:
             raise NotFoundError(CATEGORY_NOT_FOUND_MESSAGE)
         if currency_id not in wallet.currency_ids:
             raise ClientError("Валюта операции не входит в набор валют кошелька")
+        await self._validate_leg_amount(currency_id, amount)
+        return wallet
+
+    async def _validate_leg_amount(self, currency_id: UUID, amount: Decimal) -> Currency:
+        if amount <= 0:
+            raise ClientError("Сумма должна быть положительной")
         currency = await self._currencies.get_by_id(currency_id)
         if currency is None:
             raise ClientError("Неизвестная валюта операции")
-        exponent = amount.as_tuple().exponent
-        if isinstance(exponent, int) and exponent < 0 and -exponent > currency.decimal_places:
-            raise ClientError(
-                f"Сумма содержит больше {currency.decimal_places} знаков после запятой, "
-                f"допустимых для валюты {currency.code}"
-            )
+        ensure_amount_precision(amount, currency)
+        return currency
+
+    async def _ensure_legs_match_wallet_currencies(self, wallet: Wallet, legs: Sequence[TransactionLeg]) -> None:
+        leg_currency_ids = [leg.currency_id for leg in legs]
+        if len(leg_currency_ids) != len(set(leg_currency_ids)):
+            raise ClientError("Валюта в пополнении указана более одного раза")
+        wallet_currency_ids = set(wallet.currency_ids)
+        leg_currency_id_set = set(leg_currency_ids)
+        if leg_currency_id_set == wallet_currency_ids:
+            return
+        missing = wallet_currency_ids - leg_currency_id_set
+        extra = leg_currency_id_set - wallet_currency_ids
+        parts = []
+        if missing:
+            parts.append(f"отсутствуют ноги для валют: {await self._currency_codes_text(missing)}")
+        if extra:
+            parts.append(f"лишние валюты в ногах: {await self._currency_codes_text(extra)}")
+        raise ClientError("; ".join(parts))
+
+    async def _currency_codes_text(self, currency_ids: set[UUID]) -> str:
+        codes = []
+        for currency_id in currency_ids:
+            currency = await self._currencies.get_by_id(currency_id)
+            codes.append(currency.code if currency is not None else str(currency_id))
+        return ", ".join(sorted(codes))

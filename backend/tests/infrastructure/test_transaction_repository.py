@@ -7,7 +7,7 @@ from sqlalchemy import insert, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.entities import Category, CategoryType, Currency, Transaction, User, Wallet
+from core.entities import Category, CategoryType, Currency, Transaction, TransactionLeg, User, Wallet
 from models import categories as categories_table
 from models import currencies as currencies_table
 from models import transaction_legs as transaction_legs_table
@@ -88,8 +88,26 @@ def make_transaction(
         user_id=user_id,
         wallet_id=wallet_id,
         category_id=category_id,
-        currency_id=currency_id,
-        amount=amount,
+        legs=(TransactionLeg(currency_id=currency_id, amount=amount),),
+        occurred_at=occurred_at,
+        created_at=DEFAULT_CREATED_AT,
+    )
+
+
+def make_topup(
+    user_id: UUID,
+    wallet_id: UUID,
+    category_id: UUID,
+    legs: tuple[TransactionLeg, ...],
+    *,
+    occurred_at: datetime = DEFAULT_CREATED_AT,
+) -> Transaction:
+    return Transaction(
+        id=uuid4(),
+        user_id=user_id,
+        wallet_id=wallet_id,
+        category_id=category_id,
+        legs=legs,
         occurred_at=occurred_at,
         created_at=DEFAULT_CREATED_AT,
     )
@@ -106,13 +124,44 @@ async def test_add_and_get_by_id(db_session: AsyncSession) -> None:
     added = await repo.add(transaction)
     await db_session.flush()
 
-    assert added.amount == Decimal("100.00")
+    assert added.legs == (TransactionLeg(currency_id=currency.id, amount=Decimal("100.00")),)
     fetched = await repo.get_by_id(transaction.id, user.id)
     assert fetched is not None
     assert fetched.wallet_id == wallet.id
     assert fetched.category_id == category.id
-    assert fetched.currency_id == currency.id
-    assert fetched.amount == Decimal("100.00")
+    assert fetched.legs == (TransactionLeg(currency_id=currency.id, amount=Decimal("100.00")),)
+
+
+async def test_add_and_get_by_id_with_multiple_legs(db_session: AsyncSession) -> None:
+    user = await make_user(db_session)
+    rub = await make_currency(db_session, "RUB")
+    cny = await make_currency(db_session, "CNY")
+    usdt = await make_currency(db_session, "USDT")
+    wallet = await make_wallet(db_session, user.id, (rub.id, cny.id, usdt.id))
+    category = await make_category(db_session, user.id, CategoryType.INCOME)
+    repo = TransactionRepository(db_session)
+    # Намеренно вставлены не в алфавитном порядке кода.
+    topup = make_topup(
+        user.id,
+        wallet.id,
+        category.id,
+        (
+            TransactionLeg(currency_id=rub.id, amount=Decimal("10000.00")),
+            TransactionLeg(currency_id=usdt.id, amount=Decimal("100.00")),
+            TransactionLeg(currency_id=cny.id, amount=Decimal("780.00")),
+        ),
+    )
+
+    await repo.add(topup)
+    await db_session.flush()
+
+    fetched = await repo.get_by_id(topup.id, user.id)
+    assert fetched is not None
+    assert fetched.legs == (
+        TransactionLeg(currency_id=cny.id, amount=Decimal("780.00")),
+        TransactionLeg(currency_id=rub.id, amount=Decimal("10000.00")),
+        TransactionLeg(currency_id=usdt.id, amount=Decimal("100.00")),
+    )
 
 
 async def test_get_by_id_unknown_returns_none(db_session: AsyncSession) -> None:
@@ -299,6 +348,42 @@ async def test_list_is_sorted_by_occurred_at_desc_then_id_desc(db_session: Async
     assert [item.id for item in items] == [first.id, *same_moment_ids_desc]
 
 
+async def test_list_aggregates_legs_for_multiple_transactions_without_n_plus_one(db_session: AsyncSession) -> None:
+    user = await make_user(db_session)
+    rub = await make_currency(db_session, "RUB")
+    cny = await make_currency(db_session, "CNY")
+    wallet = await make_wallet(db_session, user.id, (rub.id, cny.id))
+    category = await make_category(db_session, user.id, CategoryType.INCOME)
+    repo = TransactionRepository(db_session)
+    single_leg = make_transaction(user.id, wallet.id, category.id, rub.id, amount=Decimal("50.00"))
+    multi_leg = make_topup(
+        user.id,
+        wallet.id,
+        category.id,
+        (
+            TransactionLeg(currency_id=rub.id, amount=Decimal("10000.00")),
+            TransactionLeg(currency_id=cny.id, amount=Decimal("780.00")),
+        ),
+    )
+    await repo.add(single_leg)
+    await repo.add(multi_leg)
+    await db_session.flush()
+
+    # `_load_legs_map` выполняет один батч-запрос по всем `transaction_id` страницы сразу (см. design.md,
+    # раздел 2) — здесь явно проверяется корректность агрегации ног на нескольких операциях с разным их
+    # числом, а не количество SQL-запросов напрямую.
+    items = await repo.list(
+        user.id, wallet_id=None, category_id=None, type=None, date_from=None, date_to=None, limit=20, offset=0
+    )
+
+    by_id = {item.id: item for item in items}
+    assert by_id[single_leg.id].legs == (TransactionLeg(currency_id=rub.id, amount=Decimal("50.00")),)
+    assert by_id[multi_leg.id].legs == (
+        TransactionLeg(currency_id=cny.id, amount=Decimal("780.00")),
+        TransactionLeg(currency_id=rub.id, amount=Decimal("10000.00")),
+    )
+
+
 async def test_update_replaces_all_fields(db_session: AsyncSession) -> None:
     user = await make_user(db_session)
     rub = await make_currency(db_session, "RUB")
@@ -316,8 +401,7 @@ async def test_update_replaces_all_fields(db_session: AsyncSession) -> None:
         user.id,
         wallet_id=wallet.id,
         category_id=category_b.id,
-        currency_id=cny.id,
-        amount=Decimal("20.00"),
+        legs=(TransactionLeg(currency_id=cny.id, amount=Decimal("20.00")),),
         occurred_at=datetime(2026, 5, 1, tzinfo=UTC),
         now=datetime(2026, 5, 2, tzinfo=UTC),
     )
@@ -325,10 +409,43 @@ async def test_update_replaces_all_fields(db_session: AsyncSession) -> None:
 
     assert updated is not None
     assert updated.category_id == category_b.id
-    assert updated.currency_id == cny.id
-    assert updated.amount == Decimal("20.00")
+    assert updated.legs == (TransactionLeg(currency_id=cny.id, amount=Decimal("20.00")),)
     assert updated.occurred_at == datetime(2026, 5, 1, tzinfo=UTC)
     assert updated.updated_at == datetime(2026, 5, 2, tzinfo=UTC)
+
+
+async def test_update_replaces_multiple_legs_with_one(db_session: AsyncSession) -> None:
+    user = await make_user(db_session)
+    rub = await make_currency(db_session, "RUB")
+    cny = await make_currency(db_session, "CNY")
+    wallet = await make_wallet(db_session, user.id, (rub.id, cny.id))
+    category = await make_category(db_session, user.id, CategoryType.INCOME)
+    repo = TransactionRepository(db_session)
+    topup = make_topup(
+        user.id,
+        wallet.id,
+        category.id,
+        (
+            TransactionLeg(currency_id=rub.id, amount=Decimal("10000.00")),
+            TransactionLeg(currency_id=cny.id, amount=Decimal("780.00")),
+        ),
+    )
+    await repo.add(topup)
+    await db_session.flush()
+
+    updated = await repo.update(
+        topup.id,
+        user.id,
+        wallet_id=wallet.id,
+        category_id=category.id,
+        legs=(TransactionLeg(currency_id=rub.id, amount=Decimal("1.00")),),
+        occurred_at=DEFAULT_CREATED_AT,
+        now=DEFAULT_CREATED_AT,
+    )
+    await db_session.flush()
+
+    assert updated is not None
+    assert updated.legs == (TransactionLeg(currency_id=rub.id, amount=Decimal("1.00")),)
 
 
 async def test_update_unknown_returns_none(db_session: AsyncSession) -> None:
@@ -343,8 +460,7 @@ async def test_update_unknown_returns_none(db_session: AsyncSession) -> None:
         user.id,
         wallet_id=wallet.id,
         category_id=category.id,
-        currency_id=currency.id,
-        amount=Decimal("1"),
+        legs=(TransactionLeg(currency_id=currency.id, amount=Decimal("1")),),
         occurred_at=DEFAULT_CREATED_AT,
         now=DEFAULT_CREATED_AT,
     )
@@ -368,8 +484,7 @@ async def test_update_with_foreign_user_id_returns_none(db_session: AsyncSession
         other.id,
         wallet_id=wallet.id,
         category_id=category.id,
-        currency_id=currency.id,
-        amount=Decimal("999"),
+        legs=(TransactionLeg(currency_id=currency.id, amount=Decimal("999")),),
         occurred_at=DEFAULT_CREATED_AT,
         now=DEFAULT_CREATED_AT,
     )
@@ -377,7 +492,7 @@ async def test_update_with_foreign_user_id_returns_none(db_session: AsyncSession
     assert result is None
     unchanged = await repo.get_by_id(transaction.id, owner.id)
     assert unchanged is not None
-    assert unchanged.amount == Decimal("100.00")
+    assert unchanged.legs == (TransactionLeg(currency_id=currency.id, amount=Decimal("100.00")),)
 
 
 async def test_delete_success(db_session: AsyncSession) -> None:
@@ -539,7 +654,7 @@ async def test_check_constraint_rejects_nonpositive_amount(db_session: AsyncSess
         )
 
 
-async def test_balances_sum_income_and_expense_per_currency(db_session: AsyncSession) -> None:
+async def test_balance_delta_sums_income_and_expense_per_currency(db_session: AsyncSession) -> None:
     user = await make_user(db_session)
     rub = await make_currency(db_session, "RUB")
     cny = await make_currency(db_session, "CNY")
@@ -552,13 +667,13 @@ async def test_balances_sum_income_and_expense_per_currency(db_session: AsyncSes
     await repo.add(make_transaction(user.id, wallet.id, income.id, cny.id, amount=Decimal("50.00")))
     await db_session.flush()
 
-    balances = await repo.balances(wallet.id, user.id)
+    balances = await repo.balance_delta(wallet.id, user.id)
 
     assert balances[rub.id] == Decimal("70.00")
     assert balances[cny.id] == Decimal("50.00")
 
 
-async def test_balances_excludes_other_wallets_and_users(db_session: AsyncSession) -> None:
+async def test_balance_delta_excludes_other_wallets_and_users(db_session: AsyncSession) -> None:
     user_a = await make_user(db_session)
     user_b = await make_user(db_session)
     currency = await make_currency(db_session)
@@ -575,17 +690,17 @@ async def test_balances_excludes_other_wallets_and_users(db_session: AsyncSessio
     )
     await db_session.flush()
 
-    balances = await repo.balances(wallet_a.id, user_a.id)
+    balances = await repo.balance_delta(wallet_a.id, user_a.id)
 
     assert balances == {currency.id: Decimal("10.00")}
 
 
-async def test_balances_empty_for_wallet_without_transactions(db_session: AsyncSession) -> None:
+async def test_balance_delta_empty_for_wallet_without_transactions(db_session: AsyncSession) -> None:
     user = await make_user(db_session)
     currency = await make_currency(db_session)
     wallet = await make_wallet(db_session, user.id, (currency.id,))
     repo = TransactionRepository(db_session)
 
-    balances = await repo.balances(wallet.id, user.id)
+    balances = await repo.balance_delta(wallet.id, user.id)
 
     assert balances == {}

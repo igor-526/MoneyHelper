@@ -7,7 +7,7 @@ from sqlalchemy import delete, insert, select
 from sqlalchemy.exc import IntegrityError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.entities import Category, CategoryType, Currency, Transaction, User, Wallet
+from core.entities import Category, CategoryType, Currency, Transaction, TransactionLeg, User, Wallet
 from core.exceptions import AlreadyExistsError, ConflictError
 from models import categories as categories_table
 from models import users as users_table
@@ -320,8 +320,7 @@ async def test_delete_category_with_transactions_raises_conflict_error(db_sessio
             user_id=user.id,
             wallet_id=wallet.id,
             category_id=category.id,
-            currency_id=currency.id,
-            amount=Decimal("10.00"),
+            legs=(TransactionLeg(currency_id=currency.id, amount=Decimal("10.00")),),
             occurred_at=DEFAULT_CREATED_AT,
             created_at=DEFAULT_CREATED_AT,
         )

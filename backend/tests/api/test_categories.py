@@ -4,7 +4,7 @@ from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
 
-from core.entities import Currency, Transaction, Wallet
+from core.entities import Currency, Transaction, TransactionLeg, Wallet
 from core.exceptions import ConflictError
 from depends.auth import get_current_user
 from depends.category import get_category_repository
@@ -241,8 +241,7 @@ async def test_delete_category_with_transactions_returns_409() -> None:
             user_id=user_id,
             wallet_id=wallet.id,
             category_id=UUID(category_id),
-            currency_id=currency.id,
-            amount=Decimal("10"),
+            legs=(TransactionLeg(currency_id=currency.id, amount=Decimal("10")),),
             occurred_at=datetime(2026, 1, 1, tzinfo=UTC),
             created_at=datetime(2026, 1, 1, tzinfo=UTC),
         )

@@ -7,13 +7,14 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.entities import Category, CategoryType, Currency, Transaction, User, Wallet
+from core.entities import Category, CategoryType, Currency, Transaction, TransactionLeg, Transfer, User, Wallet
 from core.exceptions import ConflictError
 from models import currencies as currencies_table
 from models import wallet_currencies as wallet_currencies_table
 from repositories.category import CategoryRepository
 from repositories.currency import CurrencyRepository
 from repositories.transaction import TransactionRepository
+from repositories.transfer import TransferRepository
 from repositories.user import UserRepository
 from repositories.wallet import WalletRepository
 
@@ -283,6 +284,31 @@ async def test_delete_wallet_with_transactions_raises_conflict_error(db_session:
             user_id=user.id,
             wallet_id=wallet.id,
             category_id=category.id,
+            legs=(TransactionLeg(currency_id=rub.id, amount=Decimal("10.00")),),
+            occurred_at=DEFAULT_CREATED_AT,
+            created_at=DEFAULT_CREATED_AT,
+        )
+    )
+    await db_session.flush()
+
+    with pytest.raises(ConflictError):
+        await wallet_repo.delete(wallet.id, user.id)
+
+
+async def test_delete_from_wallet_with_transfer_raises_conflict_error(db_session: AsyncSession) -> None:
+    user = await make_user(db_session)
+    rub = await make_currency(db_session, "RUB")
+    wallet_repo = WalletRepository(db_session)
+    wallet_a = make_wallet(user.id, (rub.id,), name="A")
+    wallet_b = make_wallet(user.id, (rub.id,), name="B")
+    await wallet_repo.add(wallet_a)
+    await wallet_repo.add(wallet_b)
+    await TransferRepository(db_session).add(
+        Transfer(
+            id=uuid4(),
+            user_id=user.id,
+            from_wallet_id=wallet_a.id,
+            to_wallet_id=wallet_b.id,
             currency_id=rub.id,
             amount=Decimal("10.00"),
             occurred_at=DEFAULT_CREATED_AT,
@@ -292,4 +318,30 @@ async def test_delete_wallet_with_transactions_raises_conflict_error(db_session:
     await db_session.flush()
 
     with pytest.raises(ConflictError):
-        await wallet_repo.delete(wallet.id, user.id)
+        await wallet_repo.delete(wallet_a.id, user.id)
+
+
+async def test_delete_to_wallet_with_transfer_raises_conflict_error(db_session: AsyncSession) -> None:
+    user = await make_user(db_session)
+    rub = await make_currency(db_session, "RUB")
+    wallet_repo = WalletRepository(db_session)
+    wallet_a = make_wallet(user.id, (rub.id,), name="A")
+    wallet_b = make_wallet(user.id, (rub.id,), name="B")
+    await wallet_repo.add(wallet_a)
+    await wallet_repo.add(wallet_b)
+    await TransferRepository(db_session).add(
+        Transfer(
+            id=uuid4(),
+            user_id=user.id,
+            from_wallet_id=wallet_a.id,
+            to_wallet_id=wallet_b.id,
+            currency_id=rub.id,
+            amount=Decimal("10.00"),
+            occurred_at=DEFAULT_CREATED_AT,
+            created_at=DEFAULT_CREATED_AT,
+        )
+    )
+    await db_session.flush()
+
+    with pytest.raises(ConflictError):
+        await wallet_repo.delete(wallet_b.id, user.id)

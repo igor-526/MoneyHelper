@@ -18,14 +18,32 @@ class TransactionCreate(BaseModel):
 TransactionUpdate = TransactionCreate
 
 
+class TransactionLegIn(BaseModel):
+    currency_id: UUID
+    amount: Money = Field(gt=0)
+
+
+class TopupCreate(BaseModel):
+    wallet_id: UUID
+    category_id: UUID
+    legs: list[TransactionLegIn]
+    occurred_at: datetime | None = None
+
+
+class TransactionLegOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    currency_id: UUID
+    amount: Money
+
+
 class TransactionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     wallet_id: UUID
     category_id: UUID
-    currency_id: UUID
-    amount: Money
+    legs: list[TransactionLegOut]
     occurred_at: datetime
     created_at: datetime
     updated_at: datetime | None
@@ -43,10 +61,3 @@ class TransactionListParams(PageParams):
     type: CategoryType | None = None
     date_from: datetime | None = None
     date_to: datetime | None = None
-
-
-class WalletBalanceOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    currency_id: UUID
-    balance: Money

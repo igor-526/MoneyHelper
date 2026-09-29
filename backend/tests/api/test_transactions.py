@@ -98,6 +98,19 @@ def transaction_payload(
     return payload
 
 
+def topup_payload(
+    *,
+    wallet_id: UUID,
+    category_id: UUID,
+    legs: list[dict],
+    occurred_at: str | None = None,
+) -> dict:
+    payload: dict = {"wallet_id": str(wallet_id), "category_id": str(category_id), "legs": legs}
+    if occurred_at is not None:
+        payload["occurred_at"] = occurred_at
+    return payload
+
+
 async def make_environment(
     user_id: UUID,
 ) -> tuple[
@@ -128,8 +141,7 @@ async def test_create_transaction_with_explicit_date() -> None:
     body = response.json()
     assert body["wallet_id"] == str(wallet.id)
     assert body["category_id"] == str(category.id)
-    assert body["currency_id"] == str(currency.id)
-    assert body["amount"] == "100.00"
+    assert body["legs"] == [{"currency_id": str(currency.id), "amount": "100.00"}]
     assert body["occurred_at"] == "2026-03-01T12:00:00Z"
     assert body["created_at"] is not None
     assert body["updated_at"] is None
@@ -284,7 +296,7 @@ async def test_get_list_put_delete_full_cycle() -> None:
     )
     assert updated.status_code == 200
     assert updated.json()["category_id"] == str(other_category.id)
-    assert updated.json()["amount"] == "55.00"
+    assert updated.json()["legs"] == [{"currency_id": str(currency.id), "amount": "55.00"}]
     assert updated.json()["updated_at"] is not None
 
     deleted = client.delete(f"/api/transactions/{transaction_id}")
@@ -336,6 +348,33 @@ async def test_put_validates_input_like_create() -> None:
         json=transaction_payload(wallet_id=wallet.id, category_id=category.id, currency_id=currency.id, amount="0"),
     )
     assert amount_response.status_code == 400
+
+
+async def test_put_on_topup_replaces_multiple_legs_with_one() -> None:
+    user_id = uuid4()
+    wallets, categories, currencies, wallet, category, rub = await make_environment(user_id)
+    cny = await make_currency(currencies, "CNY")
+    multi_wallet = await make_wallet(wallets, user_id, [rub.id, cny.id])
+    client = make_client(wallets=wallets, categories=categories, currencies=currencies, user_id=user_id)
+    topup_id = client.post(
+        "/api/transactions/topups",
+        json=topup_payload(
+            wallet_id=multi_wallet.id,
+            category_id=category.id,
+            legs=[
+                {"currency_id": str(rub.id), "amount": "10000.00"},
+                {"currency_id": str(cny.id), "amount": "780.00"},
+            ],
+        ),
+    ).json()["id"]
+
+    response = client.put(
+        f"/api/transactions/{topup_id}",
+        json=transaction_payload(wallet_id=wallet.id, category_id=category.id, currency_id=rub.id, amount="1.00"),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["legs"] == [{"currency_id": str(rub.id), "amount": "1.00"}]
 
 
 async def test_delete_unknown_transaction_returns_404() -> None:
@@ -493,6 +532,30 @@ class TestFiltersAndSorting:
         assert client.get("/api/transactions", params={"limit": 101}).status_code == 400
         assert client.get("/api/transactions", params={"offset": -1}).status_code == 400
 
+    async def test_list_shows_topup_with_multiple_legs(self) -> None:
+        user_id = uuid4()
+        wallets, categories, currencies, _, category, rub = await make_environment(user_id)
+        cny = await make_currency(currencies, "CNY")
+        wallet = await make_wallet(wallets, user_id, [rub.id, cny.id])
+        client = make_client(wallets=wallets, categories=categories, currencies=currencies, user_id=user_id)
+        client.post(
+            "/api/transactions/topups",
+            json=topup_payload(
+                wallet_id=wallet.id,
+                category_id=category.id,
+                legs=[
+                    {"currency_id": str(rub.id), "amount": "10000.00"},
+                    {"currency_id": str(cny.id), "amount": "780.00"},
+                ],
+            ),
+        )
+
+        response = client.get("/api/transactions")
+
+        assert response.status_code == 200
+        legs = response.json()["items"][0]["legs"]
+        assert {leg["currency_id"] for leg in legs} == {str(rub.id), str(cny.id)}
+
 
 class TestUserIsolation:
     async def test_foreign_transaction_is_not_readable(self) -> None:
@@ -527,7 +590,7 @@ class TestUserIsolation:
         )
 
         assert response.status_code == 404
-        assert client_a.get(f"/api/transactions/{transaction_id}").json()["amount"] == "100.00"
+        assert client_a.get(f"/api/transactions/{transaction_id}").json()["legs"][0]["amount"] == "100.00"
 
     async def test_foreign_transaction_is_not_deletable(self) -> None:
         user_a, user_b = uuid4(), uuid4()
@@ -561,65 +624,220 @@ class TestUserIsolation:
         assert response.json()["total"] == 0
 
 
-class TestWalletBalances:
-    async def test_balance_zero_without_transactions(self) -> None:
+class TestTopups:
+    async def test_success_with_full_currency_set(self) -> None:
         user_id = uuid4()
-        wallets, categories, currencies, wallet, _, currency = await make_environment(user_id)
-        client = make_client(wallets=wallets, categories=categories, currencies=currencies, user_id=user_id)
-
-        response = client.get(f"/api/wallets/{wallet.id}/balances")
-
-        assert response.status_code == 200
-        assert response.json() == [{"currency_id": str(currency.id), "balance": "0"}]
-
-    async def test_balance_reflects_income_and_expense(self) -> None:
-        user_id = uuid4()
-        wallets, categories, currencies, wallet, income, currency = await make_environment(user_id)
-        expense = await make_category(categories, user_id, CategoryType.EXPENSE)
-        client = make_client(wallets=wallets, categories=categories, currencies=currencies, user_id=user_id)
-        client.post(
-            "/api/transactions",
-            json=transaction_payload(
-                wallet_id=wallet.id, category_id=income.id, currency_id=currency.id, amount="100.00"
-            ),
-        )
-        client.post(
-            "/api/transactions",
-            json=transaction_payload(
-                wallet_id=wallet.id, category_id=expense.id, currency_id=currency.id, amount="30.00"
-            ),
-        )
-
-        response = client.get(f"/api/wallets/{wallet.id}/balances")
-
-        assert response.status_code == 200
-        assert response.json() == [{"currency_id": str(currency.id), "balance": "70.00"}]
-
-    async def test_balance_separates_currencies_for_multicurrency_wallet(self) -> None:
-        user_id = uuid4()
-        wallets, categories, currencies, _, income, rub = await make_environment(user_id)
+        wallets, categories, currencies, _, category, rub = await make_environment(user_id)
         cny = await make_currency(currencies, "CNY")
         wallet = await make_wallet(wallets, user_id, [rub.id, cny.id])
         client = make_client(wallets=wallets, categories=categories, currencies=currencies, user_id=user_id)
-        client.post(
-            "/api/transactions",
-            json=transaction_payload(wallet_id=wallet.id, category_id=income.id, currency_id=rub.id, amount="100.00"),
+
+        response = client.post(
+            "/api/transactions/topups",
+            json=topup_payload(
+                wallet_id=wallet.id,
+                category_id=category.id,
+                legs=[
+                    {"currency_id": str(rub.id), "amount": "10000.00"},
+                    {"currency_id": str(cny.id), "amount": "780.00"},
+                ],
+                occurred_at="2026-03-01T12:00:00Z",
+            ),
         )
-        client.post(
-            "/api/transactions",
-            json=transaction_payload(wallet_id=wallet.id, category_id=income.id, currency_id=cny.id, amount="50.00"),
-        )
 
-        response = client.get(f"/api/wallets/{wallet.id}/balances")
+        assert response.status_code == 201
+        body = response.json()
+        assert body["wallet_id"] == str(wallet.id)
+        assert body["category_id"] == str(category.id)
+        assert {leg["currency_id"] for leg in body["legs"]} == {str(rub.id), str(cny.id)}
+        assert body["occurred_at"] == "2026-03-01T12:00:00Z"
 
-        assert response.status_code == 200
-        balances = {item["currency_id"]: item["balance"] for item in response.json()}
-        assert balances == {str(rub.id): "100.00", str(cny.id): "50.00"}
-
-    async def test_balance_unknown_or_foreign_wallet_returns_404(self) -> None:
+    async def test_without_date_uses_server_time(self) -> None:
         user_id = uuid4()
-        wallets, categories, currencies, wallet, _, _ = await make_environment(uuid4())
+        wallets, categories, currencies, wallet, category, currency = await make_environment(user_id)
         client = make_client(wallets=wallets, categories=categories, currencies=currencies, user_id=user_id)
 
-        assert client.get(f"/api/wallets/{uuid4()}/balances").status_code == 404
-        assert client.get(f"/api/wallets/{wallet.id}/balances").status_code == 404
+        response = client.post(
+            "/api/transactions/topups",
+            json=topup_payload(
+                wallet_id=wallet.id, category_id=category.id, legs=[{"currency_id": str(currency.id), "amount": "1"}]
+            ),
+        )
+
+        assert response.status_code == 201
+        assert response.json()["occurred_at"] is not None
+
+    async def test_rate_is_reproducible_from_stored_legs(self) -> None:
+        user_id = uuid4()
+        wallets, categories, currencies, _, category, rub = await make_environment(user_id)
+        cny = await make_currency(currencies, "CNY")
+        wallet = await make_wallet(wallets, user_id, [rub.id, cny.id])
+        client = make_client(wallets=wallets, categories=categories, currencies=currencies, user_id=user_id)
+
+        response = client.post(
+            "/api/transactions/topups",
+            json=topup_payload(
+                wallet_id=wallet.id,
+                category_id=category.id,
+                legs=[
+                    {"currency_id": str(rub.id), "amount": "10000.00"},
+                    {"currency_id": str(cny.id), "amount": "780.00"},
+                ],
+            ),
+        )
+
+        legs = {leg["currency_id"]: leg["amount"] for leg in response.json()["legs"]}
+        rate = float(legs[str(rub.id)]) / float(legs[str(cny.id)])
+        assert rate == float("10000.00") / float("780.00")
+
+    async def test_rejects_incomplete_currency_set(self) -> None:
+        user_id = uuid4()
+        wallets, categories, currencies, _, category, rub = await make_environment(user_id)
+        cny = await make_currency(currencies, "CNY")
+        wallet = await make_wallet(wallets, user_id, [rub.id, cny.id])
+        client = make_client(wallets=wallets, categories=categories, currencies=currencies, user_id=user_id)
+
+        response = client.post(
+            "/api/transactions/topups",
+            json=topup_payload(
+                wallet_id=wallet.id, category_id=category.id, legs=[{"currency_id": str(rub.id), "amount": "100"}]
+            ),
+        )
+
+        assert response.status_code == 400
+
+    async def test_rejects_excessive_currency_set(self) -> None:
+        user_id = uuid4()
+        wallets, categories, currencies, wallet, category, rub = await make_environment(user_id)
+        cny = await make_currency(currencies, "CNY")
+        client = make_client(wallets=wallets, categories=categories, currencies=currencies, user_id=user_id)
+
+        response = client.post(
+            "/api/transactions/topups",
+            json=topup_payload(
+                wallet_id=wallet.id,
+                category_id=category.id,
+                legs=[
+                    {"currency_id": str(rub.id), "amount": "100"},
+                    {"currency_id": str(cny.id), "amount": "100"},
+                ],
+            ),
+        )
+
+        assert response.status_code == 400
+
+    async def test_rejects_duplicate_currency_in_legs(self) -> None:
+        user_id = uuid4()
+        wallets, categories, currencies, wallet, category, rub = await make_environment(user_id)
+        client = make_client(wallets=wallets, categories=categories, currencies=currencies, user_id=user_id)
+
+        response = client.post(
+            "/api/transactions/topups",
+            json=topup_payload(
+                wallet_id=wallet.id,
+                category_id=category.id,
+                legs=[
+                    {"currency_id": str(rub.id), "amount": "100"},
+                    {"currency_id": str(rub.id), "amount": "50"},
+                ],
+            ),
+        )
+
+        assert response.status_code == 400
+
+    async def test_rejects_non_income_category(self) -> None:
+        user_id = uuid4()
+        wallets, categories, currencies, wallet, _, currency = await make_environment(user_id)
+        expense_category = await make_category(categories, user_id, CategoryType.EXPENSE)
+        client = make_client(wallets=wallets, categories=categories, currencies=currencies, user_id=user_id)
+
+        response = client.post(
+            "/api/transactions/topups",
+            json=topup_payload(
+                wallet_id=wallet.id,
+                category_id=expense_category.id,
+                legs=[{"currency_id": str(currency.id), "amount": "100"}],
+            ),
+        )
+
+        assert response.status_code == 400
+
+    async def test_rejects_nonpositive_leg_amount(self) -> None:
+        user_id = uuid4()
+        wallets, categories, currencies, wallet, category, currency = await make_environment(user_id)
+        client = make_client(wallets=wallets, categories=categories, currencies=currencies, user_id=user_id)
+
+        response = client.post(
+            "/api/transactions/topups",
+            json=topup_payload(
+                wallet_id=wallet.id, category_id=category.id, legs=[{"currency_id": str(currency.id), "amount": "0"}]
+            ),
+        )
+
+        assert response.status_code == 400
+
+    async def test_rejects_leg_amount_exceeding_decimal_places(self) -> None:
+        user_id = uuid4()
+        wallets, categories, currencies, wallet, category, currency = await make_environment(user_id)
+        client = make_client(wallets=wallets, categories=categories, currencies=currencies, user_id=user_id)
+
+        response = client.post(
+            "/api/transactions/topups",
+            json=topup_payload(
+                wallet_id=wallet.id,
+                category_id=category.id,
+                legs=[{"currency_id": str(currency.id), "amount": "1.005"}],
+            ),
+        )
+
+        assert response.status_code == 400
+
+    async def test_rejects_unknown_wallet(self) -> None:
+        user_id = uuid4()
+        _, categories, currencies, _, category, currency = await make_environment(user_id)
+        client = make_client(categories=categories, currencies=currencies, user_id=user_id)
+
+        response = client.post(
+            "/api/transactions/topups",
+            json=topup_payload(
+                wallet_id=uuid4(), category_id=category.id, legs=[{"currency_id": str(currency.id), "amount": "1"}]
+            ),
+        )
+
+        assert response.status_code == 404
+
+    async def test_rejects_unknown_category(self) -> None:
+        user_id = uuid4()
+        wallets, _, currencies, wallet, _, currency = await make_environment(user_id)
+        client = make_client(wallets=wallets, currencies=currencies, user_id=user_id)
+
+        response = client.post(
+            "/api/transactions/topups",
+            json=topup_payload(
+                wallet_id=wallet.id, category_id=uuid4(), legs=[{"currency_id": str(currency.id), "amount": "1"}]
+            ),
+        )
+
+        assert response.status_code == 404
+
+    async def test_without_session_is_401(self) -> None:
+        client = make_client(authenticated=False)
+
+        response = client.post(
+            "/api/transactions/topups",
+            json=topup_payload(
+                wallet_id=uuid4(), category_id=uuid4(), legs=[{"currency_id": str(uuid4()), "amount": "1"}]
+            ),
+        )
+
+        assert response.status_code == 401
+
+    async def test_topups_route_is_not_mistaken_for_transaction_id_route(self) -> None:
+        client = make_client()
+
+        # `POST /api/transactions/topups` не эквивалентен несуществующему `POST
+        # /api/transactions/{transaction_id}` (у параметризованного маршрута нет метода POST — 405/422,
+        # а не случайное совпадение с "topups", распознанным как `transaction_id`).
+        response = client.get("/api/transactions/topups")
+
+        assert response.status_code != 200

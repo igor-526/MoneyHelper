@@ -1,3 +1,5 @@
+from collections import defaultdict
+from collections.abc import Sequence
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
@@ -8,20 +10,17 @@ from sqlalchemy import delete as sa_delete
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.entities import CategoryType, Transaction
-from models import categories, transaction_legs, transactions
-
-_JOINED = transactions.join(transaction_legs, transactions.c.id == transaction_legs.c.transaction_id)
+from core.entities import CategoryType, Transaction, TransactionLeg
+from models import categories, currencies, transaction_legs, transactions
 
 
-def _map_row(row: Row[Any]) -> Transaction:
+def _map_row(row: Row[Any], legs: tuple[TransactionLeg, ...]) -> Transaction:
     return Transaction(
         id=row.id,
         user_id=row.user_id,
         wallet_id=row.wallet_id,
         category_id=row.category_id,
-        currency_id=row.currency_id,
-        amount=row.amount,
+        legs=legs,
         occurred_at=row.occurred_at,
         created_at=row.created_at,
         updated_at=row.updated_at,
@@ -44,22 +43,19 @@ class TransactionRepository:
                 updated_at=transaction.updated_at,
             )
         )
-        await self._session.execute(
-            insert(transaction_legs).values(
-                transaction_id=transaction.id, currency_id=transaction.currency_id, amount=transaction.amount
-            )
-        )
-        return transaction
+        await self._insert_legs(transaction.id, transaction.legs)
+        return await self.get_by_id(transaction.id, transaction.user_id) or transaction
 
     async def get_by_id(self, transaction_id: UUID, user_id: UUID) -> Transaction | None:
         row = (
             await self._session.execute(
-                select(transactions, transaction_legs.c.currency_id, transaction_legs.c.amount)
-                .select_from(_JOINED)
-                .where(transactions.c.id == transaction_id, transactions.c.user_id == user_id)
+                select(transactions).where(transactions.c.id == transaction_id, transactions.c.user_id == user_id)
             )
         ).first()
-        return _map_row(row) if row is not None else None
+        if row is None:
+            return None
+        legs = await self._load_legs(transaction_id)
+        return _map_row(row, legs)
 
     async def list(
         self,
@@ -81,7 +77,10 @@ class TransactionRepository:
                 query.order_by(transactions.c.occurred_at.desc(), transactions.c.id.desc()).limit(limit).offset(offset)
             )
         ).all()
-        return [_map_row(row) for row in rows]
+        if not rows:
+            return []
+        legs_by_transaction = await self._load_legs_map([row.id for row in rows])
+        return [_map_row(row, legs_by_transaction.get(row.id, ())) for row in rows]
 
     async def count(
         self,
@@ -109,8 +108,7 @@ class TransactionRepository:
         *,
         wallet_id: UUID,
         category_id: UUID,
-        currency_id: UUID,
-        amount: Decimal,
+        legs: Sequence[TransactionLeg],
         occurred_at: datetime,
         now: datetime,
     ) -> Transaction | None:
@@ -125,9 +123,7 @@ class TransactionRepository:
         await self._session.execute(
             sa_delete(transaction_legs).where(transaction_legs.c.transaction_id == transaction_id)
         )
-        await self._session.execute(
-            insert(transaction_legs).values(transaction_id=transaction_id, currency_id=currency_id, amount=amount)
-        )
+        await self._insert_legs(transaction_id, legs)
         return await self.get_by_id(transaction_id, user_id)
 
     async def delete(self, transaction_id: UUID, user_id: UUID) -> bool:
@@ -138,7 +134,7 @@ class TransactionRepository:
         )
         return result.first() is not None
 
-    async def balances(self, wallet_id: UUID, user_id: UUID) -> dict[UUID, Decimal]:
+    async def balance_delta(self, wallet_id: UUID, user_id: UUID) -> dict[UUID, Decimal]:
         signed_amount = case(
             (categories.c.type == CategoryType.INCOME, transaction_legs.c.amount), else_=-transaction_legs.c.amount
         )
@@ -155,6 +151,31 @@ class TransactionRepository:
         rows = await self._session.execute(query)
         return {row.currency_id: row.balance for row in rows}
 
+    async def _insert_legs(self, transaction_id: UUID, legs: Sequence[TransactionLeg]) -> None:
+        if not legs:
+            return
+        await self._session.execute(
+            insert(transaction_legs),
+            [{"transaction_id": transaction_id, "currency_id": leg.currency_id, "amount": leg.amount} for leg in legs],
+        )
+
+    async def _load_legs(self, transaction_id: UUID) -> tuple[TransactionLeg, ...]:
+        return (await self._load_legs_map([transaction_id])).get(transaction_id, ())
+
+    async def _load_legs_map(self, transaction_ids: Sequence[UUID]) -> dict[UUID, tuple[TransactionLeg, ...]]:
+        if not transaction_ids:
+            return {}
+        rows = await self._session.execute(
+            select(transaction_legs.c.transaction_id, transaction_legs.c.currency_id, transaction_legs.c.amount)
+            .select_from(transaction_legs.join(currencies, transaction_legs.c.currency_id == currencies.c.id))
+            .where(transaction_legs.c.transaction_id.in_(transaction_ids))
+            .order_by(transaction_legs.c.transaction_id, currencies.c.code)
+        )
+        grouped: dict[UUID, list[TransactionLeg]] = defaultdict(list)
+        for row in rows:
+            grouped[row.transaction_id].append(TransactionLeg(currency_id=row.currency_id, amount=row.amount))
+        return {transaction_id: tuple(legs) for transaction_id, legs in grouped.items()}
+
     def _filtered_query(
         self,
         user_id: UUID,
@@ -165,14 +186,10 @@ class TransactionRepository:
         date_from: datetime | None,
         date_to: datetime | None,
     ) -> Any:
-        joined = _JOINED
+        joined: Any = transactions
         if type is not None:
             joined = joined.join(categories, transactions.c.category_id == categories.c.id)
-        query = (
-            select(transactions, transaction_legs.c.currency_id, transaction_legs.c.amount)
-            .select_from(joined)
-            .where(transactions.c.user_id == user_id)
-        )
+        query = select(transactions).select_from(joined).where(transactions.c.user_id == user_id)
         return self._apply_filters(
             query, wallet_id=wallet_id, category_id=category_id, type=type, date_from=date_from, date_to=date_to
         )

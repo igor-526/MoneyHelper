@@ -4,19 +4,19 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, status
 
 from api.schemas.transaction import (
+    TopupCreate,
     TransactionCreate,
     TransactionListParams,
     TransactionOut,
     TransactionUpdate,
-    WalletBalanceOut,
 )
+from core.entities import TransactionLeg
 from core.schemas import Page
 from core.services.transaction import TransactionService
 from depends.auth import get_current_user
 from depends.transaction import get_transaction_service
 
 router = APIRouter(prefix="/api/transactions", tags=["Transactions"])
-wallet_balances_router = APIRouter(tags=["Transactions"])
 
 
 @router.post("", response_model=TransactionOut, status_code=status.HTTP_201_CREATED)
@@ -31,6 +31,25 @@ async def create_transaction(
         category_id=body.category_id,
         currency_id=body.currency_id,
         amount=body.amount,
+        occurred_at=body.occurred_at,
+    )
+    return TransactionOut.model_validate(transaction)
+
+
+# Статический маршрут `/topups` объявлен раньше параметризованных `/{transaction_id}` ниже: Starlette
+# сопоставляет маршруты в порядке регистрации, и при обратном порядке `"topups"` мог бы быть ошибочно
+# разобран как `transaction_id` (см. design.md, раздел 10).
+@router.post("/topups", response_model=TransactionOut, status_code=status.HTTP_201_CREATED)
+async def create_topup(
+    body: TopupCreate,
+    user_id: Annotated[UUID, Depends(get_current_user)],
+    transaction_service: Annotated[TransactionService, Depends(get_transaction_service)],
+) -> TransactionOut:
+    transaction = await transaction_service.create_topup(
+        user_id,
+        wallet_id=body.wallet_id,
+        category_id=body.category_id,
+        legs=[TransactionLeg(currency_id=leg.currency_id, amount=leg.amount) for leg in body.legs],
         occurred_at=body.occurred_at,
     )
     return TransactionOut.model_validate(transaction)
@@ -96,13 +115,3 @@ async def delete_transaction(
     transaction_service: Annotated[TransactionService, Depends(get_transaction_service)],
 ) -> None:
     await transaction_service.delete_transaction(transaction_id, user_id)
-
-
-@wallet_balances_router.get("/api/wallets/{wallet_id}/balances", response_model=list[WalletBalanceOut])
-async def get_wallet_balances(
-    wallet_id: UUID,
-    user_id: Annotated[UUID, Depends(get_current_user)],
-    transaction_service: Annotated[TransactionService, Depends(get_transaction_service)],
-) -> list[WalletBalanceOut]:
-    balances = await transaction_service.get_wallet_balances(wallet_id, user_id)
-    return [WalletBalanceOut(currency_id=currency_id, balance=balance) for currency_id, balance in balances]

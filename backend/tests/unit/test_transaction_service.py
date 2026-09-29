@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import pytest
 
-from core.entities import Category, CategoryType, Currency, Wallet
+from core.entities import Category, CategoryType, Currency, TransactionLeg, Wallet
 from core.exceptions import ClientError, NotFoundError
 from core.services.transaction import TransactionService
 from tests.fakes import (
@@ -87,8 +87,7 @@ async def test_create_transaction_with_explicit_date() -> None:
 
     assert transaction.wallet_id == wallet.id
     assert transaction.category_id == category.id
-    assert transaction.currency_id == currency.id
-    assert transaction.amount == Decimal("100.50")
+    assert transaction.legs == (TransactionLeg(currency_id=currency.id, amount=Decimal("100.50")),)
     assert transaction.occurred_at == occurred_at
 
 
@@ -274,8 +273,7 @@ async def test_update_transaction_replaces_all_fields() -> None:
     )
 
     assert updated.category_id == category_b.id
-    assert updated.currency_id == cny.id
-    assert updated.amount == Decimal("20")
+    assert updated.legs == (TransactionLeg(currency_id=cny.id, amount=Decimal("20")),)
     assert updated.occurred_at == new_occurred_at
     assert updated.updated_at == clock.now()
 
@@ -529,78 +527,219 @@ async def test_list_transactions_rejects_date_from_after_date_to() -> None:
         )
 
 
-async def test_get_wallet_balances_zero_without_transactions() -> None:
-    service, _, wallets, _, currencies, _ = make_service()
-    owner = uuid4()
-    rub = await make_currency(currencies, "RUB")
-    cny = await make_currency(currencies, "CNY")
-    wallet = await make_wallet(wallets, owner, [rub.id, cny.id])
-
-    balances = await service.get_wallet_balances(wallet.id, owner)
-
-    assert balances == [(rub.id, Decimal("0")), (cny.id, Decimal("0"))]
-
-
-async def test_get_wallet_balances_computes_income_minus_expense() -> None:
-    service, _, wallets, categories, currencies, _ = make_service()
-    owner = uuid4()
-    currency = await make_currency(currencies)
-    wallet = await make_wallet(wallets, owner, [currency.id])
-    income = await make_category(categories, owner, CategoryType.INCOME)
-    expense = await make_category(categories, owner, CategoryType.EXPENSE)
-    await service.create_transaction(
-        owner,
-        wallet_id=wallet.id,
-        category_id=income.id,
-        currency_id=currency.id,
-        amount=Decimal("100"),
-        occurred_at=None,
-    )
-    await service.create_transaction(
-        owner,
-        wallet_id=wallet.id,
-        category_id=expense.id,
-        currency_id=currency.id,
-        amount=Decimal("30"),
-        occurred_at=None,
-    )
-
-    balances = await service.get_wallet_balances(wallet.id, owner)
-
-    assert balances == [(currency.id, Decimal("70"))]
-
-
-async def test_get_wallet_balances_separates_currencies() -> None:
+async def test_create_topup_success_with_full_currency_set() -> None:
     service, _, wallets, categories, currencies, _ = make_service()
     owner = uuid4()
     rub = await make_currency(currencies, "RUB")
     cny = await make_currency(currencies, "CNY")
     wallet = await make_wallet(wallets, owner, [rub.id, cny.id])
-    income = await make_category(categories, owner, CategoryType.INCOME)
-    await service.create_transaction(
-        owner, wallet_id=wallet.id, category_id=income.id, currency_id=rub.id, amount=Decimal("100"), occurred_at=None
+    category = await make_category(categories, owner, CategoryType.INCOME)
+
+    transaction = await service.create_topup(
+        owner,
+        wallet_id=wallet.id,
+        category_id=category.id,
+        legs=[
+            TransactionLeg(currency_id=rub.id, amount=Decimal("10000")),
+            TransactionLeg(currency_id=cny.id, amount=Decimal("780")),
+        ],
+        occurred_at=None,
     )
-    await service.create_transaction(
-        owner, wallet_id=wallet.id, category_id=income.id, currency_id=cny.id, amount=Decimal("50"), occurred_at=None
+
+    assert transaction.wallet_id == wallet.id
+    assert transaction.category_id == category.id
+    assert {leg.currency_id for leg in transaction.legs} == {rub.id, cny.id}
+
+
+async def test_create_topup_without_date_uses_clock_now() -> None:
+    service, _, wallets, categories, currencies, clock = make_service()
+    owner = uuid4()
+    currency = await make_currency(currencies)
+    wallet = await make_wallet(wallets, owner, [currency.id])
+    category = await make_category(categories, owner, CategoryType.INCOME)
+
+    transaction = await service.create_topup(
+        owner,
+        wallet_id=wallet.id,
+        category_id=category.id,
+        legs=[TransactionLeg(currency_id=currency.id, amount=Decimal("10"))],
+        occurred_at=None,
     )
 
-    balances = await service.get_wallet_balances(wallet.id, owner)
-
-    assert balances == [(rub.id, Decimal("100")), (cny.id, Decimal("50"))]
+    assert transaction.occurred_at == clock.now()
 
 
-async def test_get_wallet_balances_unknown_wallet_raises_not_found() -> None:
-    service, _, _, _, _, _ = make_service()
+async def test_create_topup_rejects_incomplete_currency_set() -> None:
+    service, _, wallets, categories, currencies, _ = make_service()
+    owner = uuid4()
+    rub = await make_currency(currencies, "RUB")
+    cny = await make_currency(currencies, "CNY")
+    wallet = await make_wallet(wallets, owner, [rub.id, cny.id])
+    category = await make_category(categories, owner, CategoryType.INCOME)
+
+    with pytest.raises(ClientError):
+        await service.create_topup(
+            owner,
+            wallet_id=wallet.id,
+            category_id=category.id,
+            legs=[TransactionLeg(currency_id=rub.id, amount=Decimal("100"))],
+            occurred_at=None,
+        )
+
+
+async def test_create_topup_rejects_excessive_currency_set() -> None:
+    service, _, wallets, categories, currencies, _ = make_service()
+    owner = uuid4()
+    rub = await make_currency(currencies, "RUB")
+    cny = await make_currency(currencies, "CNY")
+    wallet = await make_wallet(wallets, owner, [rub.id])
+    category = await make_category(categories, owner, CategoryType.INCOME)
+
+    with pytest.raises(ClientError):
+        await service.create_topup(
+            owner,
+            wallet_id=wallet.id,
+            category_id=category.id,
+            legs=[
+                TransactionLeg(currency_id=rub.id, amount=Decimal("100")),
+                TransactionLeg(currency_id=cny.id, amount=Decimal("100")),
+            ],
+            occurred_at=None,
+        )
+
+
+async def test_create_topup_rejects_duplicate_currency_in_legs() -> None:
+    service, _, wallets, categories, currencies, _ = make_service()
+    owner = uuid4()
+    rub = await make_currency(currencies, "RUB")
+    wallet = await make_wallet(wallets, owner, [rub.id])
+    category = await make_category(categories, owner, CategoryType.INCOME)
+
+    with pytest.raises(ClientError):
+        await service.create_topup(
+            owner,
+            wallet_id=wallet.id,
+            category_id=category.id,
+            legs=[
+                TransactionLeg(currency_id=rub.id, amount=Decimal("100")),
+                TransactionLeg(currency_id=rub.id, amount=Decimal("50")),
+            ],
+            occurred_at=None,
+        )
+
+
+async def test_create_topup_rejects_non_income_category() -> None:
+    service, _, wallets, categories, currencies, _ = make_service()
+    owner = uuid4()
+    currency = await make_currency(currencies)
+    wallet = await make_wallet(wallets, owner, [currency.id])
+    category = await make_category(categories, owner, CategoryType.EXPENSE)
+
+    with pytest.raises(ClientError):
+        await service.create_topup(
+            owner,
+            wallet_id=wallet.id,
+            category_id=category.id,
+            legs=[TransactionLeg(currency_id=currency.id, amount=Decimal("100"))],
+            occurred_at=None,
+        )
+
+
+async def test_create_topup_rejects_nonpositive_leg_amount() -> None:
+    service, _, wallets, categories, currencies, _ = make_service()
+    owner = uuid4()
+    currency = await make_currency(currencies)
+    wallet = await make_wallet(wallets, owner, [currency.id])
+    category = await make_category(categories, owner, CategoryType.INCOME)
+
+    with pytest.raises(ClientError):
+        await service.create_topup(
+            owner,
+            wallet_id=wallet.id,
+            category_id=category.id,
+            legs=[TransactionLeg(currency_id=currency.id, amount=Decimal("0"))],
+            occurred_at=None,
+        )
+
+
+async def test_create_topup_rejects_leg_amount_exceeding_decimal_places() -> None:
+    service, _, wallets, categories, currencies, _ = make_service()
+    owner = uuid4()
+    currency = await make_currency(currencies, decimal_places=2)
+    wallet = await make_wallet(wallets, owner, [currency.id])
+    category = await make_category(categories, owner, CategoryType.INCOME)
+
+    with pytest.raises(ClientError):
+        await service.create_topup(
+            owner,
+            wallet_id=wallet.id,
+            category_id=category.id,
+            legs=[TransactionLeg(currency_id=currency.id, amount=Decimal("1.005"))],
+            occurred_at=None,
+        )
+
+
+async def test_create_topup_rejects_foreign_wallet() -> None:
+    service, _, wallets, categories, currencies, _ = make_service()
+    owner = uuid4()
+    currency = await make_currency(currencies)
+    wallet = await make_wallet(wallets, owner, [currency.id])
+    category = await make_category(categories, uuid4(), CategoryType.INCOME)
 
     with pytest.raises(NotFoundError):
-        await service.get_wallet_balances(uuid4(), uuid4())
+        await service.create_topup(
+            uuid4(),
+            wallet_id=wallet.id,
+            category_id=category.id,
+            legs=[TransactionLeg(currency_id=currency.id, amount=Decimal("1"))],
+            occurred_at=None,
+        )
 
 
-async def test_get_wallet_balances_foreign_wallet_raises_not_found() -> None:
+async def test_create_topup_rejects_unknown_wallet() -> None:
+    service, _, _, categories, currencies, _ = make_service()
+    owner = uuid4()
+    currency = await make_currency(currencies)
+    category = await make_category(categories, owner, CategoryType.INCOME)
+
+    with pytest.raises(NotFoundError):
+        await service.create_topup(
+            owner,
+            wallet_id=uuid4(),
+            category_id=category.id,
+            legs=[TransactionLeg(currency_id=currency.id, amount=Decimal("1"))],
+            occurred_at=None,
+        )
+
+
+async def test_create_topup_rejects_foreign_category() -> None:
+    service, _, wallets, categories, currencies, _ = make_service()
+    owner = uuid4()
+    currency = await make_currency(currencies)
+    wallet = await make_wallet(wallets, owner, [currency.id])
+    category = await make_category(categories, uuid4(), CategoryType.INCOME)
+
+    with pytest.raises(NotFoundError):
+        await service.create_topup(
+            owner,
+            wallet_id=wallet.id,
+            category_id=category.id,
+            legs=[TransactionLeg(currency_id=currency.id, amount=Decimal("1"))],
+            occurred_at=None,
+        )
+
+
+async def test_create_topup_rejects_unknown_category() -> None:
     service, _, wallets, _, currencies, _ = make_service()
     owner = uuid4()
     currency = await make_currency(currencies)
     wallet = await make_wallet(wallets, owner, [currency.id])
 
     with pytest.raises(NotFoundError):
-        await service.get_wallet_balances(wallet.id, uuid4())
+        await service.create_topup(
+            owner,
+            wallet_id=wallet.id,
+            category_id=uuid4(),
+            legs=[TransactionLeg(currency_id=currency.id, amount=Decimal("1"))],
+            occurred_at=None,
+        )

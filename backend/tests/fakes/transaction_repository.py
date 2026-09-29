@@ -1,9 +1,10 @@
 from collections import defaultdict
+from collections.abc import Sequence
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from core.entities import CategoryType, Transaction
+from core.entities import CategoryType, Transaction, TransactionLeg
 from tests.fakes.category_repository import InMemoryCategoryRepository
 
 
@@ -99,8 +100,7 @@ class InMemoryTransactionRepository:
         *,
         wallet_id: UUID,
         category_id: UUID,
-        currency_id: UUID,
-        amount: Decimal,
+        legs: Sequence[TransactionLeg],
         occurred_at: datetime,
         now: datetime,
     ) -> Transaction | None:
@@ -111,8 +111,7 @@ class InMemoryTransactionRepository:
             update={
                 "wallet_id": wallet_id,
                 "category_id": category_id,
-                "currency_id": currency_id,
-                "amount": amount,
+                "legs": tuple(legs),
                 "occurred_at": occurred_at,
                 "updated_at": now,
             }
@@ -136,12 +135,13 @@ class InMemoryTransactionRepository:
         """Аналогично `references_wallet`, но для `ON DELETE RESTRICT` `transactions.category_id`."""
         return any(transaction.category_id == category_id for transaction in self._transactions.values())
 
-    async def balances(self, wallet_id: UUID, user_id: UUID) -> dict[UUID, Decimal]:
+    async def balance_delta(self, wallet_id: UUID, user_id: UUID) -> dict[UUID, Decimal]:
         totals: dict[UUID, Decimal] = defaultdict(lambda: Decimal("0"))
         for transaction in self._transactions.values():
             if transaction.user_id != user_id or transaction.wallet_id != wallet_id:
                 continue
             category = await self._categories.get_by_id(transaction.category_id, user_id)
             sign = 1 if category is not None and category.type == CategoryType.INCOME else -1
-            totals[transaction.currency_id] += sign * transaction.amount
+            for leg in transaction.legs:
+                totals[leg.currency_id] += sign * leg.amount
         return dict(totals)
