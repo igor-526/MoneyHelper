@@ -30,6 +30,7 @@ import {
   Share,
   Sun,
   Moon,
+  LogOut,
 } from "lucide-react";
 
 /**
@@ -67,6 +68,7 @@ export const ICONS: Record<string, LucideIcon> = {
   share: Share,
   sun: Sun,
   moon: Moon,
+  "log-out": LogOut,
 };
 
 export const FALLBACK_ICON: LucideIcon = CircleHelp;

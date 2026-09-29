@@ -19,3 +19,17 @@ def test_openapi_schema_is_generated() -> None:
 
     assert response.status_code == 200
     assert "/health" in response.json()["paths"]
+
+
+def test_auth_routes_are_registered() -> None:
+    paths = TestClient(app).get("/openapi.json").json()["paths"]
+
+    for path in [
+        "/api/auth/register",
+        "/api/auth/login",
+        "/api/auth/refresh",
+        "/api/auth/logout",
+        "/api/auth/password",
+        "/api/auth/me",
+    ]:
+        assert path in paths, path

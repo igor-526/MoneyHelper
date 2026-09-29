@@ -8,9 +8,3 @@ def test_health() -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
-
-
-def test_auth_routes_are_not_registered() -> None:
-    response = TestClient(app).post("/api/auth/register")
-
-    assert response.status_code == 404

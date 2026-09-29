@@ -2,8 +2,9 @@ import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { FakeApiClient } from "@/test/FakeApiClient";
 import { renderApp } from "@/test/renderApp";
+import { withSession } from "@/test/session";
 
-const api = () => new FakeApiClient(() => ({ status: "ok" }));
+const api = () => new FakeApiClient(withSession(() => ({ status: "ok" })));
 
 describe("адаптивный layout", () => {
   it("на телефоне: нижняя панель навигации, верхней навигации нет", async () => {

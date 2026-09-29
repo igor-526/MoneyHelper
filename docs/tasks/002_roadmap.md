@@ -7,10 +7,10 @@
 
 | Тема | Решение |
 |---|---|
-| Авторизация | JWT access + refresh; время жизни в `.env`; токены только в cookies, которые ставит и читает backend |
+| Авторизация | JWT access + refresh (HS256, подпись `JWT_SECRET`), **токены на сервере не хранятся**; время жизни в `.env` (по умолчанию 15 минут и 30 дней); токены только в cookies, которые ставит и читает backend |
 | Вход и регистрация | Вход по email; регистрация управляется флагом `REGISTRATION_ENABLED`; подтверждение email, сброс пароля, OAuth, роли и rate limit — вне рамок |
 | Origin и CORS | Разные origin (same-site), CORS с `allow_credentials` и списком `CORS_ORIGINS`; CSRF закрывается проверкой `Origin` и JSON-only телом |
-| Refresh | Хранится хешем в `refresh_sessions`, ротация с `family_id` и отзывом семьи при повторном использовании |
+| Refresh | Скользящий: каждый `/refresh` выдаёт новую пару токенов. Отзыв без хранения токенов: у пользователя `token_version`, он лежит в claim refresh; logout и смена пароля увеличивают его и гасят все refresh пользователя. Окна терпимости нет |
 | Frontend | React, полностью CSR, UI — Ant Design; mobile-first (проект в основном используется на телефоне), светлая и тёмная темы, PWA; каждое действие обрабатывает любую ошибку (400, 401, 403, 404, 409, 500, сеть) с уведомлением Toast |
 | Тесты и CI | `make test` без БД (unit + smoke), тесты с БД в `tests/infrastructure/` через `make test-infra`; CI на GitHub: job без БД и job с PostgreSQL |
 | Валюты | Глобальный справочник; сидируется при старте приложения в `lifespan`, не миграциями |

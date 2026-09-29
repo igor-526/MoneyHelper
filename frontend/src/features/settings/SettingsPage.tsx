@@ -1,5 +1,7 @@
 import { Card, Flex, Typography } from "antd";
+import { ChangePasswordForm } from "./ChangePasswordForm";
 import { InstallSection } from "./InstallSection";
+import { LogoutButton } from "./LogoutButton";
 import { ThemeSwitch } from "./ThemeSwitch";
 
 export function SettingsPage() {
@@ -10,6 +12,12 @@ export function SettingsPage() {
       </Typography.Title>
       <Card title="Тема оформления">
         <ThemeSwitch />
+      </Card>
+      <Card title="Смена пароля">
+        <ChangePasswordForm />
+      </Card>
+      <Card title="Аккаунт">
+        <LogoutButton />
       </Card>
       <Card title="Приложение">
         <Flex vertical gap={12}>

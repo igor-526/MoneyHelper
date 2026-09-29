@@ -168,12 +168,14 @@ backend/
   (`core`) и валидируется на входе API; frontend отрисовывает иконку по этому имени.
 
 **Авторизация**
-- JWT: пара access + refresh. Время жизни задаётся в `.env` (поля `Settings`), в коде не хардкодится.
+- JWT (PyJWT, HS256, подпись `JWT_SECRET`): пара access + refresh; **токены на сервере не хранятся**. Время жизни задаётся в
+  `.env` (по умолчанию 15 минут и 30 дней), в коде не хардкодится. `sub` — `user_id`; `token_type` различает access и refresh.
 - Токены передаются только через cookies: backend сам ставит и удаляет их (`HttpOnly`, `Secure` вне development,
   `SameSite`), читает из запроса; frontend лишь отправляет запросы с `credentials`. В теле ответа токены не возвращаются.
-- Refresh хранится на стороне сервера (хеш) в `refresh_sessions` с `family_id`: ротация при каждом обновлении,
-  при повторном предъявлении использованного refresh отзывается вся семья. Access проверяется без обращения к БД.
-- Вход по email (нижний регистр, уникален). Пароли — argon2id, хеширование выполняется вне event loop.
+- Refresh скользящий: каждый `/refresh` выдаёт новую пару токенов. Отзыв без хранения токенов — `token_version`
+  пользователя: он лежит в claim `ver` refresh, `/refresh` сверяет его с БД; logout и смена пароля увеличивают его и
+  гасят все refresh пользователя. Access проверяется без обращения к БД (после logout действует до истечения TTL).
+- Вход по email (нижний регистр, уникален). Пароли — argon2id (8–128 символов), хеширование выполняется вне event loop.
   Ответ на неверные учётные данные одинаков для неизвестного email и неверного пароля.
 - Регистрация включается настройкой `REGISTRATION_ENABLED`.
 - Frontend и backend работают на разных origin, но обязаны быть same-site (общий registrable domain, в dev —
@@ -237,13 +239,17 @@ backend/
   ├── app/                # App (композиция провайдеров), routes, layout (MobileShell/DesktopShell), navItems
   ├── features/<feature>/ # страницы, компоненты, hooks и api фичи (сейчас health, settings)
   ├── shared/
-  │   ├── api/            # ApiClient (интерфейс), FetchApiClient, ApiError, parseApiError, ApiClientProvider
+  │   ├── api/            # ApiClient (интерфейс), FetchApiClient, ApiError, parseApiError, ApiClientProvider, refreshSession
   │   ├── errors/         # ErrorBoundary, resolveErrorMessage, createQueryClient, applyFieldErrors
   │   ├── ui/             # theme (ThemeProvider, токены), useIsMobile, toast (ToastProvider), Icon
   │   ├── pwa/            # manifest, PwaBanners, useOnlineStatus, usePwaUpdate, installPrompt
   │   └── config/         # чтение переменных окружения
-  └── test/               # setup, FakeApiClient, toastSpy, matchMedia, renderApp
+  └── test/               # setup, FakeApiClient, toastSpy, matchMedia, renderApp, session (withSession)
   ```
+
+  `features/auth/` — не обычная фича, а инфраструктура маршрутов: `session.ts` (`useSession`, `SESSION_QUERY_KEY`),
+  `RequireAuth`/`GuestOnly` (обёртки маршрутов в `app/routes.tsx`), `LoginPage`/`RegisterPage`, `useLogin`/`useRegister`.
+  Выход и смена пароля живут в `features/settings/` (`LogoutButton`, `ChangePasswordForm`), где ими и пользуются.
 
   Тесты лежат рядом с кодом (`*.test.ts(x)`). Импорты между слоями: `app` → `features` → `shared`; `shared` не зависит от `features`.
 - **Обработка ошибок обязательна для каждого действия.** Любой запрос к API обрабатывает все ошибки: 400 (включая
@@ -258,6 +264,20 @@ backend/
     ошибками 400 по полям: `silent` + `applyFieldErrors(error, [поля формы])` → сообщения у полей и
     `toast.error(toastMessage)` (в нём остаются сообщения неизвестных форме полей).
   - Ошибки не из API (баги) тоже показываются toast «Что-то пошло не так»; ошибки рендеринга ловит `ErrorBoundary`.
+- **Авторизация.** Сессия — обычный запрос (`useSession`, `GET /api/auth/me`), а не React-контекст; у него
+  `meta.silent: true`, потому что 401 при первом визите анонима — нормальное состояние, не ошибка. `RequireAuth`
+  оборачивает защищённые маршруты (все, кроме `/login` и `/register`), `GuestOnly` — публичные; оба реагируют на
+  один и тот же кэш `SESSION_QUERY_KEY`, поэтому редирект всегда один на событие: например, `GuestOnly` сам решает
+  «куда» (сохранённый `from` или `/`), а не `LoginPage` — два места, редиректящих по одному и тому же изменению
+  кэша, гоняются друг с другом за `router.navigate`.
+  - Обновление токена при 401 — `createSingleFlightRefresh` (`shared/api`), передаётся в `FetchApiClient` как
+    `onUnauthorized`; несколько запросов, упавших в 401 одновременно, ждут одно обновление, не по одному на каждый.
+  - Если обновление не помогло, глобальный обработчик ошибок не зовёт роутер напрямую — он очищает
+    `SESSION_QUERY_KEY` (`onUnauthorized` в `createQueryClient`), а `RequireAuth` сам уводит на `/login` тем же кодом,
+    что и при обычном заходе без сессии (включая сохранение пути для возврата).
+  - Формы входа/регистрации/смены пароля — тот же паттерн `silent` + `applyFieldErrors`, но `kind === "unauthorized"`
+    каждая форма показывает своим текстом под свой контекст (неверные учётные данные / неверный текущий пароль),
+    а не переиспользует дефолтное «Сессия истекла…».
 - **Mobile-first (обязательно).** Приложение в основном используется на телефоне: вёрстка проектируется сначала под
   узкий экран (от 320 px, без горизонтальной прокрутки), затем расширяется.
   - Режим выбирается только хуком `useIsMobile` (порог 768 px, `md` antd), не собственными `matchMedia`.

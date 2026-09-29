@@ -10,6 +10,11 @@
 
 ### Возможности
 
+**Авторизация**
+- Регистрация по email (управляется флагом `REGISTRATION_ENABLED`) и вход.
+- Сессия — JWT access и refresh в HTTP-only cookies; backend их не хранит, только проверяет подпись и срок.
+- Смена пароля и выход завершают сессию на всех устройствах.
+
 **Кошельки и валюты**
 - Кошельки и валюты администрируются отдельно для каждого пользователя.
 - Примеры кошельков: UPay (USDT), Alipay CNY (2 шт.), WeChatPay CNY (2 шт.), NihaoChina CNY, наличные RUB и др.
@@ -47,7 +52,7 @@
 - Python 3.14, FastAPI, Uvicorn
 - SQLAlchemy Core + asyncpg, PostgreSQL, Alembic
 - Pydantic / pydantic-settings
-- JWT (access + refresh) в cookies
+- JWT (access + refresh) в cookies, без хранения токенов на сервере; argon2id
 - Sentry (опционально)
 - uv, pytest, ruff, flake8, mypy
 

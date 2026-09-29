@@ -11,8 +11,11 @@ export function shouldRetryQuery(failureCount: number, error: unknown): boolean 
 }
 
 /** `QueryClient` с глобальным показом toast для любой ошибки запроса и мутации. */
-export function createQueryClient(toast: ToastApi): QueryClient {
-  const handle = createErrorHandler(toast);
+export function createQueryClient(
+  toast: ToastApi,
+  options?: { onUnauthorized?: () => void },
+): QueryClient {
+  const handle = createErrorHandler(toast, options);
   return new QueryClient({
     queryCache: new QueryCache({
       onError: (error, query) => handle(error, query.meta),

@@ -4,22 +4,26 @@ import { describe, expect, it } from "vitest";
 import { ApiError } from "@/shared/api";
 import { FakeApiClient } from "@/test/FakeApiClient";
 import { renderApp } from "@/test/renderApp";
+import { withSession } from "@/test/session";
 
 // Запрос на чтение при сбое сети/сервера повторяется один раз (задержка 1 с), поэтому ожидаем дольше
 const RETRY_WAIT = { timeout: 4000 };
 
-const healthy = () => new FakeApiClient(() => ({ status: "ok" }));
+const healthy = () => new FakeApiClient(withSession(() => ({ status: "ok" })));
 const failing = (error: ApiError) =>
-  new FakeApiClient(() => {
-    throw error;
-  });
+  new FakeApiClient(
+    withSession((request) => {
+      if (request.path === "/health") throw error;
+      return {};
+    }),
+  );
 
 describe("страница-заглушка и проверка backend", () => {
   it("backend доступен", async () => {
     const api = healthy();
     renderApp({ apiClient: api });
     expect(await screen.findByText("Backend доступен")).toBeInTheDocument();
-    expect(api.requests[0]).toMatchObject({ method: "GET", path: "/health" });
+    expect(api.requests.some((r) => r.method === "GET" && r.path === "/health")).toBe(true);
   });
 
   it("сетевой сбой: страница показывает «недоступен» и показывается toast", async () => {
@@ -44,10 +48,15 @@ describe("страница-заглушка и проверка backend", () => 
 
   it("кнопка «Повторить» повторяет запрос", async () => {
     let fail = true;
-    const api = new FakeApiClient(() => {
-      if (fail) throw new ApiError({ kind: "network", status: null });
-      return { status: "ok" };
-    });
+    const api = new FakeApiClient(
+      withSession((request) => {
+        if (request.path === "/health") {
+          if (fail) throw new ApiError({ kind: "network", status: null });
+          return { status: "ok" };
+        }
+        return {};
+      }),
+    );
     renderApp({ apiClient: api });
     await screen.findByText("Backend недоступен", undefined, RETRY_WAIT);
 
@@ -70,9 +79,19 @@ describe("маршруты", () => {
 
   it("навигация переключает страницы", async () => {
     renderApp({ apiClient: healthy() });
-    const nav = screen.getByRole("navigation", { name: "Основная навигация" });
+    const nav = await screen.findByRole("navigation", { name: "Основная навигация" });
     await userEvent.click(within(nav).getByRole("link", { name: /Настройки/ }));
     expect(await screen.findByRole("heading", { name: "Настройки" })).toBeInTheDocument();
+  });
+
+  it("без сессии защищённый маршрут ведёт на /login", async () => {
+    renderApp({ apiClient: new FakeApiClient(withSession(() => ({}), null)), path: "/settings" });
+    expect(await screen.findByRole("heading", { name: "Вход" })).toBeInTheDocument();
+  });
+
+  it("с активной сессией /login ведёт на главную", async () => {
+    renderApp({ apiClient: healthy(), path: "/login" });
+    expect(await screen.findByText("Backend доступен")).toBeInTheDocument();
   });
 });
 

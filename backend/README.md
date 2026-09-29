@@ -62,12 +62,21 @@ make test
 - `TEST_POSTGRES_DB`, `TEST_POSTGRES_HOST`, `TEST_POSTGRES_PORT` — БД для `make test-infra`; имя обязано оканчиваться на `_test`.
 - `make test` и `pytest` без аргументов не требуют БД; тесты с БД лежат в `tests/infrastructure/` и запускаются `make test-infra`
   (сначала `make infra` в корне репозитория).
+- `JWT_SECRET`, `ACCESS_TOKEN_TTL_MINUTES` (15), `REFRESH_TOKEN_TTL_DAYS` (30), `COOKIE_SECURE`, `COOKIE_DOMAIN`,
+  `COOKIE_SAMESITE`, `REGISTRATION_ENABLED` — авторизация; токены не хранятся на сервере (см. AGENTS.md, раздел
+  «Авторизация»). Вне `development` `JWT_SECRET` обязателен и должен быть не короче 32 символов.
 
 ## API
 
 | Метод | Путь | Назначение |
 |---|---|---|
 | GET | `/health` | Healthcheck |
+| POST | `/api/auth/register` | Регистрация (при `REGISTRATION_ENABLED=true`) |
+| POST | `/api/auth/login` | Вход, ставит cookies сессии |
+| POST | `/api/auth/refresh` | Обновление сессии по refresh-cookie |
+| POST | `/api/auth/logout` | Выход, гасит сессию на всех устройствах |
+| POST | `/api/auth/password` | Смена пароля |
+| GET | `/api/auth/me` | Текущий пользователь |
 
 Пакеты `api`, `core`, `depends`, `models` и `repositories` оставлены как точки расширения для новых бизнес-фич.
 
