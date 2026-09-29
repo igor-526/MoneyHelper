@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from api.auth import router as auth_router
 from api.currencies import router as currencies_router
 from api.errors import register_error_handlers
+from api.icons import router as icons_router
 from seeds import SEED_DEFINITIONS
 from settings import settings
 from utils.configure_cors import configure_cors
@@ -34,6 +35,7 @@ def create_app() -> FastAPI:
 
     application.include_router(auth_router)
     application.include_router(currencies_router)
+    application.include_router(icons_router)
 
     register_error_handlers(application)
     # Порядок важен: последний добавленный middleware — самый внешний. Обработчик 500 и проверка Origin

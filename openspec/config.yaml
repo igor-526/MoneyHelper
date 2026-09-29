@@ -16,8 +16,13 @@ context: |
   защищённые маршруты (RequireAuth/GuestOnly) и автообновление сессии. Валюты реализованы (изменение currencies-seeding):
   глобальный справочник (CNY, RUB, USDT), сидируется при старте приложения (lifespan) из JSON с явными UUID, не
   миграциями, upsert по id без удаления; переиспользуемый механизм сидирования в utils/seeding.py (advisory lock)
-  рассчитан на будущие справочники (например, iconpack). Категории — плоский список. Удаление — физическое.
-  Iconpack — Lucide. Дорожная карта: docs/tasks/002_roadmap.md; задачи: docs/tasks/003_*.md … 012_*.md.
+  рассчитан на будущие справочники. Категории — плоский список. Удаление — физическое.
+  Iconpack реализован (изменение iconpack): закрытый курируемый реестр имён иконок Lucide (23 штуки, kebab-case) в
+  backend/src/core/icons.json — единственный источник правды, не таблица БД; core/icons.py строит ALLOWED_ICONS,
+  core/schemas/icon.py даёт переиспользуемый тип IconName для будущих схем кошельков и категорий (008, 009); GET
+  /api/icons отдаёт список без авторизации. Frontend не запрашивает список по сети (статическая карта имя →
+  компонент для PWA precache/tree-shaking), а синхронизируется vitest-тестом, читающим тот же JSON с диска.
+  Дорожная карта: docs/tasks/002_roadmap.md; задачи: docs/tasks/003_*.md … 012_*.md.
   Архитектура обязательно следует SOLID по правилам из AGENTS.md.
 
   Стек backend: Python 3.14, FastAPI, SQLAlchemy Core + asyncpg, PostgreSQL, Alembic, uv, pytest,

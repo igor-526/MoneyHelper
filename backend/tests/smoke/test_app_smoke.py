@@ -32,5 +32,15 @@ def test_auth_routes_are_registered() -> None:
         "/api/auth/password",
         "/api/auth/me",
         "/api/currencies",
+        "/api/icons",
     ]:
         assert path in paths, path
+
+
+def test_icons_endpoint_returns_full_sorted_list_without_auth() -> None:
+    response = TestClient(app).get("/api/icons")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body == sorted(body)
+    assert "wallet" in body

@@ -1,44 +1,43 @@
 import {
   Banknote,
+  Briefcase,
   Bus,
   Car,
   CircleHelp,
   Coins,
   CreditCard,
+  Download,
+  Film,
+  Gamepad2,
   Gift,
+  GraduationCap,
+  HeartPulse,
+  House,
   Landmark,
+  LogOut,
   type LucideIcon,
+  Moon,
   PiggyBank,
+  Plane,
+  Settings,
+  Share,
+  Shirt,
   ShoppingCart,
   Smartphone,
-  Utensils,
-  Wallet,
-  House,
-  Settings,
-  Briefcase,
-  HeartPulse,
-  Plane,
-  Shirt,
-  GraduationCap,
-  Gamepad2,
-  Film,
+  Sun,
   TrendingDown,
   TrendingUp,
-  Zap,
+  Utensils,
+  Wallet,
   WifiOff,
-  Download,
-  Share,
-  Sun,
-  Moon,
-  LogOut,
+  Zap,
 } from "lucide-react";
 
 /**
- * Закрытый набор иконок Lucide по именам (kebab-case), как они хранятся в БД.
- * Статическая карта (а не динамическая подгрузка) нужна, чтобы бандл и precache PWA не раздувались;
- * полный набор для категорий и кошельков будет определён в задаче «Iconpack».
+ * Бизнес-иконки категорий и кошельков — синхронизированы с backend/src/core/icons.json
+ * (проверяется тестом icons.sync.test.ts). Изменение состава требует правки обоих файлов.
  */
-export const ICONS: Record<string, LucideIcon> = {
+const BUSINESS_ICONS: Record<string, LucideIcon> = {
   banknote: Banknote,
   briefcase: Briefcase,
   bus: Bus,
@@ -54,7 +53,6 @@ export const ICONS: Record<string, LucideIcon> = {
   landmark: Landmark,
   "piggy-bank": PiggyBank,
   plane: Plane,
-  settings: Settings,
   shirt: Shirt,
   "shopping-cart": ShoppingCart,
   smartphone: Smartphone,
@@ -63,13 +61,27 @@ export const ICONS: Record<string, LucideIcon> = {
   utensils: Utensils,
   wallet: Wallet,
   zap: Zap,
-  "wifi-off": WifiOff,
-  download: Download,
-  share: Share,
+};
+
+/** Иконки интерфейса приложения — не относятся к категориям/кошелькам, вне реестра iconpack. */
+const UI_ICONS: Record<string, LucideIcon> = {
+  settings: Settings,
   sun: Sun,
   moon: Moon,
   "log-out": LogOut,
+  download: Download,
+  share: Share,
+  "wifi-off": WifiOff,
 };
+
+/**
+ * Закрытый набор иконок Lucide по именам (kebab-case), как они хранятся в БД.
+ * Статическая карта (а не динамическая подгрузка) нужна, чтобы бандл и precache PWA не раздувались.
+ */
+export const ICONS: Record<string, LucideIcon> = { ...BUSINESS_ICONS, ...UI_ICONS };
+
+/** Имена бизнес-иконок — для сверки с backend/src/core/icons.json (см. icons.sync.test.ts). */
+export const BUSINESS_ICON_NAMES: readonly string[] = Object.keys(BUSINESS_ICONS);
 
 export const FALLBACK_ICON: LucideIcon = CircleHelp;
 
