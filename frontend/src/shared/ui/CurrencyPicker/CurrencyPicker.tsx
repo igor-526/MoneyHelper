@@ -4,6 +4,8 @@ import { useCurrencies } from "./useCurrencies";
 interface CurrencyPickerBaseProps {
   placeholder?: string;
   disabled?: boolean;
+  /** Ограничивает список опций переданными id валют. При отсутствии — список полный (текущее поведение). */
+  allowedIds?: string[];
 }
 
 interface SingleCurrencyPickerProps extends CurrencyPickerBaseProps {
@@ -26,7 +28,10 @@ const UNAVAILABLE_PLACEHOLDER = "Валюты недоступны";
 export function CurrencyPicker(props: CurrencyPickerProps) {
   const { data: currencies, isPending, isError } = useCurrencies();
 
-  const options = (currencies ?? []).map((currency) => ({
+  const visibleCurrencies = (currencies ?? []).filter(
+    (currency) => props.allowedIds === undefined || props.allowedIds.includes(currency.id),
+  );
+  const options = visibleCurrencies.map((currency) => ({
     value: currency.id,
     label: `${currency.code} — ${currency.name}`,
   }));

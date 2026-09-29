@@ -6,6 +6,7 @@ import { RequireAuth } from "@/features/auth/RequireAuth";
 import { CategoriesPage } from "@/features/categories/CategoriesPage";
 import { HealthPage } from "@/features/health/HealthPage";
 import { SettingsPage } from "@/features/settings/SettingsPage";
+import { TransactionsPage } from "@/features/transactions/TransactionsPage";
 import { WalletsPage } from "@/features/wallets/WalletsPage";
 import { AppLayout } from "./layout/AppLayout";
 import { NotFoundPage } from "./NotFoundPage";
@@ -32,6 +33,7 @@ export const routes: RouteObject[] = [
       { index: true, element: <HealthPage /> },
       { path: "wallets", element: <WalletsPage /> },
       { path: "categories", element: <CategoriesPage /> },
+      { path: "transactions", element: <TransactionsPage /> },
       { path: "settings", element: <SettingsPage /> },
       { path: "*", element: <NotFoundPage /> },
     ],

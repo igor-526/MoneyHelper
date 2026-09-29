@@ -112,4 +112,38 @@ describe("CurrencyPicker", () => {
     await waitFor(() => expect(screen.getByRole("combobox")).toBeDisabled());
     expect(screen.getByText("Валюты недоступны")).toBeInTheDocument();
   });
+
+  it("без allowedIds список опций совпадает с полным списком валют", async () => {
+    const { wrapper } = setup(() => CURRENCIES_PAGE);
+    render(<CurrencyPicker value={undefined} onChange={vi.fn()} />, { wrapper });
+
+    await userEvent.click(screen.getByRole("combobox"));
+
+    expect(await screen.findByText("USD — Доллар США")).toBeInTheDocument();
+    expect(screen.getByText("RUB — Российский рубль")).toBeInTheDocument();
+  });
+
+  it("с allowedIds список опций ограничен переданными id (одиночный режим)", async () => {
+    const { wrapper } = setup(() => CURRENCIES_PAGE);
+    render(<CurrencyPicker value={undefined} onChange={vi.fn()} allowedIds={["1"]} />, {
+      wrapper,
+    });
+
+    await userEvent.click(screen.getByRole("combobox"));
+
+    expect(await screen.findByText("USD — Доллар США")).toBeInTheDocument();
+    expect(screen.queryByText("RUB — Российский рубль")).not.toBeInTheDocument();
+  });
+
+  it("с allowedIds список опций ограничен переданными id (множественный режим)", async () => {
+    const { wrapper } = setup(() => CURRENCIES_PAGE);
+    render(<CurrencyPicker multiple value={[]} onChange={vi.fn()} allowedIds={["2"]} />, {
+      wrapper,
+    });
+
+    await userEvent.click(screen.getByRole("combobox"));
+
+    expect(await screen.findByText("RUB — Российский рубль")).toBeInTheDocument();
+    expect(screen.queryByText("USD — Доллар США")).not.toBeInTheDocument();
+  });
 });

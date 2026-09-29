@@ -10,6 +10,7 @@ export interface NavItem {
 export const navItems: readonly NavItem[] = [
   { key: "home", path: "/", label: "Главная", icon: "house" },
   { key: "wallets", path: "/wallets", label: "Кошельки", icon: "wallet" },
+  { key: "transactions", path: "/transactions", label: "Операции", icon: "banknote" },
   { key: "settings", path: "/settings", label: "Настройки", icon: "settings" },
 ];
 
