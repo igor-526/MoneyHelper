@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
@@ -6,10 +7,13 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.entities import Currency, User, Wallet
+from core.entities import Category, CategoryType, Currency, Transaction, User, Wallet
+from core.exceptions import ConflictError
 from models import currencies as currencies_table
 from models import wallet_currencies as wallet_currencies_table
+from repositories.category import CategoryRepository
 from repositories.currency import CurrencyRepository
+from repositories.transaction import TransactionRepository
 from repositories.user import UserRepository
 from repositories.wallet import WalletRepository
 
@@ -255,3 +259,37 @@ async def test_deleting_referenced_currency_is_restricted(db_session: AsyncSessi
 
     with pytest.raises(IntegrityError):
         await db_session.execute(delete(currencies_table).where(currencies_table.c.id == rub.id))
+
+
+async def test_delete_wallet_with_transactions_raises_conflict_error(db_session: AsyncSession) -> None:
+    user = await make_user(db_session)
+    rub = await make_currency(db_session, "RUB")
+    wallet_repo = WalletRepository(db_session)
+    wallet = make_wallet(user.id, (rub.id,))
+    await wallet_repo.add(wallet)
+    category = await CategoryRepository(db_session).add(
+        Category(
+            id=uuid4(),
+            user_id=user.id,
+            type=CategoryType.INCOME,
+            name="Зарплата",
+            icon="wallet",
+            created_at=DEFAULT_CREATED_AT,
+        )
+    )
+    await TransactionRepository(db_session).add(
+        Transaction(
+            id=uuid4(),
+            user_id=user.id,
+            wallet_id=wallet.id,
+            category_id=category.id,
+            currency_id=rub.id,
+            amount=Decimal("10.00"),
+            occurred_at=DEFAULT_CREATED_AT,
+            created_at=DEFAULT_CREATED_AT,
+        )
+    )
+    await db_session.flush()
+
+    with pytest.raises(ConflictError):
+        await wallet_repo.delete(wallet.id, user.id)

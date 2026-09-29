@@ -3,6 +3,7 @@ from .base import (
     AppError,
     AuthenticationError,
     ClientError,
+    ConflictError,
     NotFoundError,
     PermissionDeniedError,
 )
@@ -12,6 +13,7 @@ __all__ = [
     "AppError",
     "AuthenticationError",
     "ClientError",
+    "ConflictError",
     "NotFoundError",
     "PermissionDeniedError",
 ]

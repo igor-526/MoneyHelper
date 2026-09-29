@@ -1,28 +1,44 @@
+from datetime import UTC, datetime
+from decimal import Decimal
 from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
 
-from core.entities import Currency
+from core.entities import Category, CategoryType, Currency, Transaction
+from core.exceptions import ConflictError
 from depends.auth import get_current_user
+from depends.category import get_category_repository
 from depends.currency import get_currency_repository
+from depends.transaction import get_transaction_repository
 from depends.wallet import get_wallet_repository
 from main import create_app
-from tests.fakes import InMemoryCurrencyRepository, InMemoryWalletRepository
+from tests.fakes import (
+    InMemoryCategoryRepository,
+    InMemoryCurrencyRepository,
+    InMemoryTransactionRepository,
+    InMemoryWalletRepository,
+)
 
 
 def make_client(
     *,
     wallets: InMemoryWalletRepository | None = None,
     currencies: InMemoryCurrencyRepository | None = None,
+    categories: InMemoryCategoryRepository | None = None,
+    transactions: InMemoryTransactionRepository | None = None,
     user_id: UUID | None = None,
     authenticated: bool = True,
 ) -> TestClient:
     wallets = wallets if wallets is not None else InMemoryWalletRepository()
     currencies = currencies if currencies is not None else InMemoryCurrencyRepository()
+    categories = categories if categories is not None else InMemoryCategoryRepository()
+    transactions = transactions if transactions is not None else InMemoryTransactionRepository(categories)
     user_id = user_id if user_id is not None else uuid4()
     app = create_app()
     app.dependency_overrides[get_wallet_repository] = lambda: wallets
     app.dependency_overrides[get_currency_repository] = lambda: currencies
+    app.dependency_overrides[get_category_repository] = lambda: categories
+    app.dependency_overrides[get_transaction_repository] = lambda: transactions
     if authenticated:
         app.dependency_overrides[get_current_user] = lambda: user_id
     return TestClient(app)
@@ -185,6 +201,60 @@ async def test_delete_unknown_wallet_returns_404() -> None:
     response = client.delete(f"/api/wallets/{uuid4()}")
 
     assert response.status_code == 404
+
+
+class RestrictingWalletRepository(InMemoryWalletRepository):
+    """Симулирует `ON DELETE RESTRICT` `transactions.wallet_id` (реальный `WalletRepository` перехватывает
+    `IntegrityError` и поднимает `ConflictError` — см. design.md `transactions`)."""
+
+    def __init__(self, transactions: InMemoryTransactionRepository) -> None:
+        super().__init__()
+        self._transaction_repo = transactions
+
+    async def delete(self, wallet_id: UUID, user_id: UUID) -> bool:
+        if await self._transaction_repo.references_wallet(wallet_id):
+            raise ConflictError("Кошелёк нельзя удалить: есть операции")
+        return await super().delete(wallet_id, user_id)
+
+
+async def test_delete_wallet_with_transactions_returns_409() -> None:
+    currencies, rub, _ = await seeded_currencies()
+    categories = InMemoryCategoryRepository()
+    transactions = InMemoryTransactionRepository(categories)
+    wallets = RestrictingWalletRepository(transactions)
+    user_id = uuid4()
+    client = make_client(
+        wallets=wallets, currencies=currencies, categories=categories, transactions=transactions, user_id=user_id
+    )
+    wallet_id = client.post("/api/wallets", json=wallet_payload([rub.id])).json()["id"]
+    category = await categories.add(
+        Category(
+            id=uuid4(),
+            user_id=user_id,
+            type=CategoryType.INCOME,
+            name="Зарплата",
+            icon="wallet",
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+    )
+    transaction = await transactions.add(
+        Transaction(
+            id=uuid4(),
+            user_id=user_id,
+            wallet_id=UUID(wallet_id),
+            category_id=category.id,
+            currency_id=rub.id,
+            amount=Decimal("10"),
+            occurred_at=datetime(2026, 1, 1, tzinfo=UTC),
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+    )
+
+    response = client.delete(f"/api/wallets/{wallet_id}")
+
+    assert response.status_code == 409
+    assert client.get(f"/api/wallets/{wallet_id}").status_code == 200
+    assert await transactions.get_by_id(transaction.id, user_id) is not None
 
 
 class TestUserIsolation:

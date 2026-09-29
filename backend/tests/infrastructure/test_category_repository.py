@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
@@ -6,12 +7,15 @@ from sqlalchemy import delete, insert, select
 from sqlalchemy.exc import IntegrityError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.entities import Category, CategoryType, User
-from core.exceptions import AlreadyExistsError
+from core.entities import Category, CategoryType, Currency, Transaction, User, Wallet
+from core.exceptions import AlreadyExistsError, ConflictError
 from models import categories as categories_table
 from models import users as users_table
 from repositories.category import CategoryRepository
+from repositories.currency import CurrencyRepository
+from repositories.transaction import TransactionRepository
 from repositories.user import UserRepository
+from repositories.wallet import WalletRepository
 
 pytestmark = pytest.mark.infrastructure
 
@@ -292,3 +296,37 @@ async def test_deleting_user_cascades_to_categories(db_session: AsyncSession) ->
 
     rows = (await db_session.execute(select(categories_table).where(categories_table.c.id == category.id))).all()
     assert rows == []
+
+
+async def test_delete_category_with_transactions_raises_conflict_error(db_session: AsyncSession) -> None:
+    user = await make_user(db_session)
+    category_repo = CategoryRepository(db_session)
+    category = await category_repo.add(make_category(user.id))
+    currency = Currency(id=uuid4(), code="RUB", name="Российский рубль", decimal_places=2)
+    await CurrencyRepository(db_session).upsert_many([currency])
+    wallet = await WalletRepository(db_session).add(
+        Wallet(
+            id=uuid4(),
+            user_id=user.id,
+            name="Кошелёк",
+            icon="wallet",
+            currency_ids=(currency.id,),
+            created_at=DEFAULT_CREATED_AT,
+        )
+    )
+    await TransactionRepository(db_session).add(
+        Transaction(
+            id=uuid4(),
+            user_id=user.id,
+            wallet_id=wallet.id,
+            category_id=category.id,
+            currency_id=currency.id,
+            amount=Decimal("10.00"),
+            occurred_at=DEFAULT_CREATED_AT,
+            created_at=DEFAULT_CREATED_AT,
+        )
+    )
+    await db_session.flush()
+
+    with pytest.raises(ConflictError):
+        await category_repo.delete(category.id, user.id)

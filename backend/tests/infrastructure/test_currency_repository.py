@@ -102,3 +102,21 @@ async def test_missing_ids_with_empty_input_returns_empty_set(db_session: AsyncS
     repo = CurrencyRepository(db_session)
 
     assert await repo.missing_ids([]) == set()
+
+
+async def test_get_by_id_returns_existing_currency(db_session: AsyncSession) -> None:
+    repo = CurrencyRepository(db_session)
+    currency = make_currency("RUB")
+    await repo.upsert_many([currency])
+    await db_session.flush()
+
+    fetched = await repo.get_by_id(currency.id)
+
+    assert fetched is not None
+    assert fetched.code == "RUB"
+
+
+async def test_get_by_id_unknown_returns_none(db_session: AsyncSession) -> None:
+    repo = CurrencyRepository(db_session)
+
+    assert await repo.get_by_id(uuid4()) is None

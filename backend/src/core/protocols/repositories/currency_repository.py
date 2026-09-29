@@ -10,6 +10,8 @@ class CurrencyRepository(Protocol):
 
     async def count(self) -> int: ...
 
+    async def get_by_id(self, currency_id: UUID) -> Currency | None: ...
+
     async def upsert_many(self, currencies: Sequence[Currency]) -> None:
         """Добавляет отсутствующие и обновляет code/name/decimal_places у существующих по id.
         Не удаляет записи, которых нет в currencies."""

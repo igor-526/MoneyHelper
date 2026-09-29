@@ -7,6 +7,8 @@ from api.categories import router as categories_router
 from api.currencies import router as currencies_router
 from api.errors import register_error_handlers
 from api.icons import router as icons_router
+from api.transactions import router as transactions_router
+from api.transactions import wallet_balances_router
 from api.wallets import router as wallets_router
 from seeds import SEED_DEFINITIONS
 from settings import settings
@@ -39,6 +41,8 @@ def create_app() -> FastAPI:
     application.include_router(categories_router)
     application.include_router(currencies_router)
     application.include_router(icons_router)
+    application.include_router(transactions_router)
+    application.include_router(wallet_balances_router)
     application.include_router(wallets_router)
 
     register_error_handlers(application)

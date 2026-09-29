@@ -9,10 +9,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.entities import Category, CategoryType
-from core.exceptions import AlreadyExistsError
+from core.exceptions import AlreadyExistsError, ConflictError
 from models import categories
 
 DUPLICATE_NAME_MESSAGE = "Категория с таким названием уже существует среди категорий этого типа"
+DELETE_CONFLICT_MESSAGE = "Категорию нельзя удалить: есть операции"
 
 
 def _map_row(row: Row[Any]) -> Category:
@@ -89,9 +90,12 @@ class CategoryRepository:
         return _map_row(row) if row is not None else None
 
     async def delete(self, category_id: UUID, user_id: UUID) -> bool:
-        result = await self._session.execute(
-            sa_delete(categories)
-            .where(categories.c.id == category_id, categories.c.user_id == user_id)
-            .returning(categories.c.id)
-        )
+        try:
+            result = await self._session.execute(
+                sa_delete(categories)
+                .where(categories.c.id == category_id, categories.c.user_id == user_id)
+                .returning(categories.c.id)
+            )
+        except IntegrityError as exc:
+            raise ConflictError(DELETE_CONFLICT_MESSAGE) from exc
         return result.first() is not None

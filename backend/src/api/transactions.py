@@ -1,0 +1,108 @@
+from typing import Annotated
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, Query, status
+
+from api.schemas.transaction import (
+    TransactionCreate,
+    TransactionListParams,
+    TransactionOut,
+    TransactionUpdate,
+    WalletBalanceOut,
+)
+from core.schemas import Page
+from core.services.transaction import TransactionService
+from depends.auth import get_current_user
+from depends.transaction import get_transaction_service
+
+router = APIRouter(prefix="/api/transactions", tags=["Transactions"])
+wallet_balances_router = APIRouter(tags=["Transactions"])
+
+
+@router.post("", response_model=TransactionOut, status_code=status.HTTP_201_CREATED)
+async def create_transaction(
+    body: TransactionCreate,
+    user_id: Annotated[UUID, Depends(get_current_user)],
+    transaction_service: Annotated[TransactionService, Depends(get_transaction_service)],
+) -> TransactionOut:
+    transaction = await transaction_service.create_transaction(
+        user_id,
+        wallet_id=body.wallet_id,
+        category_id=body.category_id,
+        currency_id=body.currency_id,
+        amount=body.amount,
+        occurred_at=body.occurred_at,
+    )
+    return TransactionOut.model_validate(transaction)
+
+
+@router.get("", response_model=Page[TransactionOut])
+async def list_transactions(
+    params: Annotated[TransactionListParams, Query()],
+    user_id: Annotated[UUID, Depends(get_current_user)],
+    transaction_service: Annotated[TransactionService, Depends(get_transaction_service)],
+) -> Page[TransactionOut]:
+    items, total = await transaction_service.list_transactions(
+        user_id,
+        wallet_id=params.wallet_id,
+        category_id=params.category_id,
+        type=params.type,
+        date_from=params.date_from,
+        date_to=params.date_to,
+        limit=params.limit,
+        offset=params.offset,
+    )
+    return Page[TransactionOut](
+        items=[TransactionOut.model_validate(item) for item in items],
+        total=total,
+        limit=params.limit,
+        offset=params.offset,
+    )
+
+
+@router.get("/{transaction_id}", response_model=TransactionOut)
+async def get_transaction(
+    transaction_id: UUID,
+    user_id: Annotated[UUID, Depends(get_current_user)],
+    transaction_service: Annotated[TransactionService, Depends(get_transaction_service)],
+) -> TransactionOut:
+    transaction = await transaction_service.get_transaction(transaction_id, user_id)
+    return TransactionOut.model_validate(transaction)
+
+
+@router.put("/{transaction_id}", response_model=TransactionOut)
+async def update_transaction(
+    transaction_id: UUID,
+    body: TransactionUpdate,
+    user_id: Annotated[UUID, Depends(get_current_user)],
+    transaction_service: Annotated[TransactionService, Depends(get_transaction_service)],
+) -> TransactionOut:
+    transaction = await transaction_service.update_transaction(
+        transaction_id,
+        user_id,
+        wallet_id=body.wallet_id,
+        category_id=body.category_id,
+        currency_id=body.currency_id,
+        amount=body.amount,
+        occurred_at=body.occurred_at,
+    )
+    return TransactionOut.model_validate(transaction)
+
+
+@router.delete("/{transaction_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_transaction(
+    transaction_id: UUID,
+    user_id: Annotated[UUID, Depends(get_current_user)],
+    transaction_service: Annotated[TransactionService, Depends(get_transaction_service)],
+) -> None:
+    await transaction_service.delete_transaction(transaction_id, user_id)
+
+
+@wallet_balances_router.get("/api/wallets/{wallet_id}/balances", response_model=list[WalletBalanceOut])
+async def get_wallet_balances(
+    wallet_id: UUID,
+    user_id: Annotated[UUID, Depends(get_current_user)],
+    transaction_service: Annotated[TransactionService, Depends(get_transaction_service)],
+) -> list[WalletBalanceOut]:
+    balances = await transaction_service.get_wallet_balances(wallet_id, user_id)
+    return [WalletBalanceOut(currency_id=currency_id, balance=balance) for currency_id, balance in balances]

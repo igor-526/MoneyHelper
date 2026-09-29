@@ -25,6 +25,10 @@ class CurrencyRepository:
     async def count(self) -> int:
         return (await self._session.execute(select(func.count()).select_from(currencies))).scalar_one()
 
+    async def get_by_id(self, currency_id: UUID) -> Currency | None:
+        row = (await self._session.execute(select(currencies).where(currencies.c.id == currency_id))).first()
+        return _map_row(row) if row is not None else None
+
     async def upsert_many(self, currencies_: Sequence[Currency]) -> None:
         if not currencies_:
             return

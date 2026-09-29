@@ -15,6 +15,9 @@ class InMemoryCurrencyRepository:
     async def count(self) -> int:
         return len(self._currencies)
 
+    async def get_by_id(self, currency_id: UUID) -> Currency | None:
+        return self._currencies.get(currency_id)
+
     async def upsert_many(self, currencies: Sequence[Currency]) -> None:
         for currency in currencies:
             self._currencies[currency.id] = currency

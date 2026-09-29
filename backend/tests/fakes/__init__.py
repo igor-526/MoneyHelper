@@ -5,6 +5,7 @@ from .id_generator import SequentialIdGenerator
 from .password_hasher import FakePasswordHasher
 from .repository import InMemoryRepository
 from .tokens import FakeTokenService
+from .transaction_repository import InMemoryTransactionRepository
 from .user_repository import InMemoryUserRepository
 from .wallet_repository import InMemoryWalletRepository
 
@@ -15,6 +16,7 @@ __all__ = [
     "InMemoryCategoryRepository",
     "InMemoryCurrencyRepository",
     "InMemoryRepository",
+    "InMemoryTransactionRepository",
     "InMemoryUserRepository",
     "InMemoryWalletRepository",
     "SequentialIdGenerator",

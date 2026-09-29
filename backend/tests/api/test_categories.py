@@ -1,23 +1,44 @@
+from datetime import UTC, datetime
+from decimal import Decimal
 from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
 
+from core.entities import Currency, Transaction, Wallet
+from core.exceptions import ConflictError
 from depends.auth import get_current_user
 from depends.category import get_category_repository
+from depends.currency import get_currency_repository
+from depends.transaction import get_transaction_repository
+from depends.wallet import get_wallet_repository
 from main import create_app
-from tests.fakes import InMemoryCategoryRepository
+from tests.fakes import (
+    InMemoryCategoryRepository,
+    InMemoryCurrencyRepository,
+    InMemoryTransactionRepository,
+    InMemoryWalletRepository,
+)
 
 
 def make_client(
     *,
     categories: InMemoryCategoryRepository | None = None,
+    wallets: InMemoryWalletRepository | None = None,
+    currencies: InMemoryCurrencyRepository | None = None,
+    transactions: InMemoryTransactionRepository | None = None,
     user_id: UUID | None = None,
     authenticated: bool = True,
 ) -> TestClient:
     categories = categories if categories is not None else InMemoryCategoryRepository()
+    wallets = wallets if wallets is not None else InMemoryWalletRepository()
+    currencies = currencies if currencies is not None else InMemoryCurrencyRepository()
+    transactions = transactions if transactions is not None else InMemoryTransactionRepository(categories)
     user_id = user_id if user_id is not None else uuid4()
     app = create_app()
     app.dependency_overrides[get_category_repository] = lambda: categories
+    app.dependency_overrides[get_wallet_repository] = lambda: wallets
+    app.dependency_overrides[get_currency_repository] = lambda: currencies
+    app.dependency_overrides[get_transaction_repository] = lambda: transactions
     if authenticated:
         app.dependency_overrides[get_current_user] = lambda: user_id
     return TestClient(app)
@@ -174,6 +195,64 @@ async def test_delete_unknown_category_returns_404() -> None:
     response = client.delete(f"/api/categories/{uuid4()}")
 
     assert response.status_code == 404
+
+
+class RestrictingCategoryRepository(InMemoryCategoryRepository):
+    """Симулирует `ON DELETE RESTRICT` `transactions.category_id` (реальный `CategoryRepository` перехватывает
+    `IntegrityError` и поднимает `ConflictError` — см. design.md `transactions`)."""
+
+    def __init__(self, transactions: InMemoryTransactionRepository) -> None:
+        super().__init__()
+        self._transaction_repo = transactions
+
+    async def delete(self, category_id: UUID, user_id: UUID) -> bool:
+        if await self._transaction_repo.references_category(category_id):
+            raise ConflictError("Категорию нельзя удалить: есть операции")
+        return await super().delete(category_id, user_id)
+
+
+async def test_delete_category_with_transactions_returns_409() -> None:
+    # `InMemoryTransactionRepository` нужна ссылка на категории для чтения `type` (см. её докстринг); тест не
+    # фильтрует по типу, поэтому отдельный пустой репозиторий категорий для этой цели достаточен.
+    transactions = InMemoryTransactionRepository(InMemoryCategoryRepository())
+    categories = RestrictingCategoryRepository(transactions)
+    wallets = InMemoryWalletRepository()
+    currencies = InMemoryCurrencyRepository()
+    user_id = uuid4()
+    client = make_client(
+        categories=categories, wallets=wallets, currencies=currencies, transactions=transactions, user_id=user_id
+    )
+    category_id = client.post("/api/categories", json=category_payload()).json()["id"]
+    currency = Currency(id=uuid4(), code="RUB", name="Российский рубль", decimal_places=2)
+    await currencies.upsert_many([currency])
+    wallet = await wallets.add(
+        Wallet(
+            id=uuid4(),
+            user_id=user_id,
+            name="Кошелёк",
+            icon="wallet",
+            currency_ids=(currency.id,),
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+    )
+    transaction = await transactions.add(
+        Transaction(
+            id=uuid4(),
+            user_id=user_id,
+            wallet_id=wallet.id,
+            category_id=UUID(category_id),
+            currency_id=currency.id,
+            amount=Decimal("10"),
+            occurred_at=datetime(2026, 1, 1, tzinfo=UTC),
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+    )
+
+    response = client.delete(f"/api/categories/{category_id}")
+
+    assert response.status_code == 409
+    assert client.get(f"/api/categories/{category_id}").status_code == 200
+    assert await transactions.get_by_id(transaction.id, user_id) is not None
 
 
 class TestTypeFilter:

@@ -7,10 +7,14 @@ from uuid import UUID
 from sqlalchemy import Row, func, insert, select
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import update as sa_update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.entities import Wallet
+from core.exceptions import ConflictError
 from models import currencies, wallet_currencies, wallets
+
+DELETE_CONFLICT_MESSAGE = "Кошелёк нельзя удалить: есть операции"
 
 
 def _map_row(row: Row[Any], currency_ids: tuple[UUID, ...]) -> Wallet:
@@ -89,9 +93,14 @@ class WalletRepository:
         return _map_row(row, tuple(await self._load_currency_ids(wallet_id)))
 
     async def delete(self, wallet_id: UUID, user_id: UUID) -> bool:
-        result = await self._session.execute(
-            sa_delete(wallets).where(wallets.c.id == wallet_id, wallets.c.user_id == user_id).returning(wallets.c.id)
-        )
+        try:
+            result = await self._session.execute(
+                sa_delete(wallets)
+                .where(wallets.c.id == wallet_id, wallets.c.user_id == user_id)
+                .returning(wallets.c.id)
+            )
+        except IntegrityError as exc:
+            raise ConflictError(DELETE_CONFLICT_MESSAGE) from exc
         return result.first() is not None
 
     async def _insert_currency_ids(self, wallet_id: UUID, currency_ids: Sequence[UUID]) -> None:

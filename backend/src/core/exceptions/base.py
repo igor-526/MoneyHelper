@@ -24,3 +24,7 @@ class NotFoundError(ClientError):
 
 class AlreadyExistsError(ClientError):
     status_code = 409
+
+
+class ConflictError(ClientError):
+    status_code = 409

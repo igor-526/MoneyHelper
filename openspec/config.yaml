@@ -26,17 +26,30 @@ context: |
   ON DELETE CASCADE у user_id/wallet_id, ON DELETE RESTRICT у currency_id), миграция 20260929_0004. WalletRepository
   фильтрует по wallet_id И user_id в одном запросе — чужой кошелёк везде 404, никогда 403. CRUD через
   /api/wallets* под авторизацией; PUT — только полная замена name/icon/currency_ids (без PATCH); иконка проверяется
-  IconName, валюты — новым методом CurrencyRepository.missing_ids. Удаление кошелька физическое и безусловное —
-  задел на защиту от операций (010) зафиксирован в design.md изменения wallets, не реализован.
+  IconName, валюты — новым методом CurrencyRepository.missing_ids. Удаление кошелька (DELETE /api/wallets/{id})
+  отклоняется 409 (ConflictError), если по кошельку есть операции (transactions, 010) — иначе физическое.
   Категории реализованы (изменение categories): одна таблица categories (без M2M), миграция 20260929_0005,
   ON DELETE CASCADE у user_id. CategoryRepository фильтрует по category_id И user_id в одном запросе — чужая
   категория везде 404, никогда 403. CRUD через /api/categories* под авторизацией с опциональным фильтром по типу;
   PUT — только полная замена type/name/icon (без PATCH). type — первый в проекте закрытый enum (CategoryType,
   StrEnum: income/expense), защищён CheckConstraint в БД; иконка проверяется IconName. Название уникально в
   пределах пары user_id+type — составной UniqueConstraint, конфликт даёт 409 (AlreadyExistsError, перехват
-  IntegrityError без предварительного SELECT, по образцу UserRepository). Удаление категории физическое и
-  безусловное — задел на защиту от операций (010) зафиксирован в design.md изменения categories, не реализован;
+  IntegrityError без предварительного SELECT, по образцу UserRepository). Удаление категории (DELETE
+  /api/categories/{id}) отклоняется 409 (ConflictError), если по категории есть операции (010) — иначе физическое;
   набор категорий по умолчанию для нового пользователя не реализован (вне рамок).
+  Доходы и расходы реализованы (изменение transactions): таблицы transactions (wallet_id/category_id — ON DELETE
+  RESTRICT) и transaction_legs (transaction_id — ON DELETE CASCADE, currency_id — ON DELETE RESTRICT, MONEY,
+  CheckConstraint amount > 0), миграция 20260929_0006. Тип операции (income/expense) не хранится отдельным полем —
+  определяется JOIN'ом с categories.type. На уровне домена/API операция плоская (одна валюта+сумма на операцию) —
+  задел на несколько ног у transaction_legs под многовалютные пополнения (011), схема БД уже это допускает.
+  TransactionRepository фильтрует по transaction_id И user_id в одном запросе — чужая операция везде 404.
+  CRUD через /api/transactions* под авторизацией: PUT — только полная замена (без PATCH), список — фильтры
+  (wallet_id/category_id/type/date_from/date_to), сортировка occurred_at DESC, id DESC (новые сначала — в отличие
+  от created_at ASC у wallets/categories). Новое исключение ConflictError (409) — «нельзя удалить/изменить, ресурс
+  используется» (отдельно от AlreadyExistsError, который про уникальность). Валюта операции обязана входить в
+  currency_ids кошелька; сумма положительна и не превышает decimal_places валюты — без округления, ошибка 400.
+  Баланс — GET /api/wallets/{wallet_id}/balances, вычисляется на лету агрегирующим запросом (без кэша) по всем
+  валютам кошелька, включая нулевые.
   Дорожная карта: docs/tasks/002_roadmap.md; задачи: docs/tasks/003_*.md … 012_*.md.
   Архитектура обязательно следует SOLID по правилам из AGENTS.md.
 
