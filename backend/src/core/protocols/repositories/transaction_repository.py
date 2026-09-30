@@ -32,6 +32,8 @@ class TransactionRepository(Protocol):
         self, workspace_id: UUID, *, date_from: datetime, date_to: datetime
     ) -> list[TopupLegRecord]: ...
 
+    async def list_topup_legs_for_wallet_rates(self, workspace_id: UUID, wallet_id: UUID) -> list[TopupLegRecord]: ...
+
     async def list(
         self,
         workspace_id: UUID,

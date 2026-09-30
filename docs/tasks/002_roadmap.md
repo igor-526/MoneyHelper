@@ -50,6 +50,7 @@
 | [018_frontend_analytics.md](018_frontend_analytics.md) | F2f | Аналитика (frontend) | 016, 012 |
 | [019_frontend_pwa_verification.md](019_frontend_pwa_verification.md) | F3 | Проверка PWA (отложено из 003) | 003 |
 | [020_workspaces.md](020_workspaces.md) | 8 | Воркспейсы | 008, 009, 010, 011, 012 |
+| [021_wallet_average_rate.md](021_wallet_average_rate.md) | 9 | Средний курс кошелька | 011, 020 |
 
 ```
  003 frontend ─────────────────────────────────────────────────────────┐ (параллельно)

@@ -138,6 +138,24 @@ class TransactionRepository:
             for row in rows
         ]
 
+    async def list_topup_legs_for_wallet_rates(self, workspace_id: UUID, wallet_id: UUID) -> list[TopupLegRecord]:
+        topup_ids = (
+            select(transaction_legs.c.transaction_id)
+            .select_from(transaction_legs.join(transactions, transactions.c.id == transaction_legs.c.transaction_id))
+            .where(transactions.c.workspace_id == workspace_id, transactions.c.wallet_id == wallet_id)
+            .group_by(transaction_legs.c.transaction_id)
+            .having(func.count() > 1)
+        )
+        rows = await self._session.execute(
+            select(transaction_legs.c.transaction_id, transaction_legs.c.currency_id, transaction_legs.c.amount).where(
+                transaction_legs.c.transaction_id.in_(topup_ids)
+            )
+        )
+        return [
+            TopupLegRecord(transaction_id=row.transaction_id, currency_id=row.currency_id, amount=row.amount)
+            for row in rows
+        ]
+
     async def list(
         self,
         workspace_id: UUID,

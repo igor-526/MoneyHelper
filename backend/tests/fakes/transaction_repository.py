@@ -114,6 +114,19 @@ class InMemoryTransactionRepository:
                 )
         return records
 
+    async def list_topup_legs_for_wallet_rates(self, workspace_id: UUID, wallet_id: UUID) -> list[TopupLegRecord]:
+        records = []
+        for transaction in self._transactions.values():
+            if transaction.workspace_id != workspace_id or transaction.wallet_id != wallet_id:
+                continue
+            if len(transaction.legs) <= 1:
+                continue
+            for leg in transaction.legs:
+                records.append(
+                    TopupLegRecord(transaction_id=transaction.id, currency_id=leg.currency_id, amount=leg.amount)
+                )
+        return records
+
     async def list(
         self,
         workspace_id: UUID,
