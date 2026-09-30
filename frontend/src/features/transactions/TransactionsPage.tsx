@@ -1,6 +1,17 @@
-import { Button, DatePicker, Flex, Pagination, Segmented, Select, Spin, Typography } from "antd";
+import {
+  Button,
+  DatePicker,
+  Dropdown,
+  Flex,
+  Pagination,
+  Segmented,
+  Select,
+  Spin,
+  Typography,
+} from "antd";
 import type { Dayjs } from "dayjs";
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import type { Category, CategoryType } from "@/features/categories/Category";
 import { useCategories } from "@/features/categories/useCategories";
 import type { Wallet } from "@/features/wallets/Wallet";
@@ -8,6 +19,7 @@ import { useWallets } from "@/features/wallets/useWallets";
 import { EmptyState, useCurrencies, useIsMobile } from "@/shared/ui";
 import type { Currency } from "@/shared/ui";
 import type { Transaction } from "./Transaction";
+import { TopupForm } from "./TopupForm";
 import { TransactionCard } from "./TransactionCard";
 import { TransactionForm } from "./TransactionForm";
 import { DEFAULT_PAGE_SIZE, useTransactions } from "./useTransactions";
@@ -16,6 +28,13 @@ import { WalletBalanceCard } from "./WalletBalanceCard";
 const ALL_WALLETS = "all";
 const ALL_CATEGORIES = "all";
 type TypeFilter = "all" | CategoryType;
+type CreateMenuKey = "transaction" | "topup" | "transfer";
+
+const CREATE_MENU_ITEMS = [
+  { key: "transaction", label: "Доход/расход" },
+  { key: "topup", label: "Пополнение" },
+  { key: "transfer", label: "Перевод" },
+];
 
 interface FiltersState {
   walletId: string | undefined; // undefined = «Все кошельки»
@@ -48,7 +67,9 @@ export function TransactionsPage() {
   });
   const [page, setPage] = useState(1); // 1-based, antd Pagination
   const [formState, setFormState] = useState<FormState>({ open: false });
+  const [topupFormOpen, setTopupFormOpen] = useState(false);
   const isMobile = useIsMobile();
+  const navigate = useNavigate();
 
   const { data: wallets = [] } = useWallets();
   const { data: allCategories = [] } = useCategories(undefined);
@@ -103,15 +124,26 @@ export function TransactionsPage() {
   const openCreate = () => setFormState({ open: true, transaction: undefined });
   const openEdit = (transaction: Transaction) => setFormState({ open: true, transaction });
   const closeForm = () => setFormState({ open: false });
+  const closeTopupForm = () => setTopupFormOpen(false);
+
+  const handleCreateMenuClick = ({ key }: { key: string }) => {
+    const menuKey = key as CreateMenuKey;
+    if (menuKey === "transaction") openCreate();
+    else if (menuKey === "topup") setTopupFormOpen(true);
+    else navigate("/transfers");
+  };
 
   const items = transactionsQuery.data?.items ?? [];
   const total = transactionsQuery.data?.total ?? 0;
 
   return (
     <Flex vertical gap={16}>
-      <Typography.Title level={3} style={{ margin: 0 }}>
-        Операции
-      </Typography.Title>
+      <Flex justify="space-between" align="center">
+        <Typography.Title level={3} style={{ margin: 0 }}>
+          Операции
+        </Typography.Title>
+        <Typography.Link onClick={() => navigate("/transfers")}>Переводы</Typography.Link>
+      </Flex>
       <Flex vertical gap={12}>
         <Select
           aria-label="Кошелёк"
@@ -162,14 +194,11 @@ export function TransactionsPage() {
         />
       ) : (
         <>
-          <Button
-            type="primary"
-            block={isMobile}
-            onClick={openCreate}
-            style={{ alignSelf: "flex-start" }}
-          >
-            Создать операцию
-          </Button>
+          <Dropdown menu={{ items: CREATE_MENU_ITEMS, onClick: handleCreateMenuClick }}>
+            <Button type="primary" block={isMobile} style={{ alignSelf: "flex-start" }}>
+              Добавить
+            </Button>
+          </Dropdown>
           <Flex vertical gap={12}>
             {items.map((transaction) => {
               const category = categoryById.get(transaction.category_id);
@@ -183,11 +212,7 @@ export function TransactionsPage() {
                       ? { name: category.name, icon: category.icon, type: category.type }
                       : undefined
                   }
-                  currencyCode={
-                    transaction.legs[0]
-                      ? currencyCodeById.get(transaction.legs[0].currency_id)
-                      : undefined
-                  }
+                  currencyCodeById={currencyCodeById}
                   onEdit={openEdit}
                 />
               );
@@ -207,6 +232,7 @@ export function TransactionsPage() {
         transaction={formState.transaction}
         onClose={closeForm}
       />
+      <TopupForm open={topupFormOpen} onClose={closeTopupForm} />
     </Flex>
   );
 }

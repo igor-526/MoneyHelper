@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import dayjs from "dayjs";
 import type { ReactNode } from "react";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import { ApiError, ApiClientProvider } from "@/shared/api";
 import { createQueryClient } from "@/shared/errors";
@@ -67,6 +68,21 @@ const TRANSACTIONS = [
   },
 ];
 
+const MULTI_LEG_TRANSACTIONS = [
+  {
+    id: "t2",
+    wallet_id: "w1",
+    category_id: "c1",
+    legs: [
+      { currency_id: "cur1", amount: "10.00" },
+      { currency_id: "cur2", amount: "20.00" },
+    ],
+    occurred_at: "2026-03-01T12:00:00Z",
+    created_at: "2026-03-01T12:00:00Z",
+    updated_at: null,
+  },
+];
+
 /** Обработчик по умолчанию: список операций + пустые балансы (когда фильтр «Кошелёк» выбран, но балансы не важны). */
 function defaultTransactionsHandler(overrides: Partial<{ total: number }> = {}): FakeHandler {
   return (request) => {
@@ -107,7 +123,14 @@ function setup(handler: FakeHandler) {
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>
       <ApiClientProvider client={api}>
-        <ToastProvider>{children}</ToastProvider>
+        <ToastProvider>
+          <MemoryRouter initialEntries={["/transactions"]}>
+            <Routes>
+              <Route path="/transactions" element={children} />
+              <Route path="/transfers" element={<div>Раздел переводов</div>} />
+            </Routes>
+          </MemoryRouter>
+        </ToastProvider>
       </ApiClientProvider>
     </QueryClientProvider>
   );
@@ -155,6 +178,12 @@ async function goToPage(pageNumber: number) {
   await userEvent.click(screen.getByTitle(String(pageNumber)));
 }
 
+/** Открывает меню «Добавить» и кликает по указанному пункту. */
+async function clickCreateMenuItem(label: "Доход/расход" | "Пополнение" | "Перевод") {
+  await userEvent.click(screen.getByRole("button", { name: "Добавить" }));
+  await userEvent.click(await screen.findByText(label));
+}
+
 describe("TransactionsPage", () => {
   it("загрузка и рендер списка карточек", async () => {
     const { wrapper } = setup(defaultTransactionsHandler());
@@ -162,6 +191,70 @@ describe("TransactionsPage", () => {
 
     expect(await screen.findByText("Зарплата")).toBeInTheDocument();
     expect(screen.getByText("Наличные")).toBeInTheDocument();
+  });
+
+  it("меню «Добавить» показывает три пункта", async () => {
+    const { wrapper } = setup(defaultTransactionsHandler());
+    render(<TransactionsPage />, { wrapper });
+    await screen.findByText("Зарплата");
+
+    await userEvent.click(screen.getByRole("button", { name: "Добавить" }));
+
+    const menu = await screen.findByRole("menu");
+    expect(within(menu).getByText("Доход/расход")).toBeInTheDocument();
+    expect(within(menu).getByText("Пополнение")).toBeInTheDocument();
+    expect(within(menu).getByText("Перевод")).toBeInTheDocument();
+  });
+
+  it("пункт «Доход/расход» открывает TransactionForm", async () => {
+    const { wrapper } = setup(defaultTransactionsHandler());
+    render(<TransactionsPage />, { wrapper });
+    await screen.findByText("Зарплата");
+
+    await clickCreateMenuItem("Доход/расход");
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Создать операцию")).toBeInTheDocument();
+  });
+
+  it("пункт «Пополнение» открывает TopupForm", async () => {
+    const { wrapper } = setup(defaultTransactionsHandler());
+    render(<TransactionsPage />, { wrapper });
+    await screen.findByText("Зарплата");
+
+    await clickCreateMenuItem("Пополнение");
+
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Пополнение")).toBeInTheDocument();
+  });
+
+  it("пункт «Перевод» переходит на /transfers без открытия формы", async () => {
+    const { wrapper } = setup(defaultTransactionsHandler());
+    render(<TransactionsPage />, { wrapper });
+    await screen.findByText("Зарплата");
+
+    await clickCreateMenuItem("Перевод");
+
+    expect(await screen.findByText("Раздел переводов")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("ссылка «Переводы» переходит на /transfers", async () => {
+    const { wrapper } = setup(defaultTransactionsHandler());
+    render(<TransactionsPage />, { wrapper });
+    await screen.findByText("Зарплата");
+
+    await userEvent.click(screen.getByText("Переводы"));
+
+    expect(await screen.findByText("Раздел переводов")).toBeInTheDocument();
+  });
+
+  it("карточка операции с несколькими ногами получает корректный currencyCodeById", async () => {
+    const { wrapper } = setup(() => page(MULTI_LEG_TRANSACTIONS));
+    render(<TransactionsPage />, { wrapper });
+
+    expect(await screen.findByText("10.00 USD")).toBeInTheDocument();
+    expect(screen.getByText("20.00 RUB")).toBeInTheDocument();
   });
 
   it("пустой список показывает EmptyState, кнопка действия открывает форму создания", async () => {
@@ -430,5 +523,54 @@ describe("TransactionsPage", () => {
     await waitFor(() =>
       expect(api.requests.filter((r) => r.path.endsWith("/balances")).length).toBeGreaterThan(1),
     );
+  });
+
+  it("сквозной сценарий: создание пополнения через меню «Добавить» добавляет многоногую операцию, блокирующую «Редактировать»", async () => {
+    // Список начинается непустым — «Добавить»-меню (в отличие от EmptyState.action) рендерится только при
+    // непустом списке (design.md, YAGNI), поэтому сценарий стартует с уже существующей операции.
+    let items: unknown[] = [...TRANSACTIONS];
+    const handler: FakeHandler = (request) => {
+      if (request.path === "/api/transactions" && request.method === "GET") return page(items);
+      if (request.path === "/api/transactions/topups" && request.method === "POST") {
+        const body = request.body as {
+          wallet_id: string;
+          category_id: string;
+          legs: { currency_id: string; amount: string }[];
+        };
+        const created = {
+          id: "topup1",
+          wallet_id: body.wallet_id,
+          category_id: body.category_id,
+          legs: body.legs,
+          occurred_at: "2026-03-20T00:00:00Z",
+          created_at: "2026-03-20T00:00:00Z",
+          updated_at: null,
+        };
+        items = [...items, created];
+        return created;
+      }
+      return page(items);
+    };
+    const { wrapper } = setup(handler);
+    render(<TransactionsPage />, { wrapper });
+
+    expect(await screen.findByText("Зарплата")).toBeInTheDocument();
+
+    await clickCreateMenuItem("Пополнение");
+    const dialog = await screen.findByRole("dialog");
+    await fillFormOption("Кошелёк", "Наличные");
+    await userEvent.type(within(dialog).getByLabelText("Сумма (USD)"), "10");
+    await userEvent.type(within(dialog).getByLabelText("Сумма (RUB)"), "20");
+    await fillFormOption("Категория", "Зарплата");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Создать" }));
+
+    expect(await screen.findByText("10 USD")).toBeInTheDocument();
+    expect(screen.getByText("20 RUB")).toBeInTheDocument();
+
+    const editButtons = screen.getAllByRole("button", { name: "Редактировать" });
+    // Карточка новой многоногой операции — последняя в списке, её кнопка «Редактировать» заблокирована;
+    // существующая одноногая операция (посеянная в начале сценария) остаётся редактируемой.
+    expect(editButtons.at(-1)).toBeDisabled();
+    expect(editButtons[0]).toBeEnabled();
   });
 });

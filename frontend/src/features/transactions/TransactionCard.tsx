@@ -1,15 +1,18 @@
-import { Button, Card, Flex, Tag, Typography, Popconfirm } from "antd";
+import { Button, Card, Flex, Tag, Tooltip, Typography, Popconfirm } from "antd";
 import dayjs from "dayjs";
 import type { CategoryType } from "@/features/categories/Category";
 import { Icon } from "@/shared/ui";
 import type { Transaction } from "./Transaction";
 import { useDeleteTransaction } from "./useDeleteTransaction";
 
+const MULTI_LEG_TOOLTIP =
+  "Пополнение с несколькими валютами нельзя редактировать — удалите и создайте заново";
+
 export interface TransactionCardProps {
   transaction: Transaction;
   walletName: string | undefined;
   category: { name: string; icon: string; type: CategoryType } | undefined;
-  currencyCode: string | undefined;
+  currencyCodeById: Map<string, string>;
   onEdit: (transaction: Transaction) => void;
 }
 
@@ -27,12 +30,18 @@ export function TransactionCard({
   transaction,
   walletName,
   category,
-  currencyCode,
+  currencyCodeById,
   onEdit,
 }: TransactionCardProps) {
   const deleteTransaction = useDeleteTransaction();
   const typeTag = category ? TYPE_TAG[category.type] : undefined;
-  const leg = transaction.legs[0];
+  const isMultiLeg = transaction.legs.length > 1;
+
+  const editButton = (
+    <Button disabled={isMultiLeg} onClick={() => onEdit(transaction)}>
+      Редактировать
+    </Button>
+  );
 
   return (
     <Card>
@@ -43,14 +52,30 @@ export function TransactionCard({
           <Typography.Text strong>{category?.name ?? "…"}</Typography.Text>
           {typeTag ? <Tag color={typeTag.color}>{typeTag.label}</Tag> : null}
         </Flex>
-        <Typography.Text>
-          {leg?.amount ?? "…"} {currencyCode ?? "…"}
-        </Typography.Text>
+        {/*
+          Одна строка «сумма код» при одной ноге, список таких строк (одна на каждую валюту) при нескольких —
+          `Flex` с одним ребёнком визуально не отличим от одинокого `Typography.Text` (design.md, п. 4.2), а
+          единый рендер через `.map()` избегает индексации `legs[0]`, небезопасной при `noUncheckedIndexedAccess`.
+        */}
+        <Flex vertical gap={4}>
+          {transaction.legs.map((leg) => (
+            <Typography.Text key={leg.currency_id}>
+              {leg.amount} {currencyCodeById.get(leg.currency_id) ?? "…"}
+            </Typography.Text>
+          ))}
+        </Flex>
         <Typography.Text type="secondary">
           {dayjs(transaction.occurred_at).format("DD.MM.YYYY HH:mm")}
         </Typography.Text>
         <Flex gap={8}>
-          <Button onClick={() => onEdit(transaction)}>Редактировать</Button>
+          {/* antd Tooltip не всплывает над disabled-элементом без обёртки — стандартный приём antd. */}
+          {isMultiLeg ? (
+            <Tooltip title={MULTI_LEG_TOOLTIP}>
+              <span>{editButton}</span>
+            </Tooltip>
+          ) : (
+            editButton
+          )}
           <Popconfirm
             title="Удалить операцию?"
             okText="Удалить"

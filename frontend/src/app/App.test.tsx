@@ -131,6 +131,11 @@ describe("маршруты", () => {
     expect(await screen.findByRole("heading", { name: "Вход" })).toBeInTheDocument();
   });
 
+  it("без сессии прямой переход на /transfers ведёт на /login", async () => {
+    renderApp({ apiClient: new FakeApiClient(withSession(() => ({}), null)), path: "/transfers" });
+    expect(await screen.findByRole("heading", { name: "Вход" })).toBeInTheDocument();
+  });
+
   it("с активной сессией /login ведёт на главную", async () => {
     renderApp({ apiClient: healthy(), path: "/login" });
     expect(await screen.findByText("Backend доступен")).toBeInTheDocument();

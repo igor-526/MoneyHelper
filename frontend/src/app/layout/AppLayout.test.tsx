@@ -48,4 +48,14 @@ describe("адаптивный layout", () => {
     renderApp({ apiClient: api(), path: "/transactions" });
     expect(await screen.findByRole("heading", { name: "Операции" })).toBeInTheDocument();
   });
+
+  it("отдельный пункт навигации, ведущий на /transfers, отсутствует", async () => {
+    const { navItems } = await import("../navItems");
+    expect(navItems.some((item) => item.path === "/transfers")).toBe(false);
+  });
+
+  it("переход на /transfers рендерит раздел переводов", async () => {
+    renderApp({ apiClient: api(), path: "/transfers" });
+    expect(await screen.findByRole("heading", { name: "Переводы" })).toBeInTheDocument();
+  });
 });
