@@ -183,6 +183,7 @@ class InMemoryTransactionRepository:
         category_id: UUID,
         legs: Sequence[TransactionLeg],
         occurred_at: datetime,
+        comment: str | None,
         now: datetime,
     ) -> Transaction | None:
         transaction = self._transactions.get(transaction_id)
@@ -194,6 +195,7 @@ class InMemoryTransactionRepository:
                 "category_id": category_id,
                 "legs": tuple(legs),
                 "occurred_at": occurred_at,
+                "comment": comment,
                 "updated_at": now,
             }
         )

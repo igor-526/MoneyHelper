@@ -1,4 +1,4 @@
-from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, PrimaryKeyConstraint, Table
+from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, PrimaryKeyConstraint, String, Table
 from sqlalchemy.dialects.postgresql import UUID
 
 from models.types import MONEY
@@ -12,6 +12,7 @@ transactions = Table(
     Column("wallet_id", UUID(as_uuid=True), ForeignKey("wallets.id", ondelete="RESTRICT"), nullable=False),
     Column("category_id", UUID(as_uuid=True), ForeignKey("categories.id", ondelete="RESTRICT"), nullable=False),
     Column("occurred_at", DateTime(timezone=True), nullable=False),
+    Column("comment", String(1000), nullable=True),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=True),
 )

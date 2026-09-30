@@ -18,3 +18,4 @@ class Transaction(Entity, TimestampMixin):
     category_id: UUID
     legs: tuple[TransactionLeg, ...]
     occurred_at: datetime
+    comment: str | None = None

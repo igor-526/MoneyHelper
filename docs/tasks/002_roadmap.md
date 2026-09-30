@@ -51,6 +51,8 @@
 | [019_frontend_pwa_verification.md](019_frontend_pwa_verification.md) | F3 | Проверка PWA (отложено из 003) | 003 |
 | [020_workspaces.md](020_workspaces.md) | 8 | Воркспейсы | 008, 009, 010, 011, 012 |
 | [021_wallet_average_rate.md](021_wallet_average_rate.md) | 9 | Средний курс кошелька | 011, 020 |
+| [022_transaction_comments.md](022_transaction_comments.md) | 10 | Комментарии к операциям | 010, 011 |
+| [023_frontend_workspaces_adaptation.md](023_frontend_workspaces_adaptation.md) | F4 | Адаптация frontend (воркспейсы, курс кошелька, комментарии) | 013–018, 020, 021, 022 |
 
 ```
  003 frontend ─────────────────────────────────────────────────────────┐ (параллельно)

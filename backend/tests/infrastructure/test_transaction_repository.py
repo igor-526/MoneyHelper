@@ -412,6 +412,7 @@ async def test_update_replaces_all_fields(db_session: AsyncSession) -> None:
         category_id=category_b.id,
         legs=(TransactionLeg(currency_id=cny.id, amount=Decimal("20.00")),),
         occurred_at=datetime(2026, 5, 1, tzinfo=UTC),
+        comment=None,
         now=datetime(2026, 5, 2, tzinfo=UTC),
     )
     await db_session.flush()
@@ -449,6 +450,7 @@ async def test_update_replaces_multiple_legs_with_one(db_session: AsyncSession) 
         category_id=category.id,
         legs=(TransactionLeg(currency_id=rub.id, amount=Decimal("1.00")),),
         occurred_at=DEFAULT_CREATED_AT,
+        comment=None,
         now=DEFAULT_CREATED_AT,
     )
     await db_session.flush()
@@ -471,6 +473,7 @@ async def test_update_unknown_returns_none(db_session: AsyncSession) -> None:
         category_id=category.id,
         legs=(TransactionLeg(currency_id=currency.id, amount=Decimal("1")),),
         occurred_at=DEFAULT_CREATED_AT,
+        comment=None,
         now=DEFAULT_CREATED_AT,
     )
 
@@ -495,6 +498,7 @@ async def test_update_with_foreign_workspace_id_returns_none(db_session: AsyncSe
         category_id=category.id,
         legs=(TransactionLeg(currency_id=currency.id, amount=Decimal("999")),),
         occurred_at=DEFAULT_CREATED_AT,
+        comment=None,
         now=DEFAULT_CREATED_AT,
     )
 

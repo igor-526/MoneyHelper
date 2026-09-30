@@ -67,6 +67,7 @@ class TransactionRepository(Protocol):
         category_id: UUID,
         legs: Sequence[TransactionLeg],
         occurred_at: datetime,
+        comment: str | None,
         now: datetime,
     ) -> Transaction | None: ...
 

@@ -746,3 +746,105 @@ async def test_create_topup_rejects_unknown_category() -> None:
             legs=[TransactionLeg(currency_id=currency.id, amount=Decimal("1"))],
             occurred_at=None,
         )
+
+
+async def test_create_transaction_with_comment() -> None:
+    service, _, wallets, categories, currencies, _ = make_service()
+    workspace_id = uuid4()
+    currency = await make_currency(currencies)
+    wallet = await make_wallet(wallets, workspace_id, [currency.id])
+    category = await make_category(categories, workspace_id, CategoryType.EXPENSE)
+
+    transaction = await service.create_transaction(
+        workspace_id,
+        wallet_id=wallet.id,
+        category_id=category.id,
+        currency_id=currency.id,
+        amount=Decimal("10"),
+        occurred_at=None,
+        comment="Серый рюкзак",
+    )
+
+    assert transaction.comment == "Серый рюкзак"
+
+
+async def test_create_transaction_without_comment_defaults_to_none() -> None:
+    service, _, wallets, categories, currencies, _ = make_service()
+    workspace_id = uuid4()
+    currency = await make_currency(currencies)
+    wallet = await make_wallet(wallets, workspace_id, [currency.id])
+    category = await make_category(categories, workspace_id, CategoryType.EXPENSE)
+
+    transaction = await service.create_transaction(
+        workspace_id,
+        wallet_id=wallet.id,
+        category_id=category.id,
+        currency_id=currency.id,
+        amount=Decimal("10"),
+        occurred_at=None,
+    )
+
+    assert transaction.comment is None
+
+
+async def test_update_transaction_sets_and_clears_comment() -> None:
+    service, _, wallets, categories, currencies, _ = make_service()
+    workspace_id = uuid4()
+    currency = await make_currency(currencies)
+    wallet = await make_wallet(wallets, workspace_id, [currency.id])
+    category = await make_category(categories, workspace_id, CategoryType.EXPENSE)
+    transaction = await service.create_transaction(
+        workspace_id,
+        wallet_id=wallet.id,
+        category_id=category.id,
+        currency_id=currency.id,
+        amount=Decimal("10"),
+        occurred_at=None,
+        comment="Исходный комментарий",
+    )
+
+    with_new_comment = await service.update_transaction(
+        transaction.id,
+        workspace_id,
+        wallet_id=wallet.id,
+        category_id=category.id,
+        currency_id=currency.id,
+        amount=Decimal("10"),
+        occurred_at=None,
+        comment="Новый комментарий",
+    )
+    assert with_new_comment.comment == "Новый комментарий"
+
+    cleared = await service.update_transaction(
+        transaction.id,
+        workspace_id,
+        wallet_id=wallet.id,
+        category_id=category.id,
+        currency_id=currency.id,
+        amount=Decimal("10"),
+        occurred_at=None,
+    )
+    assert cleared.comment is None
+
+
+async def test_create_topup_with_comment() -> None:
+    service, _, wallets, categories, currencies, _ = make_service()
+    workspace_id = uuid4()
+    rub = await make_currency(currencies, "RUB")
+    cny = await make_currency(currencies, "CNY")
+    wallet = await make_wallet(wallets, workspace_id, [rub.id, cny.id])
+    category = await make_category(categories, workspace_id, CategoryType.INCOME)
+
+    transaction = await service.create_topup(
+        workspace_id,
+        wallet_id=wallet.id,
+        category_id=category.id,
+        legs=[
+            TransactionLeg(currency_id=rub.id, amount=Decimal("10000")),
+            TransactionLeg(currency_id=cny.id, amount=Decimal("780")),
+        ],
+        occurred_at=None,
+        comment="Обмен в банке",
+    )
+
+    assert transaction.comment == "Обмен в банке"

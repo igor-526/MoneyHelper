@@ -32,6 +32,7 @@ async def create_transaction(
         currency_id=body.currency_id,
         amount=body.amount,
         occurred_at=body.occurred_at,
+        comment=body.comment,
     )
     return TransactionOut.model_validate(transaction)
 
@@ -51,6 +52,7 @@ async def create_topup(
         category_id=body.category_id,
         legs=[TransactionLeg(currency_id=leg.currency_id, amount=leg.amount) for leg in body.legs],
         occurred_at=body.occurred_at,
+        comment=body.comment,
     )
     return TransactionOut.model_validate(transaction)
 
@@ -104,6 +106,7 @@ async def update_transaction(
         currency_id=body.currency_id,
         amount=body.amount,
         occurred_at=body.occurred_at,
+        comment=body.comment,
     )
     return TransactionOut.model_validate(transaction)
 

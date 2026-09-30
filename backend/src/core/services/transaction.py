@@ -46,6 +46,7 @@ class TransactionService:
         currency_id: UUID,
         amount: Decimal,
         occurred_at: datetime | None,
+        comment: str | None = None,
     ) -> Transaction:
         await self._validate_transaction_input(
             workspace_id, wallet_id=wallet_id, category_id=category_id, currency_id=currency_id, amount=amount
@@ -58,6 +59,7 @@ class TransactionService:
             category_id=category_id,
             legs=(TransactionLeg(currency_id=currency_id, amount=amount),),
             occurred_at=occurred_at if occurred_at is not None else now,
+            comment=comment,
             created_at=now,
         )
         return await self._transactions.add(transaction)
@@ -70,6 +72,7 @@ class TransactionService:
         category_id: UUID,
         legs: Sequence[TransactionLeg],
         occurred_at: datetime | None,
+        comment: str | None = None,
     ) -> Transaction:
         wallet = await self._wallets.get_by_id(wallet_id, workspace_id)
         if wallet is None:
@@ -90,6 +93,7 @@ class TransactionService:
             category_id=category_id,
             legs=tuple(legs),
             occurred_at=occurred_at if occurred_at is not None else now,
+            comment=comment,
             created_at=now,
         )
         return await self._transactions.add(transaction)
@@ -139,6 +143,7 @@ class TransactionService:
         currency_id: UUID,
         amount: Decimal,
         occurred_at: datetime | None,
+        comment: str | None = None,
     ) -> Transaction:
         await self._validate_transaction_input(
             workspace_id, wallet_id=wallet_id, category_id=category_id, currency_id=currency_id, amount=amount
@@ -151,6 +156,7 @@ class TransactionService:
             category_id=category_id,
             legs=(TransactionLeg(currency_id=currency_id, amount=amount),),
             occurred_at=occurred_at if occurred_at is not None else now,
+            comment=comment,
             now=now,
         )
         if transaction is None:

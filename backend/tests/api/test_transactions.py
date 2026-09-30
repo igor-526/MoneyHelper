@@ -98,6 +98,7 @@ def transaction_payload(
     currency_id: UUID,
     amount: str = "100.00",
     occurred_at: str | None = None,
+    comment: str | None = None,
 ) -> dict:
     payload = {
         "wallet_id": str(wallet_id),
@@ -107,6 +108,8 @@ def transaction_payload(
     }
     if occurred_at is not None:
         payload["occurred_at"] = occurred_at
+    if comment is not None:
+        payload["comment"] = comment
     return payload
 
 
@@ -116,10 +119,13 @@ def topup_payload(
     category_id: UUID,
     legs: list[dict],
     occurred_at: str | None = None,
+    comment: str | None = None,
 ) -> dict:
     payload: dict = {"wallet_id": str(wallet_id), "category_id": str(category_id), "legs": legs}
     if occurred_at is not None:
         payload["occurred_at"] = occurred_at
+    if comment is not None:
+        payload["comment"] = comment
     return payload
 
 
@@ -950,3 +956,125 @@ class TestTopups:
         response = client.get(transactions_url(workspace_id, "/topups"))
 
         assert response.status_code != 200
+
+
+class TestComments:
+    async def test_create_with_comment(self) -> None:
+        workspace_id = uuid4()
+        wallets, categories, currencies, wallet, category, currency = await make_environment(workspace_id)
+        client, workspace_id = make_client(
+            wallets=wallets, categories=categories, currencies=currencies, workspace_id=workspace_id
+        )
+
+        response = client.post(
+            transactions_url(workspace_id),
+            json=transaction_payload(
+                wallet_id=wallet.id, category_id=category.id, currency_id=currency.id, comment="Серый рюкзак"
+            ),
+        )
+
+        assert response.status_code == 201
+        assert response.json()["comment"] == "Серый рюкзак"
+
+    async def test_create_without_comment_is_null(self) -> None:
+        workspace_id = uuid4()
+        wallets, categories, currencies, wallet, category, currency = await make_environment(workspace_id)
+        client, workspace_id = make_client(
+            wallets=wallets, categories=categories, currencies=currencies, workspace_id=workspace_id
+        )
+
+        response = client.post(
+            transactions_url(workspace_id),
+            json=transaction_payload(wallet_id=wallet.id, category_id=category.id, currency_id=currency.id),
+        )
+
+        assert response.status_code == 201
+        assert response.json()["comment"] is None
+
+    async def test_whitespace_comment_is_normalized_to_null(self) -> None:
+        workspace_id = uuid4()
+        wallets, categories, currencies, wallet, category, currency = await make_environment(workspace_id)
+        client, workspace_id = make_client(
+            wallets=wallets, categories=categories, currencies=currencies, workspace_id=workspace_id
+        )
+
+        response = client.post(
+            transactions_url(workspace_id),
+            json=transaction_payload(
+                wallet_id=wallet.id, category_id=category.id, currency_id=currency.id, comment="   "
+            ),
+        )
+
+        assert response.status_code == 201
+        assert response.json()["comment"] is None
+
+    async def test_too_long_comment_is_rejected(self) -> None:
+        workspace_id = uuid4()
+        wallets, categories, currencies, wallet, category, currency = await make_environment(workspace_id)
+        client, workspace_id = make_client(
+            wallets=wallets, categories=categories, currencies=currencies, workspace_id=workspace_id
+        )
+
+        response = client.post(
+            transactions_url(workspace_id),
+            json=transaction_payload(
+                wallet_id=wallet.id, category_id=category.id, currency_id=currency.id, comment="x" * 1001
+            ),
+        )
+
+        assert response.status_code == 400
+
+    async def test_put_changes_and_clears_comment(self) -> None:
+        workspace_id = uuid4()
+        wallets, categories, currencies, wallet, category, currency = await make_environment(workspace_id)
+        client, workspace_id = make_client(
+            wallets=wallets, categories=categories, currencies=currencies, workspace_id=workspace_id
+        )
+        created = client.post(
+            transactions_url(workspace_id),
+            json=transaction_payload(
+                wallet_id=wallet.id, category_id=category.id, currency_id=currency.id, comment="Исходный"
+            ),
+        ).json()
+        transaction_id = created["id"]
+
+        changed = client.put(
+            transactions_url(workspace_id, f"/{transaction_id}"),
+            json=transaction_payload(
+                wallet_id=wallet.id, category_id=category.id, currency_id=currency.id, comment="Новый"
+            ),
+        )
+        assert changed.status_code == 200
+        assert changed.json()["comment"] == "Новый"
+
+        cleared = client.put(
+            transactions_url(workspace_id, f"/{transaction_id}"),
+            json=transaction_payload(wallet_id=wallet.id, category_id=category.id, currency_id=currency.id),
+        )
+        assert cleared.status_code == 200
+        assert cleared.json()["comment"] is None
+
+    async def test_topup_with_comment(self) -> None:
+        workspace_id = uuid4()
+        wallets, categories, currencies, _, category, rub = await make_environment(workspace_id)
+        cny = await make_currency(currencies, "CNY")
+        wallet = await make_wallet(wallets, workspace_id, [rub.id, cny.id])
+        client, workspace_id = make_client(
+            wallets=wallets, categories=categories, currencies=currencies, workspace_id=workspace_id
+        )
+
+        response = client.post(
+            transactions_url(workspace_id, "/topups"),
+            json=topup_payload(
+                wallet_id=wallet.id,
+                category_id=category.id,
+                legs=[
+                    {"currency_id": str(rub.id), "amount": "10000.00"},
+                    {"currency_id": str(cny.id), "amount": "780.00"},
+                ],
+                comment="Обмен в банке",
+            ),
+        )
+
+        assert response.status_code == 201
+        assert response.json()["comment"] == "Обмен в банке"

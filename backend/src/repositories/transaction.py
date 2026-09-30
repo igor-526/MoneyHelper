@@ -22,6 +22,7 @@ def _map_row(row: Row[Any], legs: tuple[TransactionLeg, ...]) -> Transaction:
         category_id=row.category_id,
         legs=legs,
         occurred_at=row.occurred_at,
+        comment=row.comment,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -39,6 +40,7 @@ class TransactionRepository:
                 wallet_id=transaction.wallet_id,
                 category_id=transaction.category_id,
                 occurred_at=transaction.occurred_at,
+                comment=transaction.comment,
                 created_at=transaction.created_at,
                 updated_at=transaction.updated_at,
             )
@@ -209,12 +211,15 @@ class TransactionRepository:
         category_id: UUID,
         legs: Sequence[TransactionLeg],
         occurred_at: datetime,
+        comment: str | None,
         now: datetime,
     ) -> Transaction | None:
         result = await self._session.execute(
             sa_update(transactions)
             .where(transactions.c.id == transaction_id, transactions.c.workspace_id == workspace_id)
-            .values(wallet_id=wallet_id, category_id=category_id, occurred_at=occurred_at, updated_at=now)
+            .values(
+                wallet_id=wallet_id, category_id=category_id, occurred_at=occurred_at, comment=comment, updated_at=now
+            )
             .returning(transactions.c.id)
         )
         if result.first() is None:
