@@ -1,4 +1,5 @@
 import type { RouteObject } from "react-router-dom";
+import { AnalyticsPage } from "@/features/analytics/AnalyticsPage";
 import { GuestOnly } from "@/features/auth/GuestOnly";
 import { LoginPage } from "@/features/auth/LoginPage";
 import { RegisterPage } from "@/features/auth/RegisterPage";
@@ -36,6 +37,7 @@ export const routes: RouteObject[] = [
       { path: "categories", element: <CategoriesPage /> },
       { path: "transactions", element: <TransactionsPage /> },
       { path: "transfers", element: <TransfersPage /> },
+      { path: "analytics", element: <AnalyticsPage /> },
       { path: "settings", element: <SettingsPage /> },
       { path: "*", element: <NotFoundPage /> },
     ],

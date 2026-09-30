@@ -42,6 +42,14 @@ describe("RequireAuth", () => {
 
     expect(await screen.findByRole("heading", { name: "Вход" })).toBeInTheDocument();
   });
+
+  it("без сессии переход на /analytics перенаправляет на /login", async () => {
+    const api = new FakeApiClient(withSession(() => ({}), null));
+
+    renderApp({ apiClient: api, path: "/analytics" });
+
+    expect(await screen.findByRole("heading", { name: "Вход" })).toBeInTheDocument();
+  });
 });
 
 describe("GuestOnly", () => {

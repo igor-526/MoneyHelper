@@ -25,11 +25,10 @@ describe("адаптивный layout", () => {
     expect(navItems.length).toBeLessThanOrEqual(5);
   });
 
-  it("пункт «Операции» расположен между «Кошельки» и «Настройки»", async () => {
+  it("пункт «Операции» расположен сразу после «Кошельки»", async () => {
     const { navItems } = await import("../navItems");
     const labels = navItems.map((item) => item.label);
     expect(labels.indexOf("Операции")).toBe(labels.indexOf("Кошельки") + 1);
-    expect(labels.indexOf("Настройки")).toBe(labels.indexOf("Операции") + 1);
   });
 
   it("контент на телефоне лежит в main, отдельном от фиксированной панели", async () => {
@@ -57,5 +56,23 @@ describe("адаптивный layout", () => {
   it("переход на /transfers рендерит раздел переводов", async () => {
     renderApp({ apiClient: api(), path: "/transfers" });
     expect(await screen.findByRole("heading", { name: "Переводы" })).toBeInTheDocument();
+  });
+
+  it("пункт «Аналитика» расположен между «Операции» и «Настройки», «Настройки» остаётся последним", async () => {
+    const { navItems } = await import("../navItems");
+    const labels = navItems.map((item) => item.label);
+    expect(labels.indexOf("Аналитика")).toBe(labels.indexOf("Операции") + 1);
+    expect(labels.indexOf("Настройки")).toBe(labels.indexOf("Аналитика") + 1);
+    expect(labels.at(-1)).toBe("Настройки");
+  });
+
+  it("пункт «Аналитика» активен на /analytics", async () => {
+    const { activeNavKey } = await import("../navItems");
+    expect(activeNavKey("/analytics")).toBe("analytics");
+  });
+
+  it("переход на /analytics рендерит раздел аналитики", async () => {
+    renderApp({ apiClient: api(), path: "/analytics" });
+    expect(await screen.findByRole("heading", { name: "Аналитика" })).toBeInTheDocument();
   });
 });
