@@ -10,7 +10,7 @@ class CategoryType(StrEnum):
 
 
 class Category(Entity, TimestampMixin):
-    user_id: UUID
+    workspace_id: UUID
     type: CategoryType
     name: str
     icon: str

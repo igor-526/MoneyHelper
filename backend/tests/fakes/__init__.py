@@ -9,6 +9,7 @@ from .transaction_repository import InMemoryTransactionRepository
 from .transfer_repository import InMemoryTransferRepository
 from .user_repository import InMemoryUserRepository
 from .wallet_repository import InMemoryWalletRepository
+from .workspace_repository import InMemoryWorkspaceRepository
 
 __all__ = [
     "FakePasswordHasher",
@@ -21,5 +22,6 @@ __all__ = [
     "InMemoryTransferRepository",
     "InMemoryUserRepository",
     "InMemoryWalletRepository",
+    "InMemoryWorkspaceRepository",
     "SequentialIdGenerator",
 ]

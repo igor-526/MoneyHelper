@@ -13,10 +13,10 @@ class CategoryService:
         self._clock = clock
         self._ids = ids
 
-    async def create_category(self, user_id: UUID, *, type: CategoryType, name: str, icon: str) -> Category:
+    async def create_category(self, workspace_id: UUID, *, type: CategoryType, name: str, icon: str) -> Category:
         category = Category(
             id=self._ids.new(),
-            user_id=user_id,
+            workspace_id=workspace_id,
             type=type,
             name=name,
             icon=icon,
@@ -24,30 +24,30 @@ class CategoryService:
         )
         return await self._categories.add(category)
 
-    async def get_category(self, category_id: UUID, user_id: UUID) -> Category:
-        category = await self._categories.get_by_id(category_id, user_id)
+    async def get_category(self, category_id: UUID, workspace_id: UUID) -> Category:
+        category = await self._categories.get_by_id(category_id, workspace_id)
         if category is None:
             raise NotFoundError(NOT_FOUND_MESSAGE)
         return category
 
     async def list_categories(
-        self, user_id: UUID, *, type: CategoryType | None, limit: int, offset: int
+        self, workspace_id: UUID, *, type: CategoryType | None, limit: int, offset: int
     ) -> tuple[list[Category], int]:
-        items = await self._categories.list(user_id, type=type, limit=limit, offset=offset)
-        total = await self._categories.count(user_id, type=type)
+        items = await self._categories.list(workspace_id, type=type, limit=limit, offset=offset)
+        total = await self._categories.count(workspace_id, type=type)
         return items, total
 
     async def update_category(
-        self, category_id: UUID, user_id: UUID, *, type: CategoryType, name: str, icon: str
+        self, category_id: UUID, workspace_id: UUID, *, type: CategoryType, name: str, icon: str
     ) -> Category:
         category = await self._categories.update(
-            category_id, user_id, type=type, name=name, icon=icon, now=self._clock.now()
+            category_id, workspace_id, type=type, name=name, icon=icon, now=self._clock.now()
         )
         if category is None:
             raise NotFoundError(NOT_FOUND_MESSAGE)
         return category
 
-    async def delete_category(self, category_id: UUID, user_id: UUID) -> None:
-        deleted = await self._categories.delete(category_id, user_id)
+    async def delete_category(self, category_id: UUID, workspace_id: UUID) -> None:
+        deleted = await self._categories.delete(category_id, workspace_id)
         if not deleted:
             raise NotFoundError(NOT_FOUND_MESSAGE)

@@ -42,10 +42,10 @@ async def make_currency(
     return currency
 
 
-async def make_wallet(wallets: InMemoryWalletRepository, user_id, currency_ids) -> Wallet:
+async def make_wallet(wallets: InMemoryWalletRepository, workspace_id, currency_ids) -> Wallet:
     wallet = Wallet(
         id=uuid4(),
-        user_id=user_id,
+        workspace_id=workspace_id,
         name="Кошелёк",
         icon="wallet",
         currency_ids=tuple(currency_ids),
@@ -55,11 +55,14 @@ async def make_wallet(wallets: InMemoryWalletRepository, user_id, currency_ids) 
 
 
 async def make_category(
-    categories: InMemoryCategoryRepository, user_id, type: CategoryType = CategoryType.INCOME, name: str | None = None
+    categories: InMemoryCategoryRepository,
+    workspace_id,
+    type: CategoryType = CategoryType.INCOME,
+    name: str | None = None,
 ) -> Category:
     category = Category(
         id=uuid4(),
-        user_id=user_id,
+        workspace_id=workspace_id,
         type=type,
         name=name if name is not None else f"Категория {uuid4()}",
         icon="wallet",
@@ -70,14 +73,14 @@ async def make_category(
 
 async def test_create_transaction_with_explicit_date() -> None:
     service, _, wallets, categories, currencies, _ = make_service()
-    user_id = uuid4()
+    workspace_id = uuid4()
     currency = await make_currency(currencies)
-    wallet = await make_wallet(wallets, user_id, [currency.id])
-    category = await make_category(categories, user_id, CategoryType.INCOME)
+    wallet = await make_wallet(wallets, workspace_id, [currency.id])
+    category = await make_category(categories, workspace_id, CategoryType.INCOME)
     occurred_at = datetime(2026, 3, 1, tzinfo=UTC)
 
     transaction = await service.create_transaction(
-        user_id,
+        workspace_id,
         wallet_id=wallet.id,
         category_id=category.id,
         currency_id=currency.id,
@@ -93,13 +96,13 @@ async def test_create_transaction_with_explicit_date() -> None:
 
 async def test_create_transaction_without_date_uses_clock_now() -> None:
     service, _, wallets, categories, currencies, clock = make_service()
-    user_id = uuid4()
+    workspace_id = uuid4()
     currency = await make_currency(currencies)
-    wallet = await make_wallet(wallets, user_id, [currency.id])
-    category = await make_category(categories, user_id)
+    wallet = await make_wallet(wallets, workspace_id, [currency.id])
+    category = await make_category(categories, workspace_id)
 
     transaction = await service.create_transaction(
-        user_id,
+        workspace_id,
         wallet_id=wallet.id,
         category_id=category.id,
         currency_id=currency.id,
@@ -112,15 +115,15 @@ async def test_create_transaction_without_date_uses_clock_now() -> None:
 
 async def test_create_transaction_rejects_currency_not_in_wallet() -> None:
     service, _, wallets, categories, currencies, _ = make_service()
-    user_id = uuid4()
+    workspace_id = uuid4()
     rub = await make_currency(currencies, "RUB")
     cny = await make_currency(currencies, "CNY")
-    wallet = await make_wallet(wallets, user_id, [rub.id])
-    category = await make_category(categories, user_id)
+    wallet = await make_wallet(wallets, workspace_id, [rub.id])
+    category = await make_category(categories, workspace_id)
 
     with pytest.raises(ClientError):
         await service.create_transaction(
-            user_id,
+            workspace_id,
             wallet_id=wallet.id,
             category_id=category.id,
             currency_id=cny.id,
@@ -131,14 +134,14 @@ async def test_create_transaction_rejects_currency_not_in_wallet() -> None:
 
 async def test_create_transaction_rejects_amount_exceeding_decimal_places() -> None:
     service, _, wallets, categories, currencies, _ = make_service()
-    user_id = uuid4()
+    workspace_id = uuid4()
     currency = await make_currency(currencies, decimal_places=2)
-    wallet = await make_wallet(wallets, user_id, [currency.id])
-    category = await make_category(categories, user_id)
+    wallet = await make_wallet(wallets, workspace_id, [currency.id])
+    category = await make_category(categories, workspace_id)
 
     with pytest.raises(ClientError):
         await service.create_transaction(
-            user_id,
+            workspace_id,
             wallet_id=wallet.id,
             category_id=category.id,
             currency_id=currency.id,
@@ -167,13 +170,13 @@ async def test_create_transaction_rejects_foreign_wallet() -> None:
 
 async def test_create_transaction_rejects_unknown_wallet() -> None:
     service, _, _, categories, currencies, _ = make_service()
-    user_id = uuid4()
+    workspace_id = uuid4()
     currency = await make_currency(currencies)
-    category = await make_category(categories, user_id)
+    category = await make_category(categories, workspace_id)
 
     with pytest.raises(NotFoundError):
         await service.create_transaction(
-            user_id,
+            workspace_id,
             wallet_id=uuid4(),
             category_id=category.id,
             currency_id=currency.id,
@@ -184,14 +187,14 @@ async def test_create_transaction_rejects_unknown_wallet() -> None:
 
 async def test_create_transaction_rejects_foreign_category() -> None:
     service, _, wallets, categories, currencies, _ = make_service()
-    user_id = uuid4()
+    workspace_id = uuid4()
     currency = await make_currency(currencies)
-    wallet = await make_wallet(wallets, user_id, [currency.id])
+    wallet = await make_wallet(wallets, workspace_id, [currency.id])
     category = await make_category(categories, uuid4())
 
     with pytest.raises(NotFoundError):
         await service.create_transaction(
-            user_id,
+            workspace_id,
             wallet_id=wallet.id,
             category_id=category.id,
             currency_id=currency.id,
@@ -202,13 +205,13 @@ async def test_create_transaction_rejects_foreign_category() -> None:
 
 async def test_create_transaction_rejects_unknown_category() -> None:
     service, _, wallets, _, currencies, _ = make_service()
-    user_id = uuid4()
+    workspace_id = uuid4()
     currency = await make_currency(currencies)
-    wallet = await make_wallet(wallets, user_id, [currency.id])
+    wallet = await make_wallet(wallets, workspace_id, [currency.id])
 
     with pytest.raises(NotFoundError):
         await service.create_transaction(
-            user_id,
+            workspace_id,
             wallet_id=wallet.id,
             category_id=uuid4(),
             currency_id=currency.id,

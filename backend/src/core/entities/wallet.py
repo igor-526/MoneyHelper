@@ -4,7 +4,7 @@ from core.entities.base import Entity, TimestampMixin
 
 
 class Wallet(Entity, TimestampMixin):
-    user_id: UUID
+    workspace_id: UUID
     name: str
     icon: str
     currency_ids: tuple[UUID, ...]

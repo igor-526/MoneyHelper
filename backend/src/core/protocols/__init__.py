@@ -10,6 +10,7 @@ from .repositories import (
     TransferRepository,
     UserRepository,
     WalletRepository,
+    WorkspaceRepository,
 )
 from .tokens import TokenIssuer, TokenVerifier
 
@@ -27,4 +28,5 @@ __all__ = [
     "TransferRepository",
     "UserRepository",
     "WalletRepository",
+    "WorkspaceRepository",
 ]

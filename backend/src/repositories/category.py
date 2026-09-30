@@ -19,7 +19,7 @@ DELETE_CONFLICT_MESSAGE = "Категорию нельзя удалить: ес�
 def _map_row(row: Row[Any]) -> Category:
     return Category(
         id=row.id,
-        user_id=row.user_id,
+        workspace_id=row.workspace_id,
         type=row.type,
         name=row.name,
         icon=row.icon,
@@ -37,7 +37,7 @@ class CategoryRepository:
             await self._session.execute(
                 insert(categories).values(
                     id=category.id,
-                    user_id=category.user_id,
+                    workspace_id=category.workspace_id,
                     type=category.type,
                     name=category.name,
                     icon=category.icon,
@@ -49,16 +49,16 @@ class CategoryRepository:
             raise AlreadyExistsError(DUPLICATE_NAME_MESSAGE) from exc
         return category
 
-    async def get_by_id(self, category_id: UUID, user_id: UUID) -> Category | None:
+    async def get_by_id(self, category_id: UUID, workspace_id: UUID) -> Category | None:
         row = (
             await self._session.execute(
-                select(categories).where(categories.c.id == category_id, categories.c.user_id == user_id)
+                select(categories).where(categories.c.id == category_id, categories.c.workspace_id == workspace_id)
             )
         ).first()
         return _map_row(row) if row is not None else None
 
-    async def list(self, user_id: UUID, *, type: CategoryType | None, limit: int, offset: int) -> list[Category]:
-        query = select(categories).where(categories.c.user_id == user_id)
+    async def list(self, workspace_id: UUID, *, type: CategoryType | None, limit: int, offset: int) -> list[Category]:
+        query = select(categories).where(categories.c.workspace_id == workspace_id)
         if type is not None:
             query = query.where(categories.c.type == type)
         rows = (
@@ -68,19 +68,19 @@ class CategoryRepository:
         ).all()
         return [_map_row(row) for row in rows]
 
-    async def count(self, user_id: UUID, *, type: CategoryType | None) -> int:
-        query = select(func.count()).select_from(categories).where(categories.c.user_id == user_id)
+    async def count(self, workspace_id: UUID, *, type: CategoryType | None) -> int:
+        query = select(func.count()).select_from(categories).where(categories.c.workspace_id == workspace_id)
         if type is not None:
             query = query.where(categories.c.type == type)
         return (await self._session.execute(query)).scalar_one()
 
     async def update(
-        self, category_id: UUID, user_id: UUID, *, type: CategoryType, name: str, icon: str, now: datetime
+        self, category_id: UUID, workspace_id: UUID, *, type: CategoryType, name: str, icon: str, now: datetime
     ) -> Category | None:
         try:
             result = await self._session.execute(
                 sa_update(categories)
-                .where(categories.c.id == category_id, categories.c.user_id == user_id)
+                .where(categories.c.id == category_id, categories.c.workspace_id == workspace_id)
                 .values(type=type, name=name, icon=icon, updated_at=now)
                 .returning(categories)
             )
@@ -89,11 +89,11 @@ class CategoryRepository:
         row = result.first()
         return _map_row(row) if row is not None else None
 
-    async def delete(self, category_id: UUID, user_id: UUID) -> bool:
+    async def delete(self, category_id: UUID, workspace_id: UUID) -> bool:
         try:
             result = await self._session.execute(
                 sa_delete(categories)
-                .where(categories.c.id == category_id, categories.c.user_id == user_id)
+                .where(categories.c.id == category_id, categories.c.workspace_id == workspace_id)
                 .returning(categories.c.id)
             )
         except IntegrityError as exc:

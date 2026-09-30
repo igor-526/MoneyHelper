@@ -9,11 +9,11 @@ from core.entities import Transfer
 class TransferRepository(Protocol):
     async def add(self, transfer: Transfer) -> Transfer: ...
 
-    async def get_by_id(self, transfer_id: UUID, user_id: UUID) -> Transfer | None: ...
+    async def get_by_id(self, transfer_id: UUID, workspace_id: UUID) -> Transfer | None: ...
 
     async def list(
         self,
-        user_id: UUID,
+        workspace_id: UUID,
         *,
         wallet_id: UUID | None,
         date_from: datetime | None,
@@ -24,7 +24,7 @@ class TransferRepository(Protocol):
 
     async def count(
         self,
-        user_id: UUID,
+        workspace_id: UUID,
         *,
         wallet_id: UUID | None,
         date_from: datetime | None,
@@ -34,7 +34,7 @@ class TransferRepository(Protocol):
     async def update(
         self,
         transfer_id: UUID,
-        user_id: UUID,
+        workspace_id: UUID,
         *,
         from_wallet_id: UUID,
         to_wallet_id: UUID,
@@ -44,6 +44,6 @@ class TransferRepository(Protocol):
         now: datetime,
     ) -> Transfer | None: ...
 
-    async def delete(self, transfer_id: UUID, user_id: UUID) -> bool: ...
+    async def delete(self, transfer_id: UUID, workspace_id: UUID) -> bool: ...
 
-    async def balance_delta(self, wallet_id: UUID, user_id: UUID) -> dict[UUID, Decimal]: ...
+    async def balance_delta(self, wallet_id: UUID, workspace_id: UUID) -> dict[UUID, Decimal]: ...

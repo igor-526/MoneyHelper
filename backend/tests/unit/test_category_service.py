@@ -16,11 +16,11 @@ def make_service() -> tuple[CategoryService, InMemoryCategoryRepository]:
 
 async def test_create_income_category() -> None:
     service, _ = make_service()
-    user_id = uuid4()
+    workspace_id = uuid4()
 
-    category = await service.create_category(user_id, type=CategoryType.INCOME, name="Зарплата", icon="wallet")
+    category = await service.create_category(workspace_id, type=CategoryType.INCOME, name="Зарплата", icon="wallet")
 
-    assert category.user_id == user_id
+    assert category.workspace_id == workspace_id
     assert category.type == CategoryType.INCOME
     assert category.name == "Зарплата"
     assert category.icon == "wallet"
@@ -29,28 +29,28 @@ async def test_create_income_category() -> None:
 
 async def test_create_expense_category() -> None:
     service, _ = make_service()
-    user_id = uuid4()
+    workspace_id = uuid4()
 
-    category = await service.create_category(user_id, type=CategoryType.EXPENSE, name="Продукты", icon="banknote")
+    category = await service.create_category(workspace_id, type=CategoryType.EXPENSE, name="Продукты", icon="banknote")
 
     assert category.type == CategoryType.EXPENSE
 
 
 async def test_create_category_duplicate_name_within_type_raises_already_exists() -> None:
     service, _ = make_service()
-    user_id = uuid4()
-    await service.create_category(user_id, type=CategoryType.INCOME, name="Зарплата", icon="wallet")
+    workspace_id = uuid4()
+    await service.create_category(workspace_id, type=CategoryType.INCOME, name="Зарплата", icon="wallet")
 
     with pytest.raises(AlreadyExistsError):
-        await service.create_category(user_id, type=CategoryType.INCOME, name="Зарплата", icon="wallet")
+        await service.create_category(workspace_id, type=CategoryType.INCOME, name="Зарплата", icon="wallet")
 
 
 async def test_create_category_same_name_different_type_is_allowed() -> None:
     service, _ = make_service()
-    user_id = uuid4()
-    await service.create_category(user_id, type=CategoryType.INCOME, name="Прочее", icon="wallet")
+    workspace_id = uuid4()
+    await service.create_category(workspace_id, type=CategoryType.INCOME, name="Прочее", icon="wallet")
 
-    category = await service.create_category(user_id, type=CategoryType.EXPENSE, name="Прочее", icon="wallet")
+    category = await service.create_category(workspace_id, type=CategoryType.EXPENSE, name="Прочее", icon="wallet")
 
     assert category.type == CategoryType.EXPENSE
 
@@ -152,11 +152,11 @@ async def test_list_categories_returns_only_given_user_categories() -> None:
 
 async def test_list_categories_filters_by_type() -> None:
     service, _ = make_service()
-    user_id = uuid4()
-    await service.create_category(user_id, type=CategoryType.INCOME, name="Зарплата", icon="wallet")
-    await service.create_category(user_id, type=CategoryType.EXPENSE, name="Продукты", icon="banknote")
+    workspace_id = uuid4()
+    await service.create_category(workspace_id, type=CategoryType.INCOME, name="Зарплата", icon="wallet")
+    await service.create_category(workspace_id, type=CategoryType.EXPENSE, name="Продукты", icon="banknote")
 
-    items, total = await service.list_categories(user_id, type=CategoryType.INCOME, limit=20, offset=0)
+    items, total = await service.list_categories(workspace_id, type=CategoryType.INCOME, limit=20, offset=0)
 
     assert total == 1
     assert [category.name for category in items] == ["Зарплата"]
@@ -164,10 +164,10 @@ async def test_list_categories_filters_by_type() -> None:
 
 async def test_list_categories_without_filter_returns_both_types() -> None:
     service, _ = make_service()
-    user_id = uuid4()
-    await service.create_category(user_id, type=CategoryType.INCOME, name="Зарплата", icon="wallet")
-    await service.create_category(user_id, type=CategoryType.EXPENSE, name="Продукты", icon="banknote")
+    workspace_id = uuid4()
+    await service.create_category(workspace_id, type=CategoryType.INCOME, name="Зарплата", icon="wallet")
+    await service.create_category(workspace_id, type=CategoryType.EXPENSE, name="Продукты", icon="banknote")
 
-    items, total = await service.list_categories(user_id, type=None, limit=20, offset=0)
+    items, total = await service.list_categories(workspace_id, type=None, limit=20, offset=0)
 
     assert total == 2

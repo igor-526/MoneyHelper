@@ -17,7 +17,7 @@ from models import categories, currencies, transaction_legs, transactions
 def _map_row(row: Row[Any], legs: tuple[TransactionLeg, ...]) -> Transaction:
     return Transaction(
         id=row.id,
-        user_id=row.user_id,
+        workspace_id=row.workspace_id,
         wallet_id=row.wallet_id,
         category_id=row.category_id,
         legs=legs,
@@ -35,7 +35,7 @@ class TransactionRepository:
         await self._session.execute(
             insert(transactions).values(
                 id=transaction.id,
-                user_id=transaction.user_id,
+                workspace_id=transaction.workspace_id,
                 wallet_id=transaction.wallet_id,
                 category_id=transaction.category_id,
                 occurred_at=transaction.occurred_at,
@@ -44,12 +44,14 @@ class TransactionRepository:
             )
         )
         await self._insert_legs(transaction.id, transaction.legs)
-        return await self.get_by_id(transaction.id, transaction.user_id) or transaction
+        return await self.get_by_id(transaction.id, transaction.workspace_id) or transaction
 
-    async def get_by_id(self, transaction_id: UUID, user_id: UUID) -> Transaction | None:
+    async def get_by_id(self, transaction_id: UUID, workspace_id: UUID) -> Transaction | None:
         row = (
             await self._session.execute(
-                select(transactions).where(transactions.c.id == transaction_id, transactions.c.user_id == user_id)
+                select(transactions).where(
+                    transactions.c.id == transaction_id, transactions.c.workspace_id == workspace_id
+                )
             )
         ).first()
         if row is None:
@@ -64,7 +66,7 @@ class TransactionRepository:
     # `async def list(...)` (тот же приём уже применён в `tests/fakes/transaction_repository.py`).
     async def list_legs_for_analytics(
         self,
-        user_id: UUID,
+        workspace_id: UUID,
         *,
         date_from: datetime,
         date_to: datetime,
@@ -87,7 +89,7 @@ class TransactionRepository:
                 )
             )
             .where(
-                transactions.c.user_id == user_id,
+                transactions.c.workspace_id == workspace_id,
                 transactions.c.occurred_at >= date_from,
                 transactions.c.occurred_at <= date_to,
             )
@@ -113,13 +115,13 @@ class TransactionRepository:
         ]
 
     async def list_topup_legs_for_rates(
-        self, user_id: UUID, *, date_from: datetime, date_to: datetime
+        self, workspace_id: UUID, *, date_from: datetime, date_to: datetime
     ) -> list[TopupLegRecord]:
         topup_ids = (
             select(transaction_legs.c.transaction_id)
             .select_from(transaction_legs.join(transactions, transactions.c.id == transaction_legs.c.transaction_id))
             .where(
-                transactions.c.user_id == user_id,
+                transactions.c.workspace_id == workspace_id,
                 transactions.c.occurred_at >= date_from,
                 transactions.c.occurred_at <= date_to,
             )
@@ -138,7 +140,7 @@ class TransactionRepository:
 
     async def list(
         self,
-        user_id: UUID,
+        workspace_id: UUID,
         *,
         wallet_id: UUID | None,
         category_id: UUID | None,
@@ -149,7 +151,7 @@ class TransactionRepository:
         offset: int,
     ) -> list[Transaction]:
         query = self._filtered_query(
-            user_id, wallet_id=wallet_id, category_id=category_id, type=type, date_from=date_from, date_to=date_to
+            workspace_id, wallet_id=wallet_id, category_id=category_id, type=type, date_from=date_from, date_to=date_to
         )
         rows = (
             await self._session.execute(
@@ -163,7 +165,7 @@ class TransactionRepository:
 
     async def count(
         self,
-        user_id: UUID,
+        workspace_id: UUID,
         *,
         wallet_id: UUID | None,
         category_id: UUID | None,
@@ -174,7 +176,7 @@ class TransactionRepository:
         joined: Any = transactions
         if type is not None:
             joined = joined.join(categories, transactions.c.category_id == categories.c.id)
-        query = select(func.count()).select_from(joined).where(transactions.c.user_id == user_id)
+        query = select(func.count()).select_from(joined).where(transactions.c.workspace_id == workspace_id)
         query = self._apply_filters(
             query, wallet_id=wallet_id, category_id=category_id, type=type, date_from=date_from, date_to=date_to
         )
@@ -183,7 +185,7 @@ class TransactionRepository:
     async def update(
         self,
         transaction_id: UUID,
-        user_id: UUID,
+        workspace_id: UUID,
         *,
         wallet_id: UUID,
         category_id: UUID,
@@ -193,7 +195,7 @@ class TransactionRepository:
     ) -> Transaction | None:
         result = await self._session.execute(
             sa_update(transactions)
-            .where(transactions.c.id == transaction_id, transactions.c.user_id == user_id)
+            .where(transactions.c.id == transaction_id, transactions.c.workspace_id == workspace_id)
             .values(wallet_id=wallet_id, category_id=category_id, occurred_at=occurred_at, updated_at=now)
             .returning(transactions.c.id)
         )
@@ -203,17 +205,17 @@ class TransactionRepository:
             sa_delete(transaction_legs).where(transaction_legs.c.transaction_id == transaction_id)
         )
         await self._insert_legs(transaction_id, legs)
-        return await self.get_by_id(transaction_id, user_id)
+        return await self.get_by_id(transaction_id, workspace_id)
 
-    async def delete(self, transaction_id: UUID, user_id: UUID) -> bool:
+    async def delete(self, transaction_id: UUID, workspace_id: UUID) -> bool:
         result = await self._session.execute(
             sa_delete(transactions)
-            .where(transactions.c.id == transaction_id, transactions.c.user_id == user_id)
+            .where(transactions.c.id == transaction_id, transactions.c.workspace_id == workspace_id)
             .returning(transactions.c.id)
         )
         return result.first() is not None
 
-    async def balance_delta(self, wallet_id: UUID, user_id: UUID) -> dict[UUID, Decimal]:
+    async def balance_delta(self, wallet_id: UUID, workspace_id: UUID) -> dict[UUID, Decimal]:
         signed_amount = case(
             (categories.c.type == CategoryType.INCOME, transaction_legs.c.amount), else_=-transaction_legs.c.amount
         )
@@ -224,7 +226,7 @@ class TransactionRepository:
                     categories, categories.c.id == transactions.c.category_id
                 )
             )
-            .where(transactions.c.wallet_id == wallet_id, transactions.c.user_id == user_id)
+            .where(transactions.c.wallet_id == wallet_id, transactions.c.workspace_id == workspace_id)
             .group_by(transaction_legs.c.currency_id)
         )
         rows = await self._session.execute(query)
@@ -257,7 +259,7 @@ class TransactionRepository:
 
     def _filtered_query(
         self,
-        user_id: UUID,
+        workspace_id: UUID,
         *,
         wallet_id: UUID | None,
         category_id: UUID | None,
@@ -268,7 +270,7 @@ class TransactionRepository:
         joined: Any = transactions
         if type is not None:
             joined = joined.join(categories, transactions.c.category_id == categories.c.id)
-        query = select(transactions).select_from(joined).where(transactions.c.user_id == user_id)
+        query = select(transactions).select_from(joined).where(transactions.c.workspace_id == workspace_id)
         return self._apply_filters(
             query, wallet_id=wallet_id, category_id=category_id, type=type, date_from=date_from, date_to=date_to
         )

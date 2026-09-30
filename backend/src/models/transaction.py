@@ -8,7 +8,7 @@ transactions = Table(
     "transactions",
     metadata,
     Column("id", UUID(as_uuid=True), primary_key=True),
-    Column("user_id", UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
+    Column("workspace_id", UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False),
     Column("wallet_id", UUID(as_uuid=True), ForeignKey("wallets.id", ondelete="RESTRICT"), nullable=False),
     Column("category_id", UUID(as_uuid=True), ForeignKey("categories.id", ondelete="RESTRICT"), nullable=False),
     Column("occurred_at", DateTime(timezone=True), nullable=False),

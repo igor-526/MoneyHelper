@@ -20,7 +20,7 @@ DELETE_CONFLICT_MESSAGE = "Кошелёк нельзя удалить: есть 
 def _map_row(row: Row[Any], currency_ids: tuple[UUID, ...]) -> Wallet:
     return Wallet(
         id=row.id,
-        user_id=row.user_id,
+        workspace_id=row.workspace_id,
         name=row.name,
         icon=row.icon,
         currency_ids=currency_ids,
@@ -37,7 +37,7 @@ class WalletRepository:
         await self._session.execute(
             insert(wallets).values(
                 id=wallet.id,
-                user_id=wallet.user_id,
+                workspace_id=wallet.workspace_id,
                 name=wallet.name,
                 icon=wallet.icon,
                 created_at=wallet.created_at,
@@ -45,22 +45,24 @@ class WalletRepository:
             )
         )
         await self._insert_currency_ids(wallet.id, wallet.currency_ids)
-        return await self.get_by_id(wallet.id, wallet.user_id) or wallet
+        return await self.get_by_id(wallet.id, wallet.workspace_id) or wallet
 
-    async def get_by_id(self, wallet_id: UUID, user_id: UUID) -> Wallet | None:
+    async def get_by_id(self, wallet_id: UUID, workspace_id: UUID) -> Wallet | None:
         row = (
-            await self._session.execute(select(wallets).where(wallets.c.id == wallet_id, wallets.c.user_id == user_id))
+            await self._session.execute(
+                select(wallets).where(wallets.c.id == wallet_id, wallets.c.workspace_id == workspace_id)
+            )
         ).first()
         if row is None:
             return None
         currency_ids = await self._load_currency_ids(wallet_id)
         return _map_row(row, currency_ids)
 
-    async def list(self, user_id: UUID, *, limit: int, offset: int) -> list[Wallet]:
+    async def list(self, workspace_id: UUID, *, limit: int, offset: int) -> list[Wallet]:
         rows = (
             await self._session.execute(
                 select(wallets)
-                .where(wallets.c.user_id == user_id)
+                .where(wallets.c.workspace_id == workspace_id)
                 .order_by(wallets.c.created_at, wallets.c.id)
                 .limit(limit)
                 .offset(offset)
@@ -71,17 +73,19 @@ class WalletRepository:
         currency_ids_by_wallet = await self._load_currency_ids_map([row.id for row in rows])
         return [_map_row(row, currency_ids_by_wallet.get(row.id, ())) for row in rows]
 
-    async def count(self, user_id: UUID) -> int:
+    async def count(self, workspace_id: UUID) -> int:
         return (
-            await self._session.execute(select(func.count()).select_from(wallets).where(wallets.c.user_id == user_id))
+            await self._session.execute(
+                select(func.count()).select_from(wallets).where(wallets.c.workspace_id == workspace_id)
+            )
         ).scalar_one()
 
     async def update(
-        self, wallet_id: UUID, user_id: UUID, *, name: str, icon: str, currency_ids: Sequence[UUID], now: datetime
+        self, wallet_id: UUID, workspace_id: UUID, *, name: str, icon: str, currency_ids: Sequence[UUID], now: datetime
     ) -> Wallet | None:
         result = await self._session.execute(
             sa_update(wallets)
-            .where(wallets.c.id == wallet_id, wallets.c.user_id == user_id)
+            .where(wallets.c.id == wallet_id, wallets.c.workspace_id == workspace_id)
             .values(name=name, icon=icon, updated_at=now)
             .returning(wallets)
         )
@@ -92,11 +96,11 @@ class WalletRepository:
         await self._insert_currency_ids(wallet_id, currency_ids)
         return _map_row(row, tuple(await self._load_currency_ids(wallet_id)))
 
-    async def delete(self, wallet_id: UUID, user_id: UUID) -> bool:
+    async def delete(self, wallet_id: UUID, workspace_id: UUID) -> bool:
         try:
             result = await self._session.execute(
                 sa_delete(wallets)
-                .where(wallets.c.id == wallet_id, wallets.c.user_id == user_id)
+                .where(wallets.c.id == wallet_id, wallets.c.workspace_id == workspace_id)
                 .returning(wallets.c.id)
             )
         except IntegrityError as exc:

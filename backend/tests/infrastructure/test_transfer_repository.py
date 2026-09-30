@@ -7,7 +7,7 @@ from sqlalchemy import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.entities import Currency, Transfer, User, Wallet
+from core.entities import Currency, Transfer, User, Wallet, Workspace
 from models import currencies as currencies_table
 from models import transfers as transfers_table
 from models import wallets as wallets_table
@@ -15,6 +15,7 @@ from repositories.currency import CurrencyRepository
 from repositories.transfer import TransferRepository
 from repositories.user import UserRepository
 from repositories.wallet import WalletRepository
+from repositories.workspace import WorkspaceRepository
 
 pytestmark = pytest.mark.infrastructure
 
@@ -34,6 +35,14 @@ async def make_user(db_session: AsyncSession) -> User:
     return user
 
 
+async def make_workspace(db_session: AsyncSession, owner: User | None = None) -> Workspace:
+    owner = owner if owner is not None else await make_user(db_session)
+    workspace = Workspace(id=uuid4(), user_id=owner.id, name="Воркспейс", created_at=DEFAULT_CREATED_AT)
+    await WorkspaceRepository(db_session).add(workspace)
+    await db_session.flush()
+    return workspace
+
+
 async def make_currency(db_session: AsyncSession, code: str = "RUB", decimal_places: int = 2) -> Currency:
     currency = Currency(id=uuid4(), code=code, name=code, decimal_places=decimal_places)
     await CurrencyRepository(db_session).upsert_many([currency])
@@ -41,10 +50,10 @@ async def make_currency(db_session: AsyncSession, code: str = "RUB", decimal_pla
     return currency
 
 
-async def make_wallet(db_session: AsyncSession, user_id: UUID, currency_ids: tuple[UUID, ...]) -> Wallet:
+async def make_wallet(db_session: AsyncSession, workspace_id: UUID, currency_ids: tuple[UUID, ...]) -> Wallet:
     wallet = Wallet(
         id=uuid4(),
-        user_id=user_id,
+        workspace_id=workspace_id,
         name="Кошелёк",
         icon="wallet",
         currency_ids=currency_ids,
@@ -56,7 +65,7 @@ async def make_wallet(db_session: AsyncSession, user_id: UUID, currency_ids: tup
 
 
 def make_transfer(
-    user_id: UUID,
+    workspace_id: UUID,
     from_wallet_id: UUID,
     to_wallet_id: UUID,
     currency_id: UUID,
@@ -66,7 +75,7 @@ def make_transfer(
 ) -> Transfer:
     return Transfer(
         id=uuid4(),
-        user_id=user_id,
+        workspace_id=workspace_id,
         from_wallet_id=from_wallet_id,
         to_wallet_id=to_wallet_id,
         currency_id=currency_id,
@@ -77,7 +86,7 @@ def make_transfer(
 
 
 async def test_add_and_get_by_id(db_session: AsyncSession) -> None:
-    user = await make_user(db_session)
+    user = await make_workspace(db_session)
     currency = await make_currency(db_session)
     wallet_a = await make_wallet(db_session, user.id, (currency.id,))
     wallet_b = await make_wallet(db_session, user.id, (currency.id,))
@@ -102,9 +111,9 @@ async def test_get_by_id_unknown_returns_none(db_session: AsyncSession) -> None:
     assert await repo.get_by_id(uuid4(), uuid4()) is None
 
 
-async def test_get_by_id_with_foreign_user_id_returns_none(db_session: AsyncSession) -> None:
-    owner = await make_user(db_session)
-    other = await make_user(db_session)
+async def test_get_by_id_with_foreign_workspace_id_returns_none(db_session: AsyncSession) -> None:
+    owner = await make_workspace(db_session)
+    other = await make_workspace(db_session)
     currency = await make_currency(db_session)
     wallet_a = await make_wallet(db_session, owner.id, (currency.id,))
     wallet_b = await make_wallet(db_session, owner.id, (currency.id,))
@@ -117,7 +126,7 @@ async def test_get_by_id_with_foreign_user_id_returns_none(db_session: AsyncSess
 
 
 async def test_list_and_count_filter_by_wallet_matches_from_or_to(db_session: AsyncSession) -> None:
-    user = await make_user(db_session)
+    user = await make_workspace(db_session)
     currency = await make_currency(db_session)
     wallet_a = await make_wallet(db_session, user.id, (currency.id,))
     wallet_b = await make_wallet(db_session, user.id, (currency.id,))
@@ -140,7 +149,7 @@ async def test_list_and_count_filter_by_wallet_matches_from_or_to(db_session: As
 
 
 async def test_list_and_count_filter_by_date_range(db_session: AsyncSession) -> None:
-    user = await make_user(db_session)
+    user = await make_workspace(db_session)
     currency = await make_currency(db_session)
     wallet_a = await make_wallet(db_session, user.id, (currency.id,))
     wallet_b = await make_wallet(db_session, user.id, (currency.id,))
@@ -168,7 +177,7 @@ async def test_list_and_count_filter_by_date_range(db_session: AsyncSession) -> 
 
 
 async def test_list_is_sorted_by_occurred_at_desc_then_id_desc(db_session: AsyncSession) -> None:
-    user = await make_user(db_session)
+    user = await make_workspace(db_session)
     currency = await make_currency(db_session)
     wallet_a = await make_wallet(db_session, user.id, (currency.id,))
     wallet_b = await make_wallet(db_session, user.id, (currency.id,))
@@ -189,8 +198,8 @@ async def test_list_is_sorted_by_occurred_at_desc_then_id_desc(db_session: Async
 
 
 async def test_list_isolates_by_user(db_session: AsyncSession) -> None:
-    user_a = await make_user(db_session)
-    user_b = await make_user(db_session)
+    user_a = await make_workspace(db_session)
+    user_b = await make_workspace(db_session)
     currency = await make_currency(db_session)
     wallet_a1 = await make_wallet(db_session, user_a.id, (currency.id,))
     wallet_a2 = await make_wallet(db_session, user_a.id, (currency.id,))
@@ -204,11 +213,11 @@ async def test_list_isolates_by_user(db_session: AsyncSession) -> None:
     items = await repo.list(user_a.id, wallet_id=None, date_from=None, date_to=None, limit=20, offset=0)
 
     assert len(items) == 1
-    assert items[0].user_id == user_a.id
+    assert items[0].workspace_id == user_a.id
 
 
 async def test_update_replaces_all_fields(db_session: AsyncSession) -> None:
-    user = await make_user(db_session)
+    user = await make_workspace(db_session)
     currency = await make_currency(db_session)
     wallet_a = await make_wallet(db_session, user.id, (currency.id,))
     wallet_b = await make_wallet(db_session, user.id, (currency.id,))
@@ -239,7 +248,7 @@ async def test_update_replaces_all_fields(db_session: AsyncSession) -> None:
 
 
 async def test_update_unknown_returns_none(db_session: AsyncSession) -> None:
-    user = await make_user(db_session)
+    user = await make_workspace(db_session)
     currency = await make_currency(db_session)
     wallet_a = await make_wallet(db_session, user.id, (currency.id,))
     wallet_b = await make_wallet(db_session, user.id, (currency.id,))
@@ -259,9 +268,9 @@ async def test_update_unknown_returns_none(db_session: AsyncSession) -> None:
     assert result is None
 
 
-async def test_update_with_foreign_user_id_returns_none(db_session: AsyncSession) -> None:
-    owner = await make_user(db_session)
-    other = await make_user(db_session)
+async def test_update_with_foreign_workspace_id_returns_none(db_session: AsyncSession) -> None:
+    owner = await make_workspace(db_session)
+    other = await make_workspace(db_session)
     currency = await make_currency(db_session)
     wallet_a = await make_wallet(db_session, owner.id, (currency.id,))
     wallet_b = await make_wallet(db_session, owner.id, (currency.id,))
@@ -288,7 +297,7 @@ async def test_update_with_foreign_user_id_returns_none(db_session: AsyncSession
 
 
 async def test_delete_success(db_session: AsyncSession) -> None:
-    user = await make_user(db_session)
+    user = await make_workspace(db_session)
     currency = await make_currency(db_session)
     wallet_a = await make_wallet(db_session, user.id, (currency.id,))
     wallet_b = await make_wallet(db_session, user.id, (currency.id,))
@@ -304,9 +313,9 @@ async def test_delete_success(db_session: AsyncSession) -> None:
     assert await repo.get_by_id(transfer.id, user.id) is None
 
 
-async def test_delete_with_foreign_user_id_returns_false(db_session: AsyncSession) -> None:
-    owner = await make_user(db_session)
-    other = await make_user(db_session)
+async def test_delete_with_foreign_workspace_id_returns_false(db_session: AsyncSession) -> None:
+    owner = await make_workspace(db_session)
+    other = await make_workspace(db_session)
     currency = await make_currency(db_session)
     wallet_a = await make_wallet(db_session, owner.id, (currency.id,))
     wallet_b = await make_wallet(db_session, owner.id, (currency.id,))
@@ -328,7 +337,7 @@ async def test_delete_unknown_returns_false(db_session: AsyncSession) -> None:
 
 
 async def test_deleting_referenced_wallet_is_restricted(db_session: AsyncSession) -> None:
-    user = await make_user(db_session)
+    user = await make_workspace(db_session)
     currency = await make_currency(db_session)
     wallet_a = await make_wallet(db_session, user.id, (currency.id,))
     wallet_b = await make_wallet(db_session, user.id, (currency.id,))
@@ -341,7 +350,7 @@ async def test_deleting_referenced_wallet_is_restricted(db_session: AsyncSession
 
 
 async def test_deleting_referenced_currency_is_restricted(db_session: AsyncSession) -> None:
-    user = await make_user(db_session)
+    user = await make_workspace(db_session)
     currency = await make_currency(db_session)
     wallet_a = await make_wallet(db_session, user.id, (currency.id,))
     wallet_b = await make_wallet(db_session, user.id, (currency.id,))
@@ -354,7 +363,7 @@ async def test_deleting_referenced_currency_is_restricted(db_session: AsyncSessi
 
 
 async def test_check_constraint_rejects_nonpositive_amount(db_session: AsyncSession) -> None:
-    user = await make_user(db_session)
+    user = await make_workspace(db_session)
     currency = await make_currency(db_session)
     wallet_a = await make_wallet(db_session, user.id, (currency.id,))
     wallet_b = await make_wallet(db_session, user.id, (currency.id,))
@@ -363,7 +372,7 @@ async def test_check_constraint_rejects_nonpositive_amount(db_session: AsyncSess
         await db_session.execute(
             insert(transfers_table).values(
                 id=uuid4(),
-                user_id=user.id,
+                workspace_id=user.id,
                 from_wallet_id=wallet_a.id,
                 to_wallet_id=wallet_b.id,
                 currency_id=currency.id,
@@ -375,7 +384,7 @@ async def test_check_constraint_rejects_nonpositive_amount(db_session: AsyncSess
 
 
 async def test_check_constraint_rejects_same_wallet(db_session: AsyncSession) -> None:
-    user = await make_user(db_session)
+    user = await make_workspace(db_session)
     currency = await make_currency(db_session)
     wallet = await make_wallet(db_session, user.id, (currency.id,))
 
@@ -383,7 +392,7 @@ async def test_check_constraint_rejects_same_wallet(db_session: AsyncSession) ->
         await db_session.execute(
             insert(transfers_table).values(
                 id=uuid4(),
-                user_id=user.id,
+                workspace_id=user.id,
                 from_wallet_id=wallet.id,
                 to_wallet_id=wallet.id,
                 currency_id=currency.id,
@@ -395,7 +404,7 @@ async def test_check_constraint_rejects_same_wallet(db_session: AsyncSession) ->
 
 
 async def test_balance_delta_aggregates_incoming_and_outgoing_transfers(db_session: AsyncSession) -> None:
-    user = await make_user(db_session)
+    user = await make_workspace(db_session)
     currency = await make_currency(db_session)
     wallet_a = await make_wallet(db_session, user.id, (currency.id,))
     wallet_b = await make_wallet(db_session, user.id, (currency.id,))
@@ -412,7 +421,7 @@ async def test_balance_delta_aggregates_incoming_and_outgoing_transfers(db_sessi
 
 
 async def test_balance_delta_empty_for_wallet_without_transfers(db_session: AsyncSession) -> None:
-    user = await make_user(db_session)
+    user = await make_workspace(db_session)
     currency = await make_currency(db_session)
     wallet = await make_wallet(db_session, user.id, (currency.id,))
     repo = TransferRepository(db_session)

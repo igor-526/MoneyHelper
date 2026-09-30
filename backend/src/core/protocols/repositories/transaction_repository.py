@@ -10,7 +10,7 @@ from core.entities import CategoryType, LegRecord, TopupLegRecord, Transaction, 
 class TransactionRepository(Protocol):
     async def add(self, transaction: Transaction) -> Transaction: ...
 
-    async def get_by_id(self, transaction_id: UUID, user_id: UUID) -> Transaction | None: ...
+    async def get_by_id(self, transaction_id: UUID, workspace_id: UUID) -> Transaction | None: ...
 
     # Объявлены раньше `list`/`count`: имя `list` внутри тела класса начинает ссылаться на одноимённый метод
     # сразу после его определения (см. тот же приём и комментарий в `repositories/transaction.py` и
@@ -18,7 +18,7 @@ class TransactionRepository(Protocol):
     # резолвиться к встроенному generic-типу, если бы шла после `async def list(...)`.
     async def list_legs_for_analytics(
         self,
-        user_id: UUID,
+        workspace_id: UUID,
         *,
         date_from: datetime,
         date_to: datetime,
@@ -29,12 +29,12 @@ class TransactionRepository(Protocol):
     ) -> list[LegRecord]: ...
 
     async def list_topup_legs_for_rates(
-        self, user_id: UUID, *, date_from: datetime, date_to: datetime
+        self, workspace_id: UUID, *, date_from: datetime, date_to: datetime
     ) -> list[TopupLegRecord]: ...
 
     async def list(
         self,
-        user_id: UUID,
+        workspace_id: UUID,
         *,
         wallet_id: UUID | None,
         category_id: UUID | None,
@@ -47,7 +47,7 @@ class TransactionRepository(Protocol):
 
     async def count(
         self,
-        user_id: UUID,
+        workspace_id: UUID,
         *,
         wallet_id: UUID | None,
         category_id: UUID | None,
@@ -59,7 +59,7 @@ class TransactionRepository(Protocol):
     async def update(
         self,
         transaction_id: UUID,
-        user_id: UUID,
+        workspace_id: UUID,
         *,
         wallet_id: UUID,
         category_id: UUID,
@@ -68,6 +68,6 @@ class TransactionRepository(Protocol):
         now: datetime,
     ) -> Transaction | None: ...
 
-    async def delete(self, transaction_id: UUID, user_id: UUID) -> bool: ...
+    async def delete(self, transaction_id: UUID, workspace_id: UUID) -> bool: ...
 
-    async def balance_delta(self, wallet_id: UUID, user_id: UUID) -> dict[UUID, Decimal]: ...
+    async def balance_delta(self, wallet_id: UUID, workspace_id: UUID) -> dict[UUID, Decimal]: ...

@@ -17,11 +17,11 @@ class WalletService:
         self._clock = clock
         self._ids = ids
 
-    async def create_wallet(self, user_id: UUID, *, name: str, icon: str, currency_ids: Sequence[UUID]) -> Wallet:
+    async def create_wallet(self, workspace_id: UUID, *, name: str, icon: str, currency_ids: Sequence[UUID]) -> Wallet:
         await self._ensure_currencies_exist(currency_ids)
         wallet = Wallet(
             id=self._ids.new(),
-            user_id=user_id,
+            workspace_id=workspace_id,
             name=name,
             icon=icon,
             currency_ids=tuple(currency_ids),
@@ -29,30 +29,30 @@ class WalletService:
         )
         return await self._wallets.add(wallet)
 
-    async def get_wallet(self, wallet_id: UUID, user_id: UUID) -> Wallet:
-        wallet = await self._wallets.get_by_id(wallet_id, user_id)
+    async def get_wallet(self, wallet_id: UUID, workspace_id: UUID) -> Wallet:
+        wallet = await self._wallets.get_by_id(wallet_id, workspace_id)
         if wallet is None:
             raise NotFoundError(NOT_FOUND_MESSAGE)
         return wallet
 
-    async def list_wallets(self, user_id: UUID, *, limit: int, offset: int) -> tuple[list[Wallet], int]:
-        items = await self._wallets.list(user_id, limit=limit, offset=offset)
-        total = await self._wallets.count(user_id)
+    async def list_wallets(self, workspace_id: UUID, *, limit: int, offset: int) -> tuple[list[Wallet], int]:
+        items = await self._wallets.list(workspace_id, limit=limit, offset=offset)
+        total = await self._wallets.count(workspace_id)
         return items, total
 
     async def update_wallet(
-        self, wallet_id: UUID, user_id: UUID, *, name: str, icon: str, currency_ids: Sequence[UUID]
+        self, wallet_id: UUID, workspace_id: UUID, *, name: str, icon: str, currency_ids: Sequence[UUID]
     ) -> Wallet:
         await self._ensure_currencies_exist(currency_ids)
         wallet = await self._wallets.update(
-            wallet_id, user_id, name=name, icon=icon, currency_ids=currency_ids, now=self._clock.now()
+            wallet_id, workspace_id, name=name, icon=icon, currency_ids=currency_ids, now=self._clock.now()
         )
         if wallet is None:
             raise NotFoundError(NOT_FOUND_MESSAGE)
         return wallet
 
-    async def delete_wallet(self, wallet_id: UUID, user_id: UUID) -> None:
-        deleted = await self._wallets.delete(wallet_id, user_id)
+    async def delete_wallet(self, wallet_id: UUID, workspace_id: UUID) -> None:
+        deleted = await self._wallets.delete(wallet_id, workspace_id)
         if not deleted:
             raise NotFoundError(NOT_FOUND_MESSAGE)
 

@@ -26,11 +26,11 @@ def make_currency(code: str = "RUB") -> Currency:
 async def test_create_wallet_with_single_currency() -> None:
     currency = make_currency("RUB")
     service, _, _ = await make_service([currency])
-    user_id = uuid4()
+    workspace_id = uuid4()
 
-    wallet = await service.create_wallet(user_id, name="Наличные", icon="wallet", currency_ids=[currency.id])
+    wallet = await service.create_wallet(workspace_id, name="Наличные", icon="wallet", currency_ids=[currency.id])
 
-    assert wallet.user_id == user_id
+    assert wallet.workspace_id == workspace_id
     assert wallet.name == "Наличные"
     assert wallet.currency_ids == (currency.id,)
     assert wallet.created_at is not None
@@ -39,9 +39,11 @@ async def test_create_wallet_with_single_currency() -> None:
 async def test_create_wallet_with_multiple_currencies() -> None:
     rub, cny = make_currency("RUB"), make_currency("CNY")
     service, _, _ = await make_service([rub, cny])
-    user_id = uuid4()
+    workspace_id = uuid4()
 
-    wallet = await service.create_wallet(user_id, name="Мультивалютный", icon="wallet", currency_ids=[rub.id, cny.id])
+    wallet = await service.create_wallet(
+        workspace_id, name="Мультивалютный", icon="wallet", currency_ids=[rub.id, cny.id]
+    )
 
     assert set(wallet.currency_ids) == {rub.id, cny.id}
 

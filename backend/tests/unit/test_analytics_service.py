@@ -26,15 +26,20 @@ class Environment:
         await self.currencies.upsert_many([currency])
         return currency
 
-    async def make_category(self, user_id: UUID, type: CategoryType) -> Category:
+    async def make_category(self, workspace_id: UUID, type: CategoryType) -> Category:
         category = Category(
-            id=uuid4(), user_id=user_id, type=type, name=f"Категория {uuid4()}", icon="wallet", created_at=IN_RANGE
+            id=uuid4(),
+            workspace_id=workspace_id,
+            type=type,
+            name=f"Категория {uuid4()}",
+            icon="wallet",
+            created_at=IN_RANGE,
         )
         return await self.categories.add(category)
 
     async def add_transaction(
         self,
-        user_id: UUID,
+        workspace_id: UUID,
         *,
         wallet_id: UUID,
         category_id: UUID,
@@ -44,7 +49,7 @@ class Environment:
     ) -> Transaction:
         transaction = Transaction(
             id=uuid4(),
-            user_id=user_id,
+            workspace_id=workspace_id,
             wallet_id=wallet_id,
             category_id=category_id,
             legs=(TransactionLeg(currency_id=currency_id, amount=amount),),
@@ -55,7 +60,7 @@ class Environment:
 
     async def add_topup(
         self,
-        user_id: UUID,
+        workspace_id: UUID,
         *,
         wallet_id: UUID,
         category_id: UUID,
@@ -64,7 +69,7 @@ class Environment:
     ) -> Transaction:
         transaction = Transaction(
             id=uuid4(),
-            user_id=user_id,
+            workspace_id=workspace_id,
             wallet_id=wallet_id,
             category_id=category_id,
             legs=legs,
@@ -76,19 +81,19 @@ class Environment:
 
 async def test_groups_by_wallet() -> None:
     env = Environment()
-    user_id = uuid4()
+    workspace_id = uuid4()
     currency = await env.make_currency()
-    income = await env.make_category(user_id, CategoryType.INCOME)
+    income = await env.make_category(workspace_id, CategoryType.INCOME)
     wallet_a, wallet_b = uuid4(), uuid4()
     await env.add_transaction(
-        user_id, wallet_id=wallet_a, category_id=income.id, currency_id=currency.id, amount=Decimal("100")
+        workspace_id, wallet_id=wallet_a, category_id=income.id, currency_id=currency.id, amount=Decimal("100")
     )
     await env.add_transaction(
-        user_id, wallet_id=wallet_b, category_id=income.id, currency_id=currency.id, amount=Decimal("50")
+        workspace_id, wallet_id=wallet_b, category_id=income.id, currency_id=currency.id, amount=Decimal("50")
     )
 
     buckets, unconverted = await env.service.get_analytics(
-        user_id,
+        workspace_id,
         display_currency_id=currency.id,
         date_from=DATE_FROM,
         date_to=DATE_TO,
@@ -107,20 +112,20 @@ async def test_groups_by_wallet() -> None:
 
 async def test_groups_by_category() -> None:
     env = Environment()
-    user_id = uuid4()
+    workspace_id = uuid4()
     currency = await env.make_currency()
     wallet = uuid4()
-    income = await env.make_category(user_id, CategoryType.INCOME)
-    expense = await env.make_category(user_id, CategoryType.EXPENSE)
+    income = await env.make_category(workspace_id, CategoryType.INCOME)
+    expense = await env.make_category(workspace_id, CategoryType.EXPENSE)
     await env.add_transaction(
-        user_id, wallet_id=wallet, category_id=income.id, currency_id=currency.id, amount=Decimal("100")
+        workspace_id, wallet_id=wallet, category_id=income.id, currency_id=currency.id, amount=Decimal("100")
     )
     await env.add_transaction(
-        user_id, wallet_id=wallet, category_id=expense.id, currency_id=currency.id, amount=Decimal("30")
+        workspace_id, wallet_id=wallet, category_id=expense.id, currency_id=currency.id, amount=Decimal("30")
     )
 
     buckets, _ = await env.service.get_analytics(
-        user_id,
+        workspace_id,
         display_currency_id=currency.id,
         date_from=DATE_FROM,
         date_to=DATE_TO,
@@ -138,17 +143,17 @@ async def test_groups_by_category() -> None:
 
 async def test_groups_by_currency() -> None:
     env = Environment()
-    user_id = uuid4()
+    workspace_id = uuid4()
     rub = await env.make_currency("RUB")
     cny = await env.make_currency("CNY")
     wallet = uuid4()
-    income = await env.make_category(user_id, CategoryType.INCOME)
+    income = await env.make_category(workspace_id, CategoryType.INCOME)
     await env.add_transaction(
-        user_id, wallet_id=wallet, category_id=income.id, currency_id=rub.id, amount=Decimal("100")
+        workspace_id, wallet_id=wallet, category_id=income.id, currency_id=rub.id, amount=Decimal("100")
     )
     # Один охват курса, чтобы CNY была конвертируема.
     await env.add_topup(
-        user_id,
+        workspace_id,
         wallet_id=wallet,
         category_id=income.id,
         legs=(
@@ -157,11 +162,11 @@ async def test_groups_by_currency() -> None:
         ),
     )
     await env.add_transaction(
-        user_id, wallet_id=wallet, category_id=income.id, currency_id=cny.id, amount=Decimal("78")
+        workspace_id, wallet_id=wallet, category_id=income.id, currency_id=cny.id, amount=Decimal("78")
     )
 
     buckets, unconverted = await env.service.get_analytics(
-        user_id,
+        workspace_id,
         display_currency_id=rub.id,
         date_from=DATE_FROM,
         date_to=DATE_TO,
@@ -183,14 +188,14 @@ async def test_groups_by_currency() -> None:
 
 async def test_conversion_by_single_topup_rate_reproducible_example() -> None:
     env = Environment()
-    user_id = uuid4()
+    workspace_id = uuid4()
     currency_a = await env.make_currency("A")
     currency_b = await env.make_currency("B", decimal_places=8)
     wallet = uuid4()
-    income = await env.make_category(user_id, CategoryType.INCOME)
-    expense = await env.make_category(user_id, CategoryType.EXPENSE)
+    income = await env.make_category(workspace_id, CategoryType.INCOME)
+    expense = await env.make_category(workspace_id, CategoryType.EXPENSE)
     await env.add_topup(
-        user_id,
+        workspace_id,
         wallet_id=wallet,
         category_id=income.id,
         legs=(
@@ -199,11 +204,11 @@ async def test_conversion_by_single_topup_rate_reproducible_example() -> None:
         ),
     )
     await env.add_transaction(
-        user_id, wallet_id=wallet, category_id=expense.id, currency_id=currency_a.id, amount=Decimal("1000")
+        workspace_id, wallet_id=wallet, category_id=expense.id, currency_id=currency_a.id, amount=Decimal("1000")
     )
 
     buckets, unconverted = await env.service.get_analytics(
-        user_id,
+        workspace_id,
         display_currency_id=currency_b.id,
         date_from=DATE_FROM,
         date_to=DATE_TO,
@@ -224,15 +229,15 @@ async def test_conversion_by_single_topup_rate_reproducible_example() -> None:
 
 async def test_rate_averaged_across_multiple_topups_not_weighted() -> None:
     env = Environment()
-    user_id = uuid4()
+    workspace_id = uuid4()
     currency_a = await env.make_currency("A")
     currency_b = await env.make_currency("B")
     wallet = uuid4()
-    income = await env.make_category(user_id, CategoryType.INCOME)
-    expense = await env.make_category(user_id, CategoryType.EXPENSE)
+    income = await env.make_category(workspace_id, CategoryType.INCOME)
+    expense = await env.make_category(workspace_id, CategoryType.EXPENSE)
     # Курс 1: 10 B за 100 A => 0.1
     await env.add_topup(
-        user_id,
+        workspace_id,
         wallet_id=wallet,
         category_id=income.id,
         legs=(
@@ -242,7 +247,7 @@ async def test_rate_averaged_across_multiple_topups_not_weighted() -> None:
     )
     # Курс 2: 1000 B за 1000 A => 1 (сильно другой вес по сумме)
     await env.add_topup(
-        user_id,
+        workspace_id,
         wallet_id=wallet,
         category_id=income.id,
         legs=(
@@ -251,11 +256,11 @@ async def test_rate_averaged_across_multiple_topups_not_weighted() -> None:
         ),
     )
     await env.add_transaction(
-        user_id, wallet_id=wallet, category_id=expense.id, currency_id=currency_a.id, amount=Decimal("100")
+        workspace_id, wallet_id=wallet, category_id=expense.id, currency_id=currency_a.id, amount=Decimal("100")
     )
 
     buckets, _ = await env.service.get_analytics(
-        user_id,
+        workspace_id,
         display_currency_id=currency_b.id,
         date_from=DATE_FROM,
         date_to=DATE_TO,
@@ -274,16 +279,16 @@ async def test_rate_averaged_across_multiple_topups_not_weighted() -> None:
 
 async def test_display_currency_does_not_require_rate_lookup() -> None:
     env = Environment()
-    user_id = uuid4()
+    workspace_id = uuid4()
     currency = await env.make_currency()
     wallet = uuid4()
-    income = await env.make_category(user_id, CategoryType.INCOME)
+    income = await env.make_category(workspace_id, CategoryType.INCOME)
     await env.add_transaction(
-        user_id, wallet_id=wallet, category_id=income.id, currency_id=currency.id, amount=Decimal("42")
+        workspace_id, wallet_id=wallet, category_id=income.id, currency_id=currency.id, amount=Decimal("42")
     )
 
     buckets, unconverted = await env.service.get_analytics(
-        user_id,
+        workspace_id,
         display_currency_id=currency.id,
         date_from=DATE_FROM,
         date_to=DATE_TO,
@@ -302,17 +307,17 @@ async def test_display_currency_does_not_require_rate_lookup() -> None:
 
 async def test_currency_without_rate_excluded_from_sums_without_error() -> None:
     env = Environment()
-    user_id = uuid4()
+    workspace_id = uuid4()
     display = await env.make_currency("RUB")
     other = await env.make_currency("CNY")
     wallet = uuid4()
-    income = await env.make_category(user_id, CategoryType.INCOME)
+    income = await env.make_category(workspace_id, CategoryType.INCOME)
     await env.add_transaction(
-        user_id, wallet_id=wallet, category_id=income.id, currency_id=other.id, amount=Decimal("100")
+        workspace_id, wallet_id=wallet, category_id=income.id, currency_id=other.id, amount=Decimal("100")
     )
 
     buckets, unconverted = await env.service.get_analytics(
-        user_id,
+        workspace_id,
         display_currency_id=display.id,
         date_from=DATE_FROM,
         date_to=DATE_TO,
@@ -329,14 +334,14 @@ async def test_currency_without_rate_excluded_from_sums_without_error() -> None:
 
 async def test_currency_with_found_rate_not_in_unconverted() -> None:
     env = Environment()
-    user_id = uuid4()
+    workspace_id = uuid4()
     display = await env.make_currency("RUB")
     convertible = await env.make_currency("CNY")
     unconvertible = await env.make_currency("USD")
     wallet = uuid4()
-    income = await env.make_category(user_id, CategoryType.INCOME)
+    income = await env.make_category(workspace_id, CategoryType.INCOME)
     await env.add_topup(
-        user_id,
+        workspace_id,
         wallet_id=wallet,
         category_id=income.id,
         legs=(
@@ -345,14 +350,14 @@ async def test_currency_with_found_rate_not_in_unconverted() -> None:
         ),
     )
     await env.add_transaction(
-        user_id, wallet_id=wallet, category_id=income.id, currency_id=convertible.id, amount=Decimal("5")
+        workspace_id, wallet_id=wallet, category_id=income.id, currency_id=convertible.id, amount=Decimal("5")
     )
     await env.add_transaction(
-        user_id, wallet_id=wallet, category_id=income.id, currency_id=unconvertible.id, amount=Decimal("5")
+        workspace_id, wallet_id=wallet, category_id=income.id, currency_id=unconvertible.id, amount=Decimal("5")
     )
 
     _, unconverted = await env.service.get_analytics(
-        user_id,
+        workspace_id,
         display_currency_id=display.id,
         date_from=DATE_FROM,
         date_to=DATE_TO,
@@ -368,16 +373,16 @@ async def test_currency_with_found_rate_not_in_unconverted() -> None:
 
 async def test_bucket_total_rounded_once_not_per_operation() -> None:
     env = Environment()
-    user_id = uuid4()
+    workspace_id = uuid4()
     display = await env.make_currency("RUB", decimal_places=2)
     source = await env.make_currency("CNY")
     wallet = uuid4()
-    income = await env.make_category(user_id, CategoryType.INCOME)
-    expense = await env.make_category(user_id, CategoryType.EXPENSE)
+    income = await env.make_category(workspace_id, CategoryType.INCOME)
+    expense = await env.make_category(workspace_id, CategoryType.EXPENSE)
     # Курс ровно 1/3, чтобы суммы отдельных операций округлялись иначе, чем их сумма. Пополнение оформлено
     # под категорией расхода, чтобы его собственные ноги не смешивались с проверяемой корзиной дохода.
     await env.add_topup(
-        user_id,
+        workspace_id,
         wallet_id=wallet,
         category_id=expense.id,
         legs=(
@@ -387,11 +392,11 @@ async def test_bucket_total_rounded_once_not_per_operation() -> None:
     )
     for _ in range(3):
         await env.add_transaction(
-            user_id, wallet_id=wallet, category_id=income.id, currency_id=source.id, amount=Decimal("1")
+            workspace_id, wallet_id=wallet, category_id=income.id, currency_id=source.id, amount=Decimal("1")
         )
 
     buckets, _ = await env.service.get_analytics(
-        user_id,
+        workspace_id,
         display_currency_id=display.id,
         date_from=DATE_FROM,
         date_to=DATE_TO,
@@ -410,16 +415,16 @@ async def test_bucket_total_rounded_once_not_per_operation() -> None:
 
 async def test_income_and_expense_both_present_when_type_filter_applied() -> None:
     env = Environment()
-    user_id = uuid4()
+    workspace_id = uuid4()
     currency = await env.make_currency()
     wallet = uuid4()
-    income = await env.make_category(user_id, CategoryType.INCOME)
+    income = await env.make_category(workspace_id, CategoryType.INCOME)
     await env.add_transaction(
-        user_id, wallet_id=wallet, category_id=income.id, currency_id=currency.id, amount=Decimal("100")
+        workspace_id, wallet_id=wallet, category_id=income.id, currency_id=currency.id, amount=Decimal("100")
     )
 
     buckets, _ = await env.service.get_analytics(
-        user_id,
+        workspace_id,
         display_currency_id=currency.id,
         date_from=DATE_FROM,
         date_to=DATE_TO,
@@ -437,11 +442,11 @@ async def test_income_and_expense_both_present_when_type_filter_applied() -> Non
 
 async def test_empty_buckets_not_included() -> None:
     env = Environment()
-    user_id = uuid4()
+    workspace_id = uuid4()
     currency = await env.make_currency()
 
     buckets, unconverted = await env.service.get_analytics(
-        user_id,
+        workspace_id,
         display_currency_id=currency.id,
         date_from=DATE_FROM,
         date_to=DATE_TO,
@@ -458,18 +463,18 @@ async def test_empty_buckets_not_included() -> None:
 
 async def test_service_does_not_depend_on_transfer_repository() -> None:
     env = Environment()
-    user_id = uuid4()
+    workspace_id = uuid4()
     currency = await env.make_currency()
     wallet = uuid4()
-    income = await env.make_category(user_id, CategoryType.INCOME)
+    income = await env.make_category(workspace_id, CategoryType.INCOME)
     await env.add_transaction(
-        user_id, wallet_id=wallet, category_id=income.id, currency_id=currency.id, amount=Decimal("100")
+        workspace_id, wallet_id=wallet, category_id=income.id, currency_id=currency.id, amount=Decimal("100")
     )
 
     # AnalyticsService сконструирован без ссылки на TransferRepository (сигнатура __init__ принимает
     # только TransactionRepository и CurrencyRepository) — переводы структурно не могут повлиять на расчёт.
     buckets, _ = await env.service.get_analytics(
-        user_id,
+        workspace_id,
         display_currency_id=currency.id,
         date_from=DATE_FROM,
         date_to=DATE_TO,
@@ -521,15 +526,15 @@ async def test_unknown_display_currency_raises_client_error() -> None:
 
 async def test_filters_narrow_operations_but_not_rate_topups() -> None:
     env = Environment()
-    user_id = uuid4()
+    workspace_id = uuid4()
     display = await env.make_currency("RUB")
     source = await env.make_currency("CNY")
     wallet_filtered = uuid4()
     wallet_other = uuid4()
-    income = await env.make_category(user_id, CategoryType.INCOME)
+    income = await env.make_category(workspace_id, CategoryType.INCOME)
     # Пополнение (для курса) относится к другому кошельку, не входящему в фильтр запроса.
     await env.add_topup(
-        user_id,
+        workspace_id,
         wallet_id=wallet_other,
         category_id=income.id,
         legs=(
@@ -538,11 +543,11 @@ async def test_filters_narrow_operations_but_not_rate_topups() -> None:
         ),
     )
     await env.add_transaction(
-        user_id, wallet_id=wallet_filtered, category_id=income.id, currency_id=source.id, amount=Decimal("100")
+        workspace_id, wallet_id=wallet_filtered, category_id=income.id, currency_id=source.id, amount=Decimal("100")
     )
 
     buckets, unconverted = await env.service.get_analytics(
-        user_id,
+        workspace_id,
         display_currency_id=display.id,
         date_from=DATE_FROM,
         date_to=DATE_TO,

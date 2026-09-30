@@ -39,7 +39,7 @@ class TransactionService:
 
     async def create_transaction(
         self,
-        user_id: UUID,
+        workspace_id: UUID,
         *,
         wallet_id: UUID,
         category_id: UUID,
@@ -48,12 +48,12 @@ class TransactionService:
         occurred_at: datetime | None,
     ) -> Transaction:
         await self._validate_transaction_input(
-            user_id, wallet_id=wallet_id, category_id=category_id, currency_id=currency_id, amount=amount
+            workspace_id, wallet_id=wallet_id, category_id=category_id, currency_id=currency_id, amount=amount
         )
         now = self._clock.now()
         transaction = Transaction(
             id=self._ids.new(),
-            user_id=user_id,
+            workspace_id=workspace_id,
             wallet_id=wallet_id,
             category_id=category_id,
             legs=(TransactionLeg(currency_id=currency_id, amount=amount),),
@@ -64,17 +64,17 @@ class TransactionService:
 
     async def create_topup(
         self,
-        user_id: UUID,
+        workspace_id: UUID,
         *,
         wallet_id: UUID,
         category_id: UUID,
         legs: Sequence[TransactionLeg],
         occurred_at: datetime | None,
     ) -> Transaction:
-        wallet = await self._wallets.get_by_id(wallet_id, user_id)
+        wallet = await self._wallets.get_by_id(wallet_id, workspace_id)
         if wallet is None:
             raise NotFoundError(WALLET_NOT_FOUND_MESSAGE)
-        category = await self._categories.get_by_id(category_id, user_id)
+        category = await self._categories.get_by_id(category_id, workspace_id)
         if category is None:
             raise NotFoundError(CATEGORY_NOT_FOUND_MESSAGE)
         if category.type is not CategoryType.INCOME:
@@ -85,7 +85,7 @@ class TransactionService:
         now = self._clock.now()
         transaction = Transaction(
             id=self._ids.new(),
-            user_id=user_id,
+            workspace_id=workspace_id,
             wallet_id=wallet_id,
             category_id=category_id,
             legs=tuple(legs),
@@ -94,15 +94,15 @@ class TransactionService:
         )
         return await self._transactions.add(transaction)
 
-    async def get_transaction(self, transaction_id: UUID, user_id: UUID) -> Transaction:
-        transaction = await self._transactions.get_by_id(transaction_id, user_id)
+    async def get_transaction(self, transaction_id: UUID, workspace_id: UUID) -> Transaction:
+        transaction = await self._transactions.get_by_id(transaction_id, workspace_id)
         if transaction is None:
             raise NotFoundError(NOT_FOUND_MESSAGE)
         return transaction
 
     async def list_transactions(
         self,
-        user_id: UUID,
+        workspace_id: UUID,
         *,
         wallet_id: UUID | None,
         category_id: UUID | None,
@@ -115,7 +115,7 @@ class TransactionService:
         if date_from is not None and date_to is not None and date_from > date_to:
             raise ClientError("date_from не может быть позже date_to")
         items = await self._transactions.list(
-            user_id,
+            workspace_id,
             wallet_id=wallet_id,
             category_id=category_id,
             type=type,
@@ -125,14 +125,14 @@ class TransactionService:
             offset=offset,
         )
         total = await self._transactions.count(
-            user_id, wallet_id=wallet_id, category_id=category_id, type=type, date_from=date_from, date_to=date_to
+            workspace_id, wallet_id=wallet_id, category_id=category_id, type=type, date_from=date_from, date_to=date_to
         )
         return items, total
 
     async def update_transaction(
         self,
         transaction_id: UUID,
-        user_id: UUID,
+        workspace_id: UUID,
         *,
         wallet_id: UUID,
         category_id: UUID,
@@ -141,12 +141,12 @@ class TransactionService:
         occurred_at: datetime | None,
     ) -> Transaction:
         await self._validate_transaction_input(
-            user_id, wallet_id=wallet_id, category_id=category_id, currency_id=currency_id, amount=amount
+            workspace_id, wallet_id=wallet_id, category_id=category_id, currency_id=currency_id, amount=amount
         )
         now = self._clock.now()
         transaction = await self._transactions.update(
             transaction_id,
-            user_id,
+            workspace_id,
             wallet_id=wallet_id,
             category_id=category_id,
             legs=(TransactionLeg(currency_id=currency_id, amount=amount),),
@@ -157,18 +157,18 @@ class TransactionService:
             raise NotFoundError(NOT_FOUND_MESSAGE)
         return transaction
 
-    async def delete_transaction(self, transaction_id: UUID, user_id: UUID) -> None:
-        deleted = await self._transactions.delete(transaction_id, user_id)
+    async def delete_transaction(self, transaction_id: UUID, workspace_id: UUID) -> None:
+        deleted = await self._transactions.delete(transaction_id, workspace_id)
         if not deleted:
             raise NotFoundError(NOT_FOUND_MESSAGE)
 
     async def _validate_transaction_input(
-        self, user_id: UUID, *, wallet_id: UUID, category_id: UUID, currency_id: UUID, amount: Decimal
+        self, workspace_id: UUID, *, wallet_id: UUID, category_id: UUID, currency_id: UUID, amount: Decimal
     ) -> Wallet:
-        wallet = await self._wallets.get_by_id(wallet_id, user_id)
+        wallet = await self._wallets.get_by_id(wallet_id, workspace_id)
         if wallet is None:
             raise NotFoundError(WALLET_NOT_FOUND_MESSAGE)
-        category = await self._categories.get_by_id(category_id, user_id)
+        category = await self._categories.get_by_id(category_id, workspace_id)
         if category is None:
             raise NotFoundError(CATEGORY_NOT_FOUND_MESSAGE)
         if currency_id not in wallet.currency_ids:

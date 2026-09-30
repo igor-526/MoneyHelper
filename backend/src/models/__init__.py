@@ -4,6 +4,7 @@ from .transaction import transaction_legs, transactions
 from .transfer import transfers
 from .user import users
 from .wallet import wallet_currencies, wallets
+from .workspace import workspaces
 
 __all__ = [
     "categories",
@@ -14,4 +15,5 @@ __all__ = [
     "users",
     "wallet_currencies",
     "wallets",
+    "workspaces",
 ]

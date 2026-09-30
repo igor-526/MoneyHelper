@@ -1,0 +1,19 @@
+from datetime import datetime
+from typing import Protocol
+from uuid import UUID
+
+from core.entities import Workspace
+
+
+class WorkspaceRepository(Protocol):
+    async def add(self, workspace: Workspace) -> Workspace: ...
+
+    async def get_by_id(self, workspace_id: UUID, user_id: UUID) -> Workspace | None: ...
+
+    async def list(self, user_id: UUID, *, limit: int, offset: int) -> list[Workspace]: ...
+
+    async def count(self, user_id: UUID) -> int: ...
+
+    async def update(self, workspace_id: UUID, user_id: UUID, *, name: str, now: datetime) -> Workspace | None: ...
+
+    async def delete(self, workspace_id: UUID, user_id: UUID) -> bool: ...

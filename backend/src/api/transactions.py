@@ -13,20 +13,20 @@ from api.schemas.transaction import (
 from core.entities import TransactionLeg
 from core.schemas import Page
 from core.services.transaction import TransactionService
-from depends.auth import get_current_user
 from depends.transaction import get_transaction_service
+from depends.workspace import require_workspace
 
-router = APIRouter(prefix="/api/transactions", tags=["Transactions"])
+router = APIRouter(prefix="/api/workspaces/{workspace_id}/transactions", tags=["Transactions"])
 
 
 @router.post("", response_model=TransactionOut, status_code=status.HTTP_201_CREATED)
 async def create_transaction(
     body: TransactionCreate,
-    user_id: Annotated[UUID, Depends(get_current_user)],
+    workspace_id: Annotated[UUID, Depends(require_workspace)],
     transaction_service: Annotated[TransactionService, Depends(get_transaction_service)],
 ) -> TransactionOut:
     transaction = await transaction_service.create_transaction(
-        user_id,
+        workspace_id,
         wallet_id=body.wallet_id,
         category_id=body.category_id,
         currency_id=body.currency_id,
@@ -42,11 +42,11 @@ async def create_transaction(
 @router.post("/topups", response_model=TransactionOut, status_code=status.HTTP_201_CREATED)
 async def create_topup(
     body: TopupCreate,
-    user_id: Annotated[UUID, Depends(get_current_user)],
+    workspace_id: Annotated[UUID, Depends(require_workspace)],
     transaction_service: Annotated[TransactionService, Depends(get_transaction_service)],
 ) -> TransactionOut:
     transaction = await transaction_service.create_topup(
-        user_id,
+        workspace_id,
         wallet_id=body.wallet_id,
         category_id=body.category_id,
         legs=[TransactionLeg(currency_id=leg.currency_id, amount=leg.amount) for leg in body.legs],
@@ -58,11 +58,11 @@ async def create_topup(
 @router.get("", response_model=Page[TransactionOut])
 async def list_transactions(
     params: Annotated[TransactionListParams, Query()],
-    user_id: Annotated[UUID, Depends(get_current_user)],
+    workspace_id: Annotated[UUID, Depends(require_workspace)],
     transaction_service: Annotated[TransactionService, Depends(get_transaction_service)],
 ) -> Page[TransactionOut]:
     items, total = await transaction_service.list_transactions(
-        user_id,
+        workspace_id,
         wallet_id=params.wallet_id,
         category_id=params.category_id,
         type=params.type,
@@ -82,10 +82,10 @@ async def list_transactions(
 @router.get("/{transaction_id}", response_model=TransactionOut)
 async def get_transaction(
     transaction_id: UUID,
-    user_id: Annotated[UUID, Depends(get_current_user)],
+    workspace_id: Annotated[UUID, Depends(require_workspace)],
     transaction_service: Annotated[TransactionService, Depends(get_transaction_service)],
 ) -> TransactionOut:
-    transaction = await transaction_service.get_transaction(transaction_id, user_id)
+    transaction = await transaction_service.get_transaction(transaction_id, workspace_id)
     return TransactionOut.model_validate(transaction)
 
 
@@ -93,12 +93,12 @@ async def get_transaction(
 async def update_transaction(
     transaction_id: UUID,
     body: TransactionUpdate,
-    user_id: Annotated[UUID, Depends(get_current_user)],
+    workspace_id: Annotated[UUID, Depends(require_workspace)],
     transaction_service: Annotated[TransactionService, Depends(get_transaction_service)],
 ) -> TransactionOut:
     transaction = await transaction_service.update_transaction(
         transaction_id,
-        user_id,
+        workspace_id,
         wallet_id=body.wallet_id,
         category_id=body.category_id,
         currency_id=body.currency_id,
@@ -111,7 +111,7 @@ async def update_transaction(
 @router.delete("/{transaction_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_transaction(
     transaction_id: UUID,
-    user_id: Annotated[UUID, Depends(get_current_user)],
+    workspace_id: Annotated[UUID, Depends(require_workspace)],
     transaction_service: Annotated[TransactionService, Depends(get_transaction_service)],
 ) -> None:
-    await transaction_service.delete_transaction(transaction_id, user_id)
+    await transaction_service.delete_transaction(transaction_id, workspace_id)

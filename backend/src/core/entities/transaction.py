@@ -13,7 +13,7 @@ class TransactionLeg(BaseModel):
 
 
 class Transaction(Entity, TimestampMixin):
-    user_id: UUID
+    workspace_id: UUID
     wallet_id: UUID
     category_id: UUID
     legs: tuple[TransactionLeg, ...]

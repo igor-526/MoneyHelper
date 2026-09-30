@@ -14,14 +14,14 @@ class StubContributor:
     def __init__(self, deltas: dict[tuple[UUID, UUID], dict[UUID, Decimal]]) -> None:
         self._deltas = deltas
 
-    async def balance_delta(self, wallet_id: UUID, user_id: UUID) -> dict[UUID, Decimal]:
-        return self._deltas.get((wallet_id, user_id), {})
+    async def balance_delta(self, wallet_id: UUID, workspace_id: UUID) -> dict[UUID, Decimal]:
+        return self._deltas.get((wallet_id, workspace_id), {})
 
 
-async def make_wallet(wallets: InMemoryWalletRepository, user_id: UUID, currency_ids: list[UUID]) -> Wallet:
+async def make_wallet(wallets: InMemoryWalletRepository, workspace_id: UUID, currency_ids: list[UUID]) -> Wallet:
     wallet = Wallet(
         id=uuid4(),
-        user_id=user_id,
+        workspace_id=workspace_id,
         name="Кошелёк",
         icon="wallet",
         currency_ids=tuple(currency_ids),

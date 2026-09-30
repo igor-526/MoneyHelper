@@ -6,19 +6,19 @@ from fastapi import APIRouter, Depends, Query
 from api.schemas.analytics import AnalyticsBucketOut, AnalyticsOut, AnalyticsQueryParams
 from core.services.analytics import AnalyticsService
 from depends.analytics import get_analytics_service
-from depends.auth import get_current_user
+from depends.workspace import require_workspace
 
-router = APIRouter(prefix="/api/analytics", tags=["Analytics"])
+router = APIRouter(prefix="/api/workspaces/{workspace_id}/analytics", tags=["Analytics"])
 
 
 @router.get("", response_model=AnalyticsOut)
 async def get_analytics(
     params: Annotated[AnalyticsQueryParams, Query()],
-    user_id: Annotated[UUID, Depends(get_current_user)],
+    workspace_id: Annotated[UUID, Depends(require_workspace)],
     analytics_service: Annotated[AnalyticsService, Depends(get_analytics_service)],
 ) -> AnalyticsOut:
     buckets, unconverted = await analytics_service.get_analytics(
-        user_id,
+        workspace_id,
         display_currency_id=params.display_currency,
         date_from=params.date_from,
         date_to=params.date_to,

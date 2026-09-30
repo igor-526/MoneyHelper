@@ -12,7 +12,7 @@ class InMemoryTransferRepository:
 
     def _filter(
         self,
-        user_id: UUID,
+        workspace_id: UUID,
         *,
         wallet_id: UUID | None,
         date_from: datetime | None,
@@ -20,7 +20,7 @@ class InMemoryTransferRepository:
     ) -> list[Transfer]:
         result = []
         for transfer in self._transfers.values():
-            if transfer.user_id != user_id:
+            if transfer.workspace_id != workspace_id:
                 continue
             if wallet_id is not None and wallet_id not in (transfer.from_wallet_id, transfer.to_wallet_id):
                 continue
@@ -35,13 +35,13 @@ class InMemoryTransferRepository:
         self._transfers[transfer.id] = transfer
         return transfer
 
-    async def get_by_id(self, transfer_id: UUID, user_id: UUID) -> Transfer | None:
+    async def get_by_id(self, transfer_id: UUID, workspace_id: UUID) -> Transfer | None:
         transfer = self._transfers.get(transfer_id)
-        return transfer if transfer is not None and transfer.user_id == user_id else None
+        return transfer if transfer is not None and transfer.workspace_id == workspace_id else None
 
     async def list(
         self,
-        user_id: UUID,
+        workspace_id: UUID,
         *,
         wallet_id: UUID | None,
         date_from: datetime | None,
@@ -50,7 +50,7 @@ class InMemoryTransferRepository:
         offset: int,
     ) -> list[Transfer]:
         items = sorted(
-            self._filter(user_id, wallet_id=wallet_id, date_from=date_from, date_to=date_to),
+            self._filter(workspace_id, wallet_id=wallet_id, date_from=date_from, date_to=date_to),
             key=lambda transfer: (transfer.occurred_at, transfer.id),
             reverse=True,
         )
@@ -58,18 +58,18 @@ class InMemoryTransferRepository:
 
     async def count(
         self,
-        user_id: UUID,
+        workspace_id: UUID,
         *,
         wallet_id: UUID | None,
         date_from: datetime | None,
         date_to: datetime | None,
     ) -> int:
-        return len(self._filter(user_id, wallet_id=wallet_id, date_from=date_from, date_to=date_to))
+        return len(self._filter(workspace_id, wallet_id=wallet_id, date_from=date_from, date_to=date_to))
 
     async def update(
         self,
         transfer_id: UUID,
-        user_id: UUID,
+        workspace_id: UUID,
         *,
         from_wallet_id: UUID,
         to_wallet_id: UUID,
@@ -79,7 +79,7 @@ class InMemoryTransferRepository:
         now: datetime,
     ) -> Transfer | None:
         transfer = self._transfers.get(transfer_id)
-        if transfer is None or transfer.user_id != user_id:
+        if transfer is None or transfer.workspace_id != workspace_id:
             return None
         updated = transfer.model_copy(
             update={
@@ -94,9 +94,9 @@ class InMemoryTransferRepository:
         self._transfers[transfer_id] = updated
         return updated
 
-    async def delete(self, transfer_id: UUID, user_id: UUID) -> bool:
+    async def delete(self, transfer_id: UUID, workspace_id: UUID) -> bool:
         transfer = self._transfers.get(transfer_id)
-        if transfer is None or transfer.user_id != user_id:
+        if transfer is None or transfer.workspace_id != workspace_id:
             return False
         del self._transfers[transfer_id]
         return True
@@ -108,10 +108,10 @@ class InMemoryTransferRepository:
             wallet_id in (transfer.from_wallet_id, transfer.to_wallet_id) for transfer in self._transfers.values()
         )
 
-    async def balance_delta(self, wallet_id: UUID, user_id: UUID) -> dict[UUID, Decimal]:
+    async def balance_delta(self, wallet_id: UUID, workspace_id: UUID) -> dict[UUID, Decimal]:
         totals: dict[UUID, Decimal] = defaultdict(lambda: Decimal("0"))
         for transfer in self._transfers.values():
-            if transfer.user_id != user_id:
+            if transfer.workspace_id != workspace_id:
                 continue
             if transfer.to_wallet_id == wallet_id:
                 totals[transfer.currency_id] += transfer.amount

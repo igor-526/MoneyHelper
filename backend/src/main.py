@@ -12,6 +12,7 @@ from api.icons import router as icons_router
 from api.transactions import router as transactions_router
 from api.transfers import router as transfers_router
 from api.wallets import router as wallets_router
+from api.workspaces import router as workspaces_router
 from seeds import SEED_DEFINITIONS
 from settings import settings
 from utils.configure_cors import configure_cors
@@ -48,6 +49,7 @@ def create_app() -> FastAPI:
     application.include_router(transfers_router)
     application.include_router(wallet_balances_router)
     application.include_router(wallets_router)
+    application.include_router(workspaces_router)
 
     register_error_handlers(application)
     # Порядок важен: последний добавленный middleware — самый внешний. Обработчик 500 и проверка Origin

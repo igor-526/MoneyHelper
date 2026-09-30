@@ -7,7 +7,17 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.entities import Category, CategoryType, Currency, Transaction, TransactionLeg, Transfer, User, Wallet
+from core.entities import (
+    Category,
+    CategoryType,
+    Currency,
+    Transaction,
+    TransactionLeg,
+    Transfer,
+    User,
+    Wallet,
+    Workspace,
+)
 from core.exceptions import ConflictError
 from models import currencies as currencies_table
 from models import wallet_currencies as wallet_currencies_table
@@ -17,6 +27,7 @@ from repositories.transaction import TransactionRepository
 from repositories.transfer import TransferRepository
 from repositories.user import UserRepository
 from repositories.wallet import WalletRepository
+from repositories.workspace import WorkspaceRepository
 
 pytestmark = pytest.mark.infrastructure
 
@@ -36,6 +47,14 @@ async def make_user(db_session: AsyncSession) -> User:
     return user
 
 
+async def make_workspace(db_session: AsyncSession, owner: User | None = None) -> Workspace:
+    owner = owner if owner is not None else await make_user(db_session)
+    workspace = Workspace(id=uuid4(), user_id=owner.id, name="Воркспейс", created_at=DEFAULT_CREATED_AT)
+    await WorkspaceRepository(db_session).add(workspace)
+    await db_session.flush()
+    return workspace
+
+
 async def make_currency(db_session: AsyncSession, code: str) -> Currency:
     currency = Currency(id=uuid4(), code=code, name=code, decimal_places=2)
     await CurrencyRepository(db_session).upsert_many([currency])
@@ -44,18 +63,20 @@ async def make_currency(db_session: AsyncSession, code: str) -> Currency:
 
 
 def make_wallet(
-    user_id: UUID,
+    workspace_id: UUID,
     currency_ids: tuple[UUID, ...],
     *,
     name: str = "Кошелёк",
     icon: str = "wallet",
     created_at: datetime = DEFAULT_CREATED_AT,
 ) -> Wallet:
-    return Wallet(id=uuid4(), user_id=user_id, name=name, icon=icon, currency_ids=currency_ids, created_at=created_at)
+    return Wallet(
+        id=uuid4(), workspace_id=workspace_id, name=name, icon=icon, currency_ids=currency_ids, created_at=created_at
+    )
 
 
 async def test_add_and_get_by_id(db_session: AsyncSession) -> None:
-    user = await make_user(db_session)
+    user = await make_workspace(db_session)
     rub = await make_currency(db_session, "RUB")
     repo = WalletRepository(db_session)
     wallet = make_wallet(user.id, (rub.id,), name="Наличные")
@@ -77,7 +98,7 @@ async def test_get_by_id_unknown_wallet_returns_none(db_session: AsyncSession) -
 
 
 async def test_currency_ids_are_ordered_by_currency_code(db_session: AsyncSession) -> None:
-    user = await make_user(db_session)
+    user = await make_workspace(db_session)
     rub = await make_currency(db_session, "RUB")
     cny = await make_currency(db_session, "CNY")
     usdt = await make_currency(db_session, "USDT")
@@ -94,7 +115,7 @@ async def test_currency_ids_are_ordered_by_currency_code(db_session: AsyncSessio
 
 
 async def test_list_is_sorted_by_created_at_then_id(db_session: AsyncSession) -> None:
-    user = await make_user(db_session)
+    user = await make_workspace(db_session)
     rub = await make_currency(db_session, "RUB")
     repo = WalletRepository(db_session)
     same_moment = datetime(2026, 1, 1, tzinfo=UTC)
@@ -113,8 +134,8 @@ async def test_list_is_sorted_by_created_at_then_id(db_session: AsyncSession) ->
 
 
 async def test_count_matches_user_wallets(db_session: AsyncSession) -> None:
-    user_a = await make_user(db_session)
-    user_b = await make_user(db_session)
+    user_a = await make_workspace(db_session)
+    user_b = await make_workspace(db_session)
     rub = await make_currency(db_session, "RUB")
     repo = WalletRepository(db_session)
     await repo.add(make_wallet(user_a.id, (rub.id,), name="A1"))
@@ -127,7 +148,7 @@ async def test_count_matches_user_wallets(db_session: AsyncSession) -> None:
 
 
 async def test_update_replaces_name_icon_and_currency_set(db_session: AsyncSession) -> None:
-    user = await make_user(db_session)
+    user = await make_workspace(db_session)
     rub = await make_currency(db_session, "RUB")
     cny = await make_currency(db_session, "CNY")
     repo = WalletRepository(db_session)
@@ -158,9 +179,9 @@ async def test_update_unknown_wallet_returns_none(db_session: AsyncSession) -> N
     assert result is None
 
 
-async def test_update_with_foreign_user_id_returns_none(db_session: AsyncSession) -> None:
-    owner = await make_user(db_session)
-    other = await make_user(db_session)
+async def test_update_with_foreign_workspace_id_returns_none(db_session: AsyncSession) -> None:
+    owner = await make_workspace(db_session)
+    other = await make_workspace(db_session)
     rub = await make_currency(db_session, "RUB")
     repo = WalletRepository(db_session)
     wallet = make_wallet(owner.id, (rub.id,))
@@ -177,9 +198,9 @@ async def test_update_with_foreign_user_id_returns_none(db_session: AsyncSession
     assert unchanged.name == "Кошелёк"
 
 
-async def test_get_by_id_with_foreign_user_id_returns_none(db_session: AsyncSession) -> None:
-    owner = await make_user(db_session)
-    other = await make_user(db_session)
+async def test_get_by_id_with_foreign_workspace_id_returns_none(db_session: AsyncSession) -> None:
+    owner = await make_workspace(db_session)
+    other = await make_workspace(db_session)
     rub = await make_currency(db_session, "RUB")
     repo = WalletRepository(db_session)
     wallet = make_wallet(owner.id, (rub.id,))
@@ -190,7 +211,7 @@ async def test_get_by_id_with_foreign_user_id_returns_none(db_session: AsyncSess
 
 
 async def test_delete_success(db_session: AsyncSession) -> None:
-    user = await make_user(db_session)
+    user = await make_workspace(db_session)
     rub = await make_currency(db_session, "RUB")
     repo = WalletRepository(db_session)
     wallet = make_wallet(user.id, (rub.id,))
@@ -204,9 +225,9 @@ async def test_delete_success(db_session: AsyncSession) -> None:
     assert await repo.get_by_id(wallet.id, user.id) is None
 
 
-async def test_delete_with_foreign_user_id_returns_false(db_session: AsyncSession) -> None:
-    owner = await make_user(db_session)
-    other = await make_user(db_session)
+async def test_delete_with_foreign_workspace_id_returns_false(db_session: AsyncSession) -> None:
+    owner = await make_workspace(db_session)
+    other = await make_workspace(db_session)
     rub = await make_currency(db_session, "RUB")
     repo = WalletRepository(db_session)
     wallet = make_wallet(owner.id, (rub.id,))
@@ -226,7 +247,7 @@ async def test_delete_unknown_wallet_returns_false(db_session: AsyncSession) -> 
 
 
 async def test_deleting_wallet_cascades_to_wallet_currencies(db_session: AsyncSession) -> None:
-    user = await make_user(db_session)
+    user = await make_workspace(db_session)
     rub = await make_currency(db_session, "RUB")
     repo = WalletRepository(db_session)
     wallet = make_wallet(user.id, (rub.id,))
@@ -242,7 +263,7 @@ async def test_deleting_wallet_cascades_to_wallet_currencies(db_session: AsyncSe
 
 
 async def test_inserting_wallet_currency_with_unknown_currency_id_is_rejected(db_session: AsyncSession) -> None:
-    user = await make_user(db_session)
+    user = await make_workspace(db_session)
     repo = WalletRepository(db_session)
     wallet = make_wallet(user.id, (uuid4(),))
 
@@ -251,7 +272,7 @@ async def test_inserting_wallet_currency_with_unknown_currency_id_is_rejected(db
 
 
 async def test_deleting_referenced_currency_is_restricted(db_session: AsyncSession) -> None:
-    user = await make_user(db_session)
+    user = await make_workspace(db_session)
     rub = await make_currency(db_session, "RUB")
     repo = WalletRepository(db_session)
     wallet = make_wallet(user.id, (rub.id,))
@@ -263,7 +284,7 @@ async def test_deleting_referenced_currency_is_restricted(db_session: AsyncSessi
 
 
 async def test_delete_wallet_with_transactions_raises_conflict_error(db_session: AsyncSession) -> None:
-    user = await make_user(db_session)
+    user = await make_workspace(db_session)
     rub = await make_currency(db_session, "RUB")
     wallet_repo = WalletRepository(db_session)
     wallet = make_wallet(user.id, (rub.id,))
@@ -271,7 +292,7 @@ async def test_delete_wallet_with_transactions_raises_conflict_error(db_session:
     category = await CategoryRepository(db_session).add(
         Category(
             id=uuid4(),
-            user_id=user.id,
+            workspace_id=user.id,
             type=CategoryType.INCOME,
             name="Зарплата",
             icon="wallet",
@@ -281,7 +302,7 @@ async def test_delete_wallet_with_transactions_raises_conflict_error(db_session:
     await TransactionRepository(db_session).add(
         Transaction(
             id=uuid4(),
-            user_id=user.id,
+            workspace_id=user.id,
             wallet_id=wallet.id,
             category_id=category.id,
             legs=(TransactionLeg(currency_id=rub.id, amount=Decimal("10.00")),),
@@ -296,7 +317,7 @@ async def test_delete_wallet_with_transactions_raises_conflict_error(db_session:
 
 
 async def test_delete_from_wallet_with_transfer_raises_conflict_error(db_session: AsyncSession) -> None:
-    user = await make_user(db_session)
+    user = await make_workspace(db_session)
     rub = await make_currency(db_session, "RUB")
     wallet_repo = WalletRepository(db_session)
     wallet_a = make_wallet(user.id, (rub.id,), name="A")
@@ -306,7 +327,7 @@ async def test_delete_from_wallet_with_transfer_raises_conflict_error(db_session
     await TransferRepository(db_session).add(
         Transfer(
             id=uuid4(),
-            user_id=user.id,
+            workspace_id=user.id,
             from_wallet_id=wallet_a.id,
             to_wallet_id=wallet_b.id,
             currency_id=rub.id,
@@ -322,7 +343,7 @@ async def test_delete_from_wallet_with_transfer_raises_conflict_error(db_session
 
 
 async def test_delete_to_wallet_with_transfer_raises_conflict_error(db_session: AsyncSession) -> None:
-    user = await make_user(db_session)
+    user = await make_workspace(db_session)
     rub = await make_currency(db_session, "RUB")
     wallet_repo = WalletRepository(db_session)
     wallet_a = make_wallet(user.id, (rub.id,), name="A")
@@ -332,7 +353,7 @@ async def test_delete_to_wallet_with_transfer_raises_conflict_error(db_session: 
     await TransferRepository(db_session).add(
         Transfer(
             id=uuid4(),
-            user_id=user.id,
+            workspace_id=user.id,
             from_wallet_id=wallet_a.id,
             to_wallet_id=wallet_b.id,
             currency_id=rub.id,

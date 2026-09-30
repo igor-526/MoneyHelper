@@ -28,7 +28,7 @@ class TransferService:
 
     async def create_transfer(
         self,
-        user_id: UUID,
+        workspace_id: UUID,
         *,
         from_wallet_id: UUID,
         to_wallet_id: UUID,
@@ -37,7 +37,7 @@ class TransferService:
         occurred_at: datetime | None,
     ) -> Transfer:
         await self._validate_transfer_input(
-            user_id,
+            workspace_id,
             from_wallet_id=from_wallet_id,
             to_wallet_id=to_wallet_id,
             currency_id=currency_id,
@@ -46,7 +46,7 @@ class TransferService:
         now = self._clock.now()
         transfer = Transfer(
             id=self._ids.new(),
-            user_id=user_id,
+            workspace_id=workspace_id,
             from_wallet_id=from_wallet_id,
             to_wallet_id=to_wallet_id,
             currency_id=currency_id,
@@ -56,15 +56,15 @@ class TransferService:
         )
         return await self._transfers.add(transfer)
 
-    async def get_transfer(self, transfer_id: UUID, user_id: UUID) -> Transfer:
-        transfer = await self._transfers.get_by_id(transfer_id, user_id)
+    async def get_transfer(self, transfer_id: UUID, workspace_id: UUID) -> Transfer:
+        transfer = await self._transfers.get_by_id(transfer_id, workspace_id)
         if transfer is None:
             raise NotFoundError(NOT_FOUND_MESSAGE)
         return transfer
 
     async def list_transfers(
         self,
-        user_id: UUID,
+        workspace_id: UUID,
         *,
         wallet_id: UUID | None,
         date_from: datetime | None,
@@ -75,15 +75,15 @@ class TransferService:
         if date_from is not None and date_to is not None and date_from > date_to:
             raise ClientError("date_from не может быть позже date_to")
         items = await self._transfers.list(
-            user_id, wallet_id=wallet_id, date_from=date_from, date_to=date_to, limit=limit, offset=offset
+            workspace_id, wallet_id=wallet_id, date_from=date_from, date_to=date_to, limit=limit, offset=offset
         )
-        total = await self._transfers.count(user_id, wallet_id=wallet_id, date_from=date_from, date_to=date_to)
+        total = await self._transfers.count(workspace_id, wallet_id=wallet_id, date_from=date_from, date_to=date_to)
         return items, total
 
     async def update_transfer(
         self,
         transfer_id: UUID,
-        user_id: UUID,
+        workspace_id: UUID,
         *,
         from_wallet_id: UUID,
         to_wallet_id: UUID,
@@ -92,7 +92,7 @@ class TransferService:
         occurred_at: datetime | None,
     ) -> Transfer:
         await self._validate_transfer_input(
-            user_id,
+            workspace_id,
             from_wallet_id=from_wallet_id,
             to_wallet_id=to_wallet_id,
             currency_id=currency_id,
@@ -101,7 +101,7 @@ class TransferService:
         now = self._clock.now()
         transfer = await self._transfers.update(
             transfer_id,
-            user_id,
+            workspace_id,
             from_wallet_id=from_wallet_id,
             to_wallet_id=to_wallet_id,
             currency_id=currency_id,
@@ -113,14 +113,14 @@ class TransferService:
             raise NotFoundError(NOT_FOUND_MESSAGE)
         return transfer
 
-    async def delete_transfer(self, transfer_id: UUID, user_id: UUID) -> None:
-        deleted = await self._transfers.delete(transfer_id, user_id)
+    async def delete_transfer(self, transfer_id: UUID, workspace_id: UUID) -> None:
+        deleted = await self._transfers.delete(transfer_id, workspace_id)
         if not deleted:
             raise NotFoundError(NOT_FOUND_MESSAGE)
 
     async def _validate_transfer_input(
         self,
-        user_id: UUID,
+        workspace_id: UUID,
         *,
         from_wallet_id: UUID,
         to_wallet_id: UUID,
@@ -129,8 +129,8 @@ class TransferService:
     ) -> None:
         if from_wallet_id == to_wallet_id:
             raise ClientError("Кошелёк отправителя и получателя не может совпадать")
-        from_wallet = await self._get_owned_wallet(from_wallet_id, user_id)
-        to_wallet = await self._get_owned_wallet(to_wallet_id, user_id)
+        from_wallet = await self._get_owned_wallet(from_wallet_id, workspace_id)
+        to_wallet = await self._get_owned_wallet(to_wallet_id, workspace_id)
         if currency_id not in from_wallet.currency_ids or currency_id not in to_wallet.currency_ids:
             raise ClientError("Валюта перевода не входит в набор валют одного из кошельков")
         if amount <= 0:
@@ -140,8 +140,8 @@ class TransferService:
             raise ClientError("Неизвестная валюта перевода")
         ensure_amount_precision(amount, currency)
 
-    async def _get_owned_wallet(self, wallet_id: UUID, user_id: UUID) -> Wallet:
-        wallet = await self._wallets.get_by_id(wallet_id, user_id)
+    async def _get_owned_wallet(self, wallet_id: UUID, workspace_id: UUID) -> Wallet:
+        wallet = await self._wallets.get_by_id(wallet_id, workspace_id)
         if wallet is None:
             raise NotFoundError(WALLET_NOT_FOUND_MESSAGE)
         return wallet

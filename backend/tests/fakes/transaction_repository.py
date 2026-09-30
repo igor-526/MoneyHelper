@@ -18,7 +18,7 @@ class InMemoryTransactionRepository:
 
     async def _filter(
         self,
-        user_id: UUID,
+        workspace_id: UUID,
         *,
         wallet_id: UUID | None,
         category_id: UUID | None,
@@ -31,14 +31,14 @@ class InMemoryTransactionRepository:
         # перестала бы резолвиться к встроенному generic-типу, если бы шла после `async def list(...)`.
         result = []
         for transaction in self._transactions.values():
-            if transaction.user_id != user_id:
+            if transaction.workspace_id != workspace_id:
                 continue
             if wallet_id is not None and transaction.wallet_id != wallet_id:
                 continue
             if category_id is not None and transaction.category_id != category_id:
                 continue
             if type is not None:
-                category = await self._categories.get_by_id(transaction.category_id, user_id)
+                category = await self._categories.get_by_id(transaction.category_id, workspace_id)
                 if category is None or category.type != type:
                     continue
             if date_from is not None and transaction.occurred_at < date_from:
@@ -52,14 +52,14 @@ class InMemoryTransactionRepository:
         self._transactions[transaction.id] = transaction
         return transaction
 
-    async def get_by_id(self, transaction_id: UUID, user_id: UUID) -> Transaction | None:
+    async def get_by_id(self, transaction_id: UUID, workspace_id: UUID) -> Transaction | None:
         transaction = self._transactions.get(transaction_id)
-        return transaction if transaction is not None and transaction.user_id == user_id else None
+        return transaction if transaction is not None and transaction.workspace_id == workspace_id else None
 
     # Объявлены раньше `list`/`count` — та же причина, что и у `_filter` выше.
     async def list_legs_for_analytics(
         self,
-        user_id: UUID,
+        workspace_id: UUID,
         *,
         date_from: datetime,
         date_to: datetime,
@@ -70,7 +70,7 @@ class InMemoryTransactionRepository:
     ) -> list[LegRecord]:
         records = []
         for transaction in self._transactions.values():
-            if transaction.user_id != user_id:
+            if transaction.workspace_id != workspace_id:
                 continue
             if transaction.occurred_at < date_from or transaction.occurred_at > date_to:
                 continue
@@ -78,7 +78,7 @@ class InMemoryTransactionRepository:
                 continue
             if category_id is not None and transaction.category_id != category_id:
                 continue
-            category = await self._categories.get_by_id(transaction.category_id, user_id)
+            category = await self._categories.get_by_id(transaction.category_id, workspace_id)
             if category is None:
                 continue
             if type is not None and category.type != type:
@@ -98,11 +98,11 @@ class InMemoryTransactionRepository:
         return records
 
     async def list_topup_legs_for_rates(
-        self, user_id: UUID, *, date_from: datetime, date_to: datetime
+        self, workspace_id: UUID, *, date_from: datetime, date_to: datetime
     ) -> list[TopupLegRecord]:
         records = []
         for transaction in self._transactions.values():
-            if transaction.user_id != user_id:
+            if transaction.workspace_id != workspace_id:
                 continue
             if transaction.occurred_at < date_from or transaction.occurred_at > date_to:
                 continue
@@ -116,7 +116,7 @@ class InMemoryTransactionRepository:
 
     async def list(
         self,
-        user_id: UUID,
+        workspace_id: UUID,
         *,
         wallet_id: UUID | None,
         category_id: UUID | None,
@@ -128,7 +128,12 @@ class InMemoryTransactionRepository:
     ) -> list[Transaction]:
         items = sorted(
             await self._filter(
-                user_id, wallet_id=wallet_id, category_id=category_id, type=type, date_from=date_from, date_to=date_to
+                workspace_id,
+                wallet_id=wallet_id,
+                category_id=category_id,
+                type=type,
+                date_from=date_from,
+                date_to=date_to,
             ),
             key=lambda transaction: (transaction.occurred_at, transaction.id),
             reverse=True,
@@ -137,7 +142,7 @@ class InMemoryTransactionRepository:
 
     async def count(
         self,
-        user_id: UUID,
+        workspace_id: UUID,
         *,
         wallet_id: UUID | None,
         category_id: UUID | None,
@@ -147,14 +152,19 @@ class InMemoryTransactionRepository:
     ) -> int:
         return len(
             await self._filter(
-                user_id, wallet_id=wallet_id, category_id=category_id, type=type, date_from=date_from, date_to=date_to
+                workspace_id,
+                wallet_id=wallet_id,
+                category_id=category_id,
+                type=type,
+                date_from=date_from,
+                date_to=date_to,
             )
         )
 
     async def update(
         self,
         transaction_id: UUID,
-        user_id: UUID,
+        workspace_id: UUID,
         *,
         wallet_id: UUID,
         category_id: UUID,
@@ -163,7 +173,7 @@ class InMemoryTransactionRepository:
         now: datetime,
     ) -> Transaction | None:
         transaction = self._transactions.get(transaction_id)
-        if transaction is None or transaction.user_id != user_id:
+        if transaction is None or transaction.workspace_id != workspace_id:
             return None
         updated = transaction.model_copy(
             update={
@@ -177,9 +187,9 @@ class InMemoryTransactionRepository:
         self._transactions[transaction_id] = updated
         return updated
 
-    async def delete(self, transaction_id: UUID, user_id: UUID) -> bool:
+    async def delete(self, transaction_id: UUID, workspace_id: UUID) -> bool:
         transaction = self._transactions.get(transaction_id)
-        if transaction is None or transaction.user_id != user_id:
+        if transaction is None or transaction.workspace_id != workspace_id:
             return False
         del self._transactions[transaction_id]
         return True
@@ -193,12 +203,12 @@ class InMemoryTransactionRepository:
         """Аналогично `references_wallet`, но для `ON DELETE RESTRICT` `transactions.category_id`."""
         return any(transaction.category_id == category_id for transaction in self._transactions.values())
 
-    async def balance_delta(self, wallet_id: UUID, user_id: UUID) -> dict[UUID, Decimal]:
+    async def balance_delta(self, wallet_id: UUID, workspace_id: UUID) -> dict[UUID, Decimal]:
         totals: dict[UUID, Decimal] = defaultdict(lambda: Decimal("0"))
         for transaction in self._transactions.values():
-            if transaction.user_id != user_id or transaction.wallet_id != wallet_id:
+            if transaction.workspace_id != workspace_id or transaction.wallet_id != wallet_id:
                 continue
-            category = await self._categories.get_by_id(transaction.category_id, user_id)
+            category = await self._categories.get_by_id(transaction.category_id, workspace_id)
             sign = 1 if category is not None and category.type == CategoryType.INCOME else -1
             for leg in transaction.legs:
                 totals[leg.currency_id] += sign * leg.amount

@@ -7,7 +7,7 @@ from sqlalchemy import delete, insert, select
 from sqlalchemy.exc import IntegrityError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.entities import Category, CategoryType, Currency, Transaction, TransactionLeg, User, Wallet
+from core.entities import Category, CategoryType, Currency, Transaction, TransactionLeg, User, Wallet, Workspace
 from core.exceptions import AlreadyExistsError, ConflictError
 from models import categories as categories_table
 from models import users as users_table
@@ -16,6 +16,7 @@ from repositories.currency import CurrencyRepository
 from repositories.transaction import TransactionRepository
 from repositories.user import UserRepository
 from repositories.wallet import WalletRepository
+from repositories.workspace import WorkspaceRepository
 
 pytestmark = pytest.mark.infrastructure
 
@@ -35,19 +36,27 @@ async def make_user(db_session: AsyncSession) -> User:
     return user
 
 
+async def make_workspace(db_session: AsyncSession, owner: User | None = None) -> Workspace:
+    owner = owner if owner is not None else await make_user(db_session)
+    workspace = Workspace(id=uuid4(), user_id=owner.id, name="Воркспейс", created_at=DEFAULT_CREATED_AT)
+    await WorkspaceRepository(db_session).add(workspace)
+    await db_session.flush()
+    return workspace
+
+
 def make_category(
-    user_id: UUID,
+    workspace_id: UUID,
     *,
     type: CategoryType = CategoryType.INCOME,
     name: str = "Зарплата",
     icon: str = "wallet",
     created_at: datetime = DEFAULT_CREATED_AT,
 ) -> Category:
-    return Category(id=uuid4(), user_id=user_id, type=type, name=name, icon=icon, created_at=created_at)
+    return Category(id=uuid4(), workspace_id=workspace_id, type=type, name=name, icon=icon, created_at=created_at)
 
 
 async def test_add_and_get_by_id(db_session: AsyncSession) -> None:
-    user = await make_user(db_session)
+    user = await make_workspace(db_session)
     repo = CategoryRepository(db_session)
     category = make_category(user.id, name="Зарплата")
 
@@ -67,9 +76,9 @@ async def test_get_by_id_unknown_category_returns_none(db_session: AsyncSession)
     assert await repo.get_by_id(uuid4(), uuid4()) is None
 
 
-async def test_get_by_id_with_foreign_user_id_returns_none(db_session: AsyncSession) -> None:
-    owner = await make_user(db_session)
-    other = await make_user(db_session)
+async def test_get_by_id_with_foreign_workspace_id_returns_none(db_session: AsyncSession) -> None:
+    owner = await make_workspace(db_session)
+    other = await make_workspace(db_session)
     repo = CategoryRepository(db_session)
     category = make_category(owner.id)
     await repo.add(category)
@@ -79,7 +88,7 @@ async def test_get_by_id_with_foreign_user_id_returns_none(db_session: AsyncSess
 
 
 async def test_list_is_sorted_by_created_at_then_id(db_session: AsyncSession) -> None:
-    user = await make_user(db_session)
+    user = await make_workspace(db_session)
     repo = CategoryRepository(db_session)
     same_moment = datetime(2026, 1, 1, tzinfo=UTC)
     later = datetime(2026, 1, 2, tzinfo=UTC)
@@ -97,7 +106,7 @@ async def test_list_is_sorted_by_created_at_then_id(db_session: AsyncSession) ->
 
 
 async def test_list_and_count_filter_by_type(db_session: AsyncSession) -> None:
-    user = await make_user(db_session)
+    user = await make_workspace(db_session)
     repo = CategoryRepository(db_session)
     await repo.add(make_category(user.id, type=CategoryType.INCOME, name="Зарплата"))
     await repo.add(make_category(user.id, type=CategoryType.EXPENSE, name="Продукты"))
@@ -113,8 +122,8 @@ async def test_list_and_count_filter_by_type(db_session: AsyncSession) -> None:
 
 
 async def test_count_matches_user_categories(db_session: AsyncSession) -> None:
-    user_a = await make_user(db_session)
-    user_b = await make_user(db_session)
+    user_a = await make_workspace(db_session)
+    user_b = await make_workspace(db_session)
     repo = CategoryRepository(db_session)
     await repo.add(make_category(user_a.id, name="A1"))
     await repo.add(make_category(user_a.id, name="A2"))
@@ -126,7 +135,7 @@ async def test_count_matches_user_categories(db_session: AsyncSession) -> None:
 
 
 async def test_update_replaces_type_name_and_icon(db_session: AsyncSession) -> None:
-    user = await make_user(db_session)
+    user = await make_workspace(db_session)
     repo = CategoryRepository(db_session)
     category = make_category(user.id, type=CategoryType.INCOME, name="Старое")
     await repo.add(category)
@@ -159,9 +168,9 @@ async def test_update_unknown_category_returns_none(db_session: AsyncSession) ->
     assert result is None
 
 
-async def test_update_with_foreign_user_id_returns_none(db_session: AsyncSession) -> None:
-    owner = await make_user(db_session)
-    other = await make_user(db_session)
+async def test_update_with_foreign_workspace_id_returns_none(db_session: AsyncSession) -> None:
+    owner = await make_workspace(db_session)
+    other = await make_workspace(db_session)
     repo = CategoryRepository(db_session)
     category = make_category(owner.id, name="Моё")
     await repo.add(category)
@@ -183,7 +192,7 @@ async def test_update_with_foreign_user_id_returns_none(db_session: AsyncSession
 
 
 async def test_delete_success(db_session: AsyncSession) -> None:
-    user = await make_user(db_session)
+    user = await make_workspace(db_session)
     repo = CategoryRepository(db_session)
     category = make_category(user.id)
     await repo.add(category)
@@ -196,9 +205,9 @@ async def test_delete_success(db_session: AsyncSession) -> None:
     assert await repo.get_by_id(category.id, user.id) is None
 
 
-async def test_delete_with_foreign_user_id_returns_false(db_session: AsyncSession) -> None:
-    owner = await make_user(db_session)
-    other = await make_user(db_session)
+async def test_delete_with_foreign_workspace_id_returns_false(db_session: AsyncSession) -> None:
+    owner = await make_workspace(db_session)
+    other = await make_workspace(db_session)
     repo = CategoryRepository(db_session)
     category = make_category(owner.id)
     await repo.add(category)
@@ -217,7 +226,7 @@ async def test_delete_unknown_category_returns_false(db_session: AsyncSession) -
 
 
 async def test_add_duplicate_name_within_type_raises_already_exists(db_session: AsyncSession) -> None:
-    user = await make_user(db_session)
+    user = await make_workspace(db_session)
     repo = CategoryRepository(db_session)
     await repo.add(make_category(user.id, type=CategoryType.INCOME, name="Зарплата"))
     await db_session.flush()
@@ -227,7 +236,7 @@ async def test_add_duplicate_name_within_type_raises_already_exists(db_session: 
 
 
 async def test_update_into_taken_name_within_type_raises_already_exists(db_session: AsyncSession) -> None:
-    user = await make_user(db_session)
+    user = await make_workspace(db_session)
     repo = CategoryRepository(db_session)
     await repo.add(make_category(user.id, type=CategoryType.INCOME, name="A"))
     category_b = make_category(user.id, type=CategoryType.INCOME, name="B")
@@ -246,7 +255,7 @@ async def test_update_into_taken_name_within_type_raises_already_exists(db_sessi
 
 
 async def test_same_name_allowed_for_different_type_same_user(db_session: AsyncSession) -> None:
-    user = await make_user(db_session)
+    user = await make_workspace(db_session)
     repo = CategoryRepository(db_session)
     await repo.add(make_category(user.id, type=CategoryType.INCOME, name="Прочее"))
     await db_session.flush()
@@ -257,8 +266,8 @@ async def test_same_name_allowed_for_different_type_same_user(db_session: AsyncS
 
 
 async def test_same_name_allowed_for_same_type_different_user(db_session: AsyncSession) -> None:
-    user_a = await make_user(db_session)
-    user_b = await make_user(db_session)
+    user_a = await make_workspace(db_session)
+    user_b = await make_workspace(db_session)
     repo = CategoryRepository(db_session)
     await repo.add(make_category(user_a.id, type=CategoryType.INCOME, name="Зарплата"))
     await db_session.flush()
@@ -269,13 +278,13 @@ async def test_same_name_allowed_for_same_type_different_user(db_session: AsyncS
 
 
 async def test_check_constraint_rejects_invalid_type(db_session: AsyncSession) -> None:
-    user = await make_user(db_session)
+    user = await make_workspace(db_session)
 
     with pytest.raises((IntegrityError, ProgrammingError)):
         await db_session.execute(
             insert(categories_table).values(
                 id=uuid4(),
-                user_id=user.id,
+                workspace_id=user.id,
                 type="savings",
                 name="Невалидная",
                 icon="wallet",
@@ -285,9 +294,11 @@ async def test_check_constraint_rejects_invalid_type(db_session: AsyncSession) -
 
 
 async def test_deleting_user_cascades_to_categories(db_session: AsyncSession) -> None:
+    """Удаление пользователя каскадно чистит его воркспейсы (`workspaces.user_id`), а те — категории внутри."""
     user = await make_user(db_session)
+    workspace = await make_workspace(db_session, user)
     repo = CategoryRepository(db_session)
-    category = make_category(user.id)
+    category = make_category(workspace.id)
     await repo.add(category)
     await db_session.flush()
 
@@ -299,7 +310,7 @@ async def test_deleting_user_cascades_to_categories(db_session: AsyncSession) ->
 
 
 async def test_delete_category_with_transactions_raises_conflict_error(db_session: AsyncSession) -> None:
-    user = await make_user(db_session)
+    user = await make_workspace(db_session)
     category_repo = CategoryRepository(db_session)
     category = await category_repo.add(make_category(user.id))
     currency = Currency(id=uuid4(), code="RUB", name="Российский рубль", decimal_places=2)
@@ -307,7 +318,7 @@ async def test_delete_category_with_transactions_raises_conflict_error(db_sessio
     wallet = await WalletRepository(db_session).add(
         Wallet(
             id=uuid4(),
-            user_id=user.id,
+            workspace_id=user.id,
             name="Кошелёк",
             icon="wallet",
             currency_ids=(currency.id,),
@@ -317,7 +328,7 @@ async def test_delete_category_with_transactions_raises_conflict_error(db_sessio
     await TransactionRepository(db_session).add(
         Transaction(
             id=uuid4(),
-            user_id=user.id,
+            workspace_id=user.id,
             wallet_id=wallet.id,
             category_id=category.id,
             legs=(TransactionLeg(currency_id=currency.id, amount=Decimal("10.00")),),

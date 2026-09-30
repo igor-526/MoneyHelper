@@ -4,12 +4,18 @@ from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
 
-from core.entities import Category, CategoryType, Currency, Transaction, TransactionLeg
+from core.entities import Category, CategoryType, Currency, Transaction, TransactionLeg, Workspace
 from depends.auth import get_current_user
 from depends.currency import get_currency_repository
 from depends.transaction import get_transaction_repository
+from depends.workspace import get_workspace_repository
 from main import create_app
-from tests.fakes import InMemoryCategoryRepository, InMemoryCurrencyRepository, InMemoryTransactionRepository
+from tests.fakes import (
+    InMemoryCategoryRepository,
+    InMemoryCurrencyRepository,
+    InMemoryTransactionRepository,
+    InMemoryWorkspaceRepository,
+)
 
 DATE_FROM = "2026-01-01T00:00:00Z"
 DATE_TO = "2026-01-31T00:00:00Z"
@@ -21,19 +27,29 @@ def make_client(
     categories: InMemoryCategoryRepository | None = None,
     currencies: InMemoryCurrencyRepository | None = None,
     transactions: InMemoryTransactionRepository | None = None,
+    workspaces: InMemoryWorkspaceRepository | None = None,
     user_id: UUID | None = None,
+    workspace_id: UUID | None = None,
     authenticated: bool = True,
-) -> TestClient:
+) -> tuple[TestClient, UUID]:
     categories = categories if categories is not None else InMemoryCategoryRepository()
     currencies = currencies if currencies is not None else InMemoryCurrencyRepository()
     transactions = transactions if transactions is not None else InMemoryTransactionRepository(categories)
+    workspaces = workspaces if workspaces is not None else InMemoryWorkspaceRepository()
     user_id = user_id if user_id is not None else uuid4()
+    workspace_id = workspace_id if workspace_id is not None else uuid4()
+    workspaces.seed(Workspace(id=workspace_id, user_id=user_id, created_at=datetime(2026, 1, 1, tzinfo=UTC), name="Т"))
     app = create_app()
     app.dependency_overrides[get_currency_repository] = lambda: currencies
     app.dependency_overrides[get_transaction_repository] = lambda: transactions
+    app.dependency_overrides[get_workspace_repository] = lambda: workspaces
     if authenticated:
         app.dependency_overrides[get_current_user] = lambda: user_id
-    return TestClient(app)
+    return TestClient(app), workspace_id
+
+
+def analytics_url(workspace_id: UUID) -> str:
+    return f"/api/workspaces/{workspace_id}/analytics"
 
 
 async def make_currency(
@@ -45,17 +61,22 @@ async def make_currency(
 
 
 async def make_category(
-    categories: InMemoryCategoryRepository, user_id: UUID, type: CategoryType = CategoryType.INCOME
+    categories: InMemoryCategoryRepository, workspace_id: UUID, type: CategoryType = CategoryType.INCOME
 ) -> Category:
     category = Category(
-        id=uuid4(), user_id=user_id, type=type, name=f"Категория {uuid4()}", icon="wallet", created_at=IN_RANGE
+        id=uuid4(),
+        workspace_id=workspace_id,
+        type=type,
+        name=f"Категория {uuid4()}",
+        icon="wallet",
+        created_at=IN_RANGE,
     )
     return await categories.add(category)
 
 
 async def add_transaction(
     transactions: InMemoryTransactionRepository,
-    user_id: UUID,
+    workspace_id: UUID,
     *,
     wallet_id: UUID,
     category_id: UUID,
@@ -65,7 +86,7 @@ async def add_transaction(
     await transactions.add(
         Transaction(
             id=uuid4(),
-            user_id=user_id,
+            workspace_id=workspace_id,
             wallet_id=wallet_id,
             category_id=category_id,
             legs=(TransactionLeg(currency_id=currency_id, amount=Decimal(amount)),),
@@ -77,7 +98,7 @@ async def add_transaction(
 
 async def add_topup(
     transactions: InMemoryTransactionRepository,
-    user_id: UUID,
+    workspace_id: UUID,
     *,
     wallet_id: UUID,
     category_id: UUID,
@@ -86,7 +107,7 @@ async def add_topup(
     await transactions.add(
         Transaction(
             id=uuid4(),
-            user_id=user_id,
+            workspace_id=workspace_id,
             wallet_id=wallet_id,
             category_id=category_id,
             legs=tuple(
@@ -108,22 +129,26 @@ def base_query(*, display_currency: UUID, group_by: str = "wallet") -> dict:
 
 
 async def test_group_by_wallet_returns_200_with_buckets() -> None:
-    user_id = uuid4()
+    workspace_id = uuid4()
     categories = InMemoryCategoryRepository()
     currencies = InMemoryCurrencyRepository()
     transactions = InMemoryTransactionRepository(categories)
     currency = await make_currency(currencies)
-    income = await make_category(categories, user_id, CategoryType.INCOME)
+    income = await make_category(categories, workspace_id, CategoryType.INCOME)
     wallet_a, wallet_b = uuid4(), uuid4()
     await add_transaction(
-        transactions, user_id, wallet_id=wallet_a, category_id=income.id, currency_id=currency.id, amount="100"
+        transactions, workspace_id, wallet_id=wallet_a, category_id=income.id, currency_id=currency.id, amount="100"
     )
     await add_transaction(
-        transactions, user_id, wallet_id=wallet_b, category_id=income.id, currency_id=currency.id, amount="50"
+        transactions, workspace_id, wallet_id=wallet_b, category_id=income.id, currency_id=currency.id, amount="50"
     )
-    client = make_client(categories=categories, currencies=currencies, transactions=transactions, user_id=user_id)
+    client, workspace_id = make_client(
+        categories=categories, currencies=currencies, transactions=transactions, workspace_id=workspace_id
+    )
 
-    response = client.get("/api/analytics", params=base_query(display_currency=currency.id, group_by="wallet"))
+    response = client.get(
+        analytics_url(workspace_id), params=base_query(display_currency=currency.id, group_by="wallet")
+    )
 
     assert response.status_code == 200
     body = response.json()
@@ -133,23 +158,27 @@ async def test_group_by_wallet_returns_200_with_buckets() -> None:
 
 
 async def test_group_by_category_returns_200_with_buckets() -> None:
-    user_id = uuid4()
+    workspace_id = uuid4()
     categories = InMemoryCategoryRepository()
     currencies = InMemoryCurrencyRepository()
     transactions = InMemoryTransactionRepository(categories)
     currency = await make_currency(currencies)
-    income = await make_category(categories, user_id, CategoryType.INCOME)
-    expense = await make_category(categories, user_id, CategoryType.EXPENSE)
+    income = await make_category(categories, workspace_id, CategoryType.INCOME)
+    expense = await make_category(categories, workspace_id, CategoryType.EXPENSE)
     wallet = uuid4()
     await add_transaction(
-        transactions, user_id, wallet_id=wallet, category_id=income.id, currency_id=currency.id, amount="100"
+        transactions, workspace_id, wallet_id=wallet, category_id=income.id, currency_id=currency.id, amount="100"
     )
     await add_transaction(
-        transactions, user_id, wallet_id=wallet, category_id=expense.id, currency_id=currency.id, amount="30"
+        transactions, workspace_id, wallet_id=wallet, category_id=expense.id, currency_id=currency.id, amount="30"
     )
-    client = make_client(categories=categories, currencies=currencies, transactions=transactions, user_id=user_id)
+    client, workspace_id = make_client(
+        categories=categories, currencies=currencies, transactions=transactions, workspace_id=workspace_id
+    )
 
-    response = client.get("/api/analytics", params=base_query(display_currency=currency.id, group_by="category"))
+    response = client.get(
+        analytics_url(workspace_id), params=base_query(display_currency=currency.id, group_by="category")
+    )
 
     assert response.status_code == 200
     by_key = {bucket["group_key"]: bucket for bucket in response.json()["buckets"]}
@@ -158,27 +187,29 @@ async def test_group_by_category_returns_200_with_buckets() -> None:
 
 
 async def test_group_by_currency_returns_200_with_buckets() -> None:
-    user_id = uuid4()
+    workspace_id = uuid4()
     categories = InMemoryCategoryRepository()
     currencies = InMemoryCurrencyRepository()
     transactions = InMemoryTransactionRepository(categories)
     rub = await make_currency(currencies, "RUB")
     cny = await make_currency(currencies, "CNY")
-    income = await make_category(categories, user_id, CategoryType.INCOME)
+    income = await make_category(categories, workspace_id, CategoryType.INCOME)
     wallet = uuid4()
     await add_transaction(
-        transactions, user_id, wallet_id=wallet, category_id=income.id, currency_id=rub.id, amount="100"
+        transactions, workspace_id, wallet_id=wallet, category_id=income.id, currency_id=rub.id, amount="100"
     )
     await add_topup(
         transactions,
-        user_id,
+        workspace_id,
         wallet_id=wallet,
         category_id=income.id,
         legs=[(rub.id, "10000"), (cny.id, "780")],
     )
-    client = make_client(categories=categories, currencies=currencies, transactions=transactions, user_id=user_id)
+    client, workspace_id = make_client(
+        categories=categories, currencies=currencies, transactions=transactions, workspace_id=workspace_id
+    )
 
-    response = client.get("/api/analytics", params=base_query(display_currency=rub.id, group_by="currency"))
+    response = client.get(analytics_url(workspace_id), params=base_query(display_currency=rub.id, group_by="currency"))
 
     assert response.status_code == 200
     keys = {bucket["group_key"] for bucket in response.json()["buckets"]}
@@ -186,28 +217,32 @@ async def test_group_by_currency_returns_200_with_buckets() -> None:
 
 
 async def test_conversion_reproducible_example() -> None:
-    user_id = uuid4()
+    workspace_id = uuid4()
     categories = InMemoryCategoryRepository()
     currencies = InMemoryCurrencyRepository()
     transactions = InMemoryTransactionRepository(categories)
     currency_a = await make_currency(currencies, "A")
     currency_b = await make_currency(currencies, "B", decimal_places=8)
-    income = await make_category(categories, user_id, CategoryType.INCOME)
-    expense = await make_category(categories, user_id, CategoryType.EXPENSE)
+    income = await make_category(categories, workspace_id, CategoryType.INCOME)
+    expense = await make_category(categories, workspace_id, CategoryType.EXPENSE)
     wallet = uuid4()
     await add_topup(
         transactions,
-        user_id,
+        workspace_id,
         wallet_id=wallet,
         category_id=income.id,
         legs=[(currency_a.id, "10000"), (currency_b.id, "780")],
     )
     await add_transaction(
-        transactions, user_id, wallet_id=wallet, category_id=expense.id, currency_id=currency_a.id, amount="1000"
+        transactions, workspace_id, wallet_id=wallet, category_id=expense.id, currency_id=currency_a.id, amount="1000"
     )
-    client = make_client(categories=categories, currencies=currencies, transactions=transactions, user_id=user_id)
+    client, workspace_id = make_client(
+        categories=categories, currencies=currencies, transactions=transactions, workspace_id=workspace_id
+    )
 
-    response = client.get("/api/analytics", params=base_query(display_currency=currency_b.id, group_by="wallet"))
+    response = client.get(
+        analytics_url(workspace_id), params=base_query(display_currency=currency_b.id, group_by="wallet")
+    )
 
     assert response.status_code == 200
     [bucket] = response.json()["buckets"]
@@ -215,28 +250,32 @@ async def test_conversion_reproducible_example() -> None:
 
 
 async def test_unconverted_currency_does_not_fail_whole_request() -> None:
-    user_id = uuid4()
+    workspace_id = uuid4()
     categories = InMemoryCategoryRepository()
     currencies = InMemoryCurrencyRepository()
     transactions = InMemoryTransactionRepository(categories)
     display = await make_currency(currencies, "RUB")
     convertible = await make_currency(currencies, "CNY")
     unconvertible = await make_currency(currencies, "USD")
-    income = await make_category(categories, user_id, CategoryType.INCOME)
+    income = await make_category(categories, workspace_id, CategoryType.INCOME)
     wallet = uuid4()
     await add_topup(
         transactions,
-        user_id,
+        workspace_id,
         wallet_id=wallet,
         category_id=income.id,
         legs=[(display.id, "100"), (convertible.id, "10")],
     )
     await add_transaction(
-        transactions, user_id, wallet_id=wallet, category_id=income.id, currency_id=unconvertible.id, amount="5"
+        transactions, workspace_id, wallet_id=wallet, category_id=income.id, currency_id=unconvertible.id, amount="5"
     )
-    client = make_client(categories=categories, currencies=currencies, transactions=transactions, user_id=user_id)
+    client, workspace_id = make_client(
+        categories=categories, currencies=currencies, transactions=transactions, workspace_id=workspace_id
+    )
 
-    response = client.get("/api/analytics", params=base_query(display_currency=display.id, group_by="currency"))
+    response = client.get(
+        analytics_url(workspace_id), params=base_query(display_currency=display.id, group_by="currency")
+    )
 
     assert response.status_code == 200
     body = response.json()
@@ -248,25 +287,33 @@ async def test_unconverted_currency_does_not_fail_whole_request() -> None:
 
 
 async def test_rounding_of_bucket_total() -> None:
-    user_id = uuid4()
+    workspace_id = uuid4()
     categories = InMemoryCategoryRepository()
     currencies = InMemoryCurrencyRepository()
     transactions = InMemoryTransactionRepository(categories)
     display = await make_currency(currencies, "RUB", decimal_places=2)
     source = await make_currency(currencies, "CNY")
-    income = await make_category(categories, user_id, CategoryType.INCOME)
-    expense = await make_category(categories, user_id, CategoryType.EXPENSE)
+    income = await make_category(categories, workspace_id, CategoryType.INCOME)
+    expense = await make_category(categories, workspace_id, CategoryType.EXPENSE)
     wallet = uuid4()
     await add_topup(
-        transactions, user_id, wallet_id=wallet, category_id=expense.id, legs=[(display.id, "1"), (source.id, "3")]
+        transactions,
+        workspace_id,
+        wallet_id=wallet,
+        category_id=expense.id,
+        legs=[(display.id, "1"), (source.id, "3")],
     )
     for _ in range(3):
         await add_transaction(
-            transactions, user_id, wallet_id=wallet, category_id=income.id, currency_id=source.id, amount="1"
+            transactions, workspace_id, wallet_id=wallet, category_id=income.id, currency_id=source.id, amount="1"
         )
-    client = make_client(categories=categories, currencies=currencies, transactions=transactions, user_id=user_id)
+    client, workspace_id = make_client(
+        categories=categories, currencies=currencies, transactions=transactions, workspace_id=workspace_id
+    )
 
-    response = client.get("/api/analytics", params=base_query(display_currency=display.id, group_by="wallet"))
+    response = client.get(
+        analytics_url(workspace_id), params=base_query(display_currency=display.id, group_by="wallet")
+    )
 
     assert response.status_code == 200
     [bucket] = response.json()["buckets"]
@@ -276,10 +323,10 @@ async def test_rounding_of_bucket_total() -> None:
 async def test_missing_date_from_rejected() -> None:
     currencies = InMemoryCurrencyRepository()
     currency_id = uuid4()
-    client = make_client(currencies=currencies)
+    client, workspace_id = make_client(currencies=currencies)
 
     response = client.get(
-        "/api/analytics",
+        analytics_url(workspace_id),
         params={"display_currency": str(currency_id), "date_to": DATE_TO, "group_by": "wallet"},
     )
 
@@ -289,10 +336,10 @@ async def test_missing_date_from_rejected() -> None:
 async def test_missing_date_to_rejected() -> None:
     currencies = InMemoryCurrencyRepository()
     currency_id = uuid4()
-    client = make_client(currencies=currencies)
+    client, workspace_id = make_client(currencies=currencies)
 
     response = client.get(
-        "/api/analytics",
+        analytics_url(workspace_id),
         params={"display_currency": str(currency_id), "date_from": DATE_FROM, "group_by": "wallet"},
     )
 
@@ -302,10 +349,10 @@ async def test_missing_date_to_rejected() -> None:
 async def test_date_from_after_date_to_rejected() -> None:
     currencies = InMemoryCurrencyRepository()
     currency = await make_currency(currencies)
-    client = make_client(currencies=currencies)
+    client, workspace_id = make_client(currencies=currencies)
 
     response = client.get(
-        "/api/analytics",
+        analytics_url(workspace_id),
         params={
             "display_currency": str(currency.id),
             "date_from": DATE_TO,
@@ -318,39 +365,43 @@ async def test_date_from_after_date_to_rejected() -> None:
 
 
 async def test_unknown_display_currency_rejected() -> None:
-    client = make_client()
+    client, workspace_id = make_client()
 
-    response = client.get("/api/analytics", params=base_query(display_currency=uuid4()))
+    response = client.get(analytics_url(workspace_id), params=base_query(display_currency=uuid4()))
 
     assert response.status_code == 400
 
 
 async def test_missing_display_currency_rejected() -> None:
-    client = make_client()
+    client, workspace_id = make_client()
 
-    response = client.get("/api/analytics", params={"date_from": DATE_FROM, "date_to": DATE_TO, "group_by": "wallet"})
+    response = client.get(
+        analytics_url(workspace_id), params={"date_from": DATE_FROM, "date_to": DATE_TO, "group_by": "wallet"}
+    )
 
     assert response.status_code == 400
 
 
 async def test_filter_by_wallet() -> None:
-    user_id = uuid4()
+    workspace_id = uuid4()
     categories = InMemoryCategoryRepository()
     currencies = InMemoryCurrencyRepository()
     transactions = InMemoryTransactionRepository(categories)
     currency = await make_currency(currencies)
-    income = await make_category(categories, user_id, CategoryType.INCOME)
+    income = await make_category(categories, workspace_id, CategoryType.INCOME)
     wallet_a, wallet_b = uuid4(), uuid4()
     await add_transaction(
-        transactions, user_id, wallet_id=wallet_a, category_id=income.id, currency_id=currency.id, amount="100"
+        transactions, workspace_id, wallet_id=wallet_a, category_id=income.id, currency_id=currency.id, amount="100"
     )
     await add_transaction(
-        transactions, user_id, wallet_id=wallet_b, category_id=income.id, currency_id=currency.id, amount="50"
+        transactions, workspace_id, wallet_id=wallet_b, category_id=income.id, currency_id=currency.id, amount="50"
     )
-    client = make_client(categories=categories, currencies=currencies, transactions=transactions, user_id=user_id)
+    client, workspace_id = make_client(
+        categories=categories, currencies=currencies, transactions=transactions, workspace_id=workspace_id
+    )
 
     response = client.get(
-        "/api/analytics",
+        analytics_url(workspace_id),
         params={**base_query(display_currency=currency.id, group_by="wallet"), "wallet_id": str(wallet_a)},
     )
 
@@ -360,24 +411,26 @@ async def test_filter_by_wallet() -> None:
 
 
 async def test_filter_by_category() -> None:
-    user_id = uuid4()
+    workspace_id = uuid4()
     categories = InMemoryCategoryRepository()
     currencies = InMemoryCurrencyRepository()
     transactions = InMemoryTransactionRepository(categories)
     currency = await make_currency(currencies)
-    income = await make_category(categories, user_id, CategoryType.INCOME)
-    expense = await make_category(categories, user_id, CategoryType.EXPENSE)
+    income = await make_category(categories, workspace_id, CategoryType.INCOME)
+    expense = await make_category(categories, workspace_id, CategoryType.EXPENSE)
     wallet = uuid4()
     await add_transaction(
-        transactions, user_id, wallet_id=wallet, category_id=income.id, currency_id=currency.id, amount="100"
+        transactions, workspace_id, wallet_id=wallet, category_id=income.id, currency_id=currency.id, amount="100"
     )
     await add_transaction(
-        transactions, user_id, wallet_id=wallet, category_id=expense.id, currency_id=currency.id, amount="30"
+        transactions, workspace_id, wallet_id=wallet, category_id=expense.id, currency_id=currency.id, amount="30"
     )
-    client = make_client(categories=categories, currencies=currencies, transactions=transactions, user_id=user_id)
+    client, workspace_id = make_client(
+        categories=categories, currencies=currencies, transactions=transactions, workspace_id=workspace_id
+    )
 
     response = client.get(
-        "/api/analytics",
+        analytics_url(workspace_id),
         params={**base_query(display_currency=currency.id, group_by="category"), "category_id": str(income.id)},
     )
 
@@ -387,24 +440,26 @@ async def test_filter_by_category() -> None:
 
 
 async def test_filter_by_currency() -> None:
-    user_id = uuid4()
+    workspace_id = uuid4()
     categories = InMemoryCategoryRepository()
     currencies = InMemoryCurrencyRepository()
     transactions = InMemoryTransactionRepository(categories)
     rub = await make_currency(currencies, "RUB")
     cny = await make_currency(currencies, "CNY")
-    income = await make_category(categories, user_id, CategoryType.INCOME)
+    income = await make_category(categories, workspace_id, CategoryType.INCOME)
     wallet = uuid4()
     await add_transaction(
-        transactions, user_id, wallet_id=wallet, category_id=income.id, currency_id=rub.id, amount="100"
+        transactions, workspace_id, wallet_id=wallet, category_id=income.id, currency_id=rub.id, amount="100"
     )
     await add_topup(
-        transactions, user_id, wallet_id=wallet, category_id=income.id, legs=[(rub.id, "100"), (cny.id, "10")]
+        transactions, workspace_id, wallet_id=wallet, category_id=income.id, legs=[(rub.id, "100"), (cny.id, "10")]
     )
-    client = make_client(categories=categories, currencies=currencies, transactions=transactions, user_id=user_id)
+    client, workspace_id = make_client(
+        categories=categories, currencies=currencies, transactions=transactions, workspace_id=workspace_id
+    )
 
     response = client.get(
-        "/api/analytics",
+        analytics_url(workspace_id),
         params={**base_query(display_currency=rub.id, group_by="currency"), "currency_id": str(cny.id)},
     )
 
@@ -414,24 +469,26 @@ async def test_filter_by_currency() -> None:
 
 
 async def test_filter_by_type() -> None:
-    user_id = uuid4()
+    workspace_id = uuid4()
     categories = InMemoryCategoryRepository()
     currencies = InMemoryCurrencyRepository()
     transactions = InMemoryTransactionRepository(categories)
     currency = await make_currency(currencies)
-    income = await make_category(categories, user_id, CategoryType.INCOME)
-    expense = await make_category(categories, user_id, CategoryType.EXPENSE)
+    income = await make_category(categories, workspace_id, CategoryType.INCOME)
+    expense = await make_category(categories, workspace_id, CategoryType.EXPENSE)
     wallet = uuid4()
     await add_transaction(
-        transactions, user_id, wallet_id=wallet, category_id=income.id, currency_id=currency.id, amount="100"
+        transactions, workspace_id, wallet_id=wallet, category_id=income.id, currency_id=currency.id, amount="100"
     )
     await add_transaction(
-        transactions, user_id, wallet_id=wallet, category_id=expense.id, currency_id=currency.id, amount="30"
+        transactions, workspace_id, wallet_id=wallet, category_id=expense.id, currency_id=currency.id, amount="30"
     )
-    client = make_client(categories=categories, currencies=currencies, transactions=transactions, user_id=user_id)
+    client, workspace_id = make_client(
+        categories=categories, currencies=currencies, transactions=transactions, workspace_id=workspace_id
+    )
 
     response = client.get(
-        "/api/analytics",
+        analytics_url(workspace_id),
         params={**base_query(display_currency=currency.id, group_by="wallet"), "type": "income"},
     )
 
@@ -442,38 +499,52 @@ async def test_filter_by_type() -> None:
 
 
 async def test_unauthenticated_request_rejected() -> None:
-    client = make_client(authenticated=False)
+    client, workspace_id = make_client(authenticated=False)
 
-    response = client.get("/api/analytics", params=base_query(display_currency=uuid4()))
+    response = client.get(analytics_url(workspace_id), params=base_query(display_currency=uuid4()))
 
     assert response.status_code == 401
 
 
 async def test_owner_isolation_excludes_foreign_data() -> None:
-    user_a, user_b = uuid4(), uuid4()
     categories = InMemoryCategoryRepository()
     currencies = InMemoryCurrencyRepository()
     transactions = InMemoryTransactionRepository(categories)
+    workspaces = InMemoryWorkspaceRepository()
     display = await make_currency(currencies, "RUB")
     source = await make_currency(currencies, "CNY")
-    income_a = await make_category(categories, user_a, CategoryType.INCOME)
-    income_b = await make_category(categories, user_b, CategoryType.INCOME)
+    workspace_a_id = uuid4()
+    workspace_b_id = uuid4()
+    income_a = await make_category(categories, workspace_a_id, CategoryType.INCOME)
+    income_b = await make_category(categories, workspace_b_id, CategoryType.INCOME)
     wallet = uuid4()
     await add_transaction(
-        transactions, user_b, wallet_id=wallet, category_id=income_b.id, currency_id=display.id, amount="999"
+        transactions, workspace_b_id, wallet_id=wallet, category_id=income_b.id, currency_id=display.id, amount="999"
     )
     await add_topup(
-        transactions, user_b, wallet_id=wallet, category_id=income_b.id, legs=[(display.id, "10"), (source.id, "100")]
+        transactions,
+        workspace_b_id,
+        wallet_id=wallet,
+        category_id=income_b.id,
+        legs=[(display.id, "10"), (source.id, "100")],
     )
     await add_transaction(
-        transactions, user_a, wallet_id=wallet, category_id=income_a.id, currency_id=source.id, amount="50"
+        transactions, workspace_a_id, wallet_id=wallet, category_id=income_a.id, currency_id=source.id, amount="50"
     )
-    client = make_client(categories=categories, currencies=currencies, transactions=transactions, user_id=user_a)
+    client, workspace_id = make_client(
+        categories=categories,
+        currencies=currencies,
+        transactions=transactions,
+        workspaces=workspaces,
+        workspace_id=workspace_a_id,
+    )
 
-    response = client.get("/api/analytics", params=base_query(display_currency=display.id, group_by="wallet"))
+    response = client.get(
+        analytics_url(workspace_id), params=base_query(display_currency=display.id, group_by="wallet")
+    )
 
     assert response.status_code == 200
     body = response.json()
-    # Чужое пополнение (курс) не в счёт — валюта пользователя A неконвертируема, чужая операция не в суммах.
+    # Чужое пополнение (курс) не в счёт — валюта воркспейса A неконвертируема, чужая операция не в суммах.
     assert body["buckets"] == []
     assert body["unconverted_currencies"] == [str(source.id)]

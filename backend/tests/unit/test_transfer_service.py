@@ -35,10 +35,10 @@ async def make_currency(
     return currency
 
 
-async def make_wallet(wallets: InMemoryWalletRepository, user_id, currency_ids) -> Wallet:
+async def make_wallet(wallets: InMemoryWalletRepository, workspace_id, currency_ids) -> Wallet:
     wallet = Wallet(
         id=uuid4(),
-        user_id=user_id,
+        workspace_id=workspace_id,
         name="Кошелёк",
         icon="wallet",
         currency_ids=tuple(currency_ids),
