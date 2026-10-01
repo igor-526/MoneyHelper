@@ -54,7 +54,7 @@ function WorkspaceRow({
   );
 }
 
-/** Секция управления воркспейсами в «Настройках» (design.md, раздел 6). */
+/** Секция управления воркспейсами на главной странице: переключение, создание, переименование, удаление. */
 export function WorkspacesSection() {
   const workspacesQuery = useWorkspaces();
   const currentWorkspaceId = useCurrentWorkspaceId();
