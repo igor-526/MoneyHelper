@@ -3,12 +3,15 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { WorkspaceContext } from "@/features/workspaces/WorkspaceContext";
 import { ApiClientProvider } from "@/shared/api";
 import { createQueryClient } from "@/shared/errors";
 import { type FakeHandler, FakeApiClient } from "@/test/FakeApiClient";
 import { createToastSpy } from "@/test/toastSpy";
 import type { Wallet } from "./Wallet";
 import { WalletCard } from "./WalletCard";
+
+const TEST_WORKSPACE_ID = "workspace-1";
 
 const WALLET: Wallet = {
   id: "5",
@@ -24,7 +27,9 @@ function setup(handler: FakeHandler) {
   const client = createQueryClient(createToastSpy());
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>
-      <ApiClientProvider client={api}>{children}</ApiClientProvider>
+      <ApiClientProvider client={api}>
+        <WorkspaceContext.Provider value={TEST_WORKSPACE_ID}>{children}</WorkspaceContext.Provider>
+      </ApiClientProvider>
     </QueryClientProvider>
   );
   return { api, wrapper };
@@ -53,7 +58,7 @@ describe("WalletCard", () => {
     expect(onEdit).toHaveBeenCalledWith(WALLET);
   });
 
-  it("подтверждение в Popconfirm вызывает DELETE /api/wallets/{id}", async () => {
+  it("подтверждение в Popconfirm вызывает DELETE /api/workspaces/{workspace_id}/wallets/{id}", async () => {
     const { api, wrapper } = setup(() => undefined);
     render(<WalletCard wallet={WALLET} currencyCodes={["USD"]} onEdit={vi.fn()} />, { wrapper });
 
@@ -62,9 +67,12 @@ describe("WalletCard", () => {
     await userEvent.click(within(popup).getByRole("button", { name: "Удалить" }));
 
     await waitFor(() =>
-      expect(api.requests.some((r) => r.method === "DELETE" && r.path === "/api/wallets/5")).toBe(
-        true,
-      ),
+      expect(
+        api.requests.some(
+          (r) =>
+            r.method === "DELETE" && r.path === `/api/workspaces/${TEST_WORKSPACE_ID}/wallets/5`,
+        ),
+      ).toBe(true),
     );
   });
 

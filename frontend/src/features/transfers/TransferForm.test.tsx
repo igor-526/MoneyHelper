@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { WorkspaceContext } from "@/features/workspaces/WorkspaceContext";
 import { ApiError, ApiClientProvider } from "@/shared/api";
 import { createQueryClient } from "@/shared/errors";
 import { ToastProvider } from "@/shared/ui";
@@ -12,6 +13,8 @@ import { createToastSpy } from "@/test/toastSpy";
 import { setMedia } from "@/test/matchMedia";
 import type { Transfer } from "./Transfer";
 import { TransferForm } from "./TransferForm";
+
+const TEST_WORKSPACE_ID = "workspace-1";
 
 const WALLETS = [
   {
@@ -63,7 +66,7 @@ function page(items: unknown[]) {
 
 function withFixtures(handler: FakeHandler): FakeHandler {
   return (request) => {
-    if (request.path === "/api/wallets") return page(WALLETS);
+    if (request.path === `/api/workspaces/${TEST_WORKSPACE_ID}/wallets`) return page(WALLETS);
     if (request.path === "/api/currencies") return page(CURRENCIES);
     return handler(request);
   };
@@ -75,7 +78,9 @@ function setup(handler: FakeHandler) {
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>
       <ApiClientProvider client={api}>
-        <ToastProvider>{children}</ToastProvider>
+        <WorkspaceContext.Provider value={TEST_WORKSPACE_ID}>
+          <ToastProvider>{children}</ToastProvider>
+        </WorkspaceContext.Provider>
       </ApiClientProvider>
     </QueryClientProvider>
   );
@@ -232,7 +237,9 @@ describe("TransferForm", () => {
     await userEvent.click(screen.getByRole("button", { name: "Создать" }));
 
     await waitFor(() => expect(onClose).toHaveBeenCalled());
-    const request = api.requests.find((r) => r.method === "POST" && r.path === "/api/transfers");
+    const request = api.requests.find(
+      (r) => r.method === "POST" && r.path === `/api/workspaces/${TEST_WORKSPACE_ID}/transfers`,
+    );
     expect(request).toMatchObject({
       body: { from_wallet_id: "w1", to_wallet_id: "w2", currency_id: "cur2", amount: "10" },
     });
@@ -257,7 +264,7 @@ describe("TransferForm", () => {
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(api.requests.at(-1)).toMatchObject({
       method: "PUT",
-      path: "/api/transfers/t1",
+      path: `/api/workspaces/${TEST_WORKSPACE_ID}/transfers/t1`,
       body: { from_wallet_id: "w1", to_wallet_id: "w2", currency_id: "cur2", amount: "30.00" },
     });
     expect(await screen.findByText("Перевод обновлён")).toBeInTheDocument();

@@ -16,6 +16,7 @@ import type { Category, CategoryType } from "@/features/categories/Category";
 import { useCategories } from "@/features/categories/useCategories";
 import type { Wallet } from "@/features/wallets/Wallet";
 import { useWallets } from "@/features/wallets/useWallets";
+import { WalletRateCard } from "@/features/wallets/WalletRateCard";
 import { EmptyState, useCurrencies, useIsMobile } from "@/shared/ui";
 import type { Currency } from "@/shared/ui";
 import type { Transaction } from "./Transaction";
@@ -95,6 +96,8 @@ export function TransactionsPage() {
     for (const wallet of wallets as Wallet[]) map.set(wallet.id, wallet.name);
     return map;
   }, [wallets]);
+
+  const selectedWallet = (wallets as Wallet[]).find((wallet) => wallet.id === filters.walletId);
 
   const categoryById = useMemo(() => {
     const map = new Map<string, Category>();
@@ -183,6 +186,9 @@ export function TransactionsPage() {
       </Flex>
       {filters.walletId !== undefined ? (
         <WalletBalanceCard walletId={filters.walletId} currencyCodeById={currencyCodeById} />
+      ) : null}
+      {selectedWallet !== undefined ? (
+        <WalletRateCard wallet={selectedWallet} currencyCodeById={currencyCodeById} />
       ) : null}
       {transactionsQuery.isPending ? (
         <Spin />

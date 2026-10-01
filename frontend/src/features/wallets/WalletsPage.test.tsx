@@ -3,12 +3,15 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { describe, expect, it } from "vitest";
+import { WorkspaceContext } from "@/features/workspaces/WorkspaceContext";
 import { ApiError, ApiClientProvider } from "@/shared/api";
 import { createQueryClient } from "@/shared/errors";
 import { ToastProvider } from "@/shared/ui";
 import { type FakeHandler, FakeApiClient } from "@/test/FakeApiClient";
 import { createToastSpy } from "@/test/toastSpy";
 import { WalletsPage } from "./WalletsPage";
+
+const TEST_WORKSPACE_ID = "workspace-1";
 
 const CURRENCIES_PAGE = {
   items: [
@@ -53,7 +56,9 @@ function setup(handler: FakeHandler) {
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>
       <ApiClientProvider client={api}>
-        <ToastProvider>{children}</ToastProvider>
+        <WorkspaceContext.Provider value={TEST_WORKSPACE_ID}>
+          <ToastProvider>{children}</ToastProvider>
+        </WorkspaceContext.Provider>
       </ApiClientProvider>
     </QueryClientProvider>
   );

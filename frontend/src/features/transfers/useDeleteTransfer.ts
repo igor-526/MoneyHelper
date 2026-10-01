@@ -1,9 +1,12 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCurrentWorkspaceId } from "@/features/workspaces/WorkspaceContext";
 import { useApiClient } from "@/shared/api";
-import { TRANSFERS_QUERY_KEY } from "./useTransfers";
+import { transfersQueryKey } from "./useTransfers";
 
 /** Локальная копия ключа кэша балансов — см. комментарий в `useCreateTransfer.ts`. */
-const WALLET_BALANCES_QUERY_KEY = ["wallet-balances"] as const;
+function walletBalancesQueryKey(workspaceId: string) {
+  return ["wallet-balances", workspaceId] as const;
+}
 
 /**
  * Без `meta: { silent: true }` и без `onError` — по образцу `useDeleteTransaction`: специфичных ошибок удаления
@@ -12,11 +15,13 @@ const WALLET_BALANCES_QUERY_KEY = ["wallet-balances"] as const;
 export function useDeleteTransfer() {
   const api = useApiClient();
   const queryClient = useQueryClient();
+  const workspaceId = useCurrentWorkspaceId();
   return useMutation({
-    mutationFn: (id: string) => api.delete<undefined>(`/api/transfers/${id}`),
+    mutationFn: (id: string) =>
+      api.delete<undefined>(`/api/workspaces/${workspaceId}/transfers/${id}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: TRANSFERS_QUERY_KEY });
-      queryClient.invalidateQueries({ queryKey: WALLET_BALANCES_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: transfersQueryKey(workspaceId) });
+      queryClient.invalidateQueries({ queryKey: walletBalancesQueryKey(workspaceId) });
     },
   });
 }

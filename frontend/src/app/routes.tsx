@@ -10,6 +10,7 @@ import { SettingsPage } from "@/features/settings/SettingsPage";
 import { TransactionsPage } from "@/features/transactions/TransactionsPage";
 import { TransfersPage } from "@/features/transfers/TransfersPage";
 import { WalletsPage } from "@/features/wallets/WalletsPage";
+import { RequireWorkspace } from "@/features/workspaces/RequireWorkspace";
 import { AppLayout } from "./layout/AppLayout";
 import { NotFoundPage } from "./NotFoundPage";
 import { RouteErrorElement } from "./RouteErrorElement";
@@ -27,7 +28,9 @@ export const routes: RouteObject[] = [
     // Все остальные маршруты, включая неизвестные, требуют активную сессию.
     element: (
       <RequireAuth>
-        <AppLayout />
+        <RequireWorkspace>
+          <AppLayout />
+        </RequireWorkspace>
       </RequireAuth>
     ),
     errorElement: <RouteErrorElement />,

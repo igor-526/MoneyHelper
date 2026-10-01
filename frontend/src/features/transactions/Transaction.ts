@@ -17,6 +17,7 @@ export interface Transaction {
   category_id: string;
   legs: TransactionLeg[];
   occurred_at: string;
+  comment: string | null;
   created_at: string;
   updated_at: string | null;
 }
@@ -28,6 +29,7 @@ export interface TransactionFormValues {
   currency_id: string;
   amount: string;
   occurred_at?: string;
+  comment?: string;
 }
 
 /** Тело запроса `TopupCreate` — пополнение многовалютного кошелька, ровно по одной ноге на каждую его валюту. */
@@ -36,6 +38,7 @@ export interface TopupFormValues {
   category_id: string;
   legs: TransactionLeg[];
   occurred_at?: string;
+  comment?: string;
 }
 
 /** Форма элемента ответа backend (`WalletBalanceOut`). */

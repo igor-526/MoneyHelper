@@ -3,12 +3,15 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { describe, expect, it } from "vitest";
+import { WorkspaceContext } from "@/features/workspaces/WorkspaceContext";
 import { ApiError, ApiClientProvider } from "@/shared/api";
 import { createQueryClient } from "@/shared/errors";
 import { ToastProvider } from "@/shared/ui";
 import { type FakeHandler, FakeApiClient } from "@/test/FakeApiClient";
 import { createToastSpy } from "@/test/toastSpy";
 import { CategoriesPage } from "./CategoriesPage";
+
+const TEST_WORKSPACE_ID = "workspace-1";
 
 function categoriesPage(items: unknown[]) {
   return { items, total: items.length, limit: 100, offset: 0 };
@@ -40,7 +43,9 @@ function setup(handler: FakeHandler) {
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>
       <ApiClientProvider client={api}>
-        <ToastProvider>{children}</ToastProvider>
+        <WorkspaceContext.Provider value={TEST_WORKSPACE_ID}>
+          <ToastProvider>{children}</ToastProvider>
+        </WorkspaceContext.Provider>
       </ApiClientProvider>
     </QueryClientProvider>
   );
@@ -76,7 +81,9 @@ describe("CategoriesPage", () => {
     expect(screen.getByText("Зарплата")).toBeInTheDocument();
     expect(
       api.requests.some(
-        (r) => r.path === "/api/categories" && (r.query as { type?: string })?.type === "income",
+        (r) =>
+          r.path === `/api/workspaces/${TEST_WORKSPACE_ID}/categories` &&
+          (r.query as { type?: string })?.type === "income",
       ),
     ).toBe(true);
   });

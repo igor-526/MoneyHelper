@@ -2,12 +2,15 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { WorkspaceContext } from "@/features/workspaces/WorkspaceContext";
 import { ApiError, ApiClientProvider } from "@/shared/api";
 import { createQueryClient } from "@/shared/errors";
 import { type FakeHandler, FakeApiClient } from "@/test/FakeApiClient";
 import { createToastSpy } from "@/test/toastSpy";
-import { WALLETS_QUERY_KEY } from "./useWallets";
+import { walletsQueryKey } from "./useWallets";
 import { useDeleteWallet } from "./useDeleteWallet";
+
+const TEST_WORKSPACE_ID = "workspace-1";
 
 function setup(handler: FakeHandler) {
   const api = new FakeApiClient(handler);
@@ -18,7 +21,10 @@ function setup(handler: FakeHandler) {
     createElement(
       QueryClientProvider,
       { client },
-      createElement(ApiClientProvider, { client: api, children }),
+      createElement(ApiClientProvider, {
+        client: api,
+        children: createElement(WorkspaceContext.Provider, { value: TEST_WORKSPACE_ID, children }),
+      }),
     );
   return { api, toast, invalidateSpy, wrapper };
 }
@@ -33,8 +39,11 @@ describe("useDeleteWallet", () => {
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(api.requests[0]).toMatchObject({ method: "DELETE", path: "/api/wallets/1" });
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: WALLETS_QUERY_KEY });
+    expect(api.requests[0]).toMatchObject({
+      method: "DELETE",
+      path: `/api/workspaces/${TEST_WORKSPACE_ID}/wallets/1`,
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: walletsQueryKey(TEST_WORKSPACE_ID) });
   });
 
   it("ошибка не обрабатывается локально — показывается общим глобальным обработчиком", async () => {

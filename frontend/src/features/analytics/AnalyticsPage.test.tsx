@@ -4,12 +4,15 @@ import userEvent from "@testing-library/user-event";
 import dayjs from "dayjs";
 import type { ReactNode } from "react";
 import { describe, expect, it } from "vitest";
+import { WorkspaceContext } from "@/features/workspaces/WorkspaceContext";
 import { ApiError, ApiClientProvider } from "@/shared/api";
 import { createQueryClient } from "@/shared/errors";
 import { ToastProvider } from "@/shared/ui";
 import { type FakeHandler, FakeApiClient } from "@/test/FakeApiClient";
 import { createToastSpy } from "@/test/toastSpy";
 import { AnalyticsPage } from "./AnalyticsPage";
+
+const TEST_WORKSPACE_ID = "workspace-1";
 
 const WALLETS = [
   {
@@ -53,8 +56,10 @@ function referencePage(items: unknown[]) {
 
 function withFixtures(handler: FakeHandler): FakeHandler {
   return (request) => {
-    if (request.path === "/api/wallets") return referencePage(WALLETS);
-    if (request.path === "/api/categories") return referencePage(CATEGORIES);
+    if (request.path === `/api/workspaces/${TEST_WORKSPACE_ID}/wallets`)
+      return referencePage(WALLETS);
+    if (request.path === `/api/workspaces/${TEST_WORKSPACE_ID}/categories`)
+      return referencePage(CATEGORIES);
     if (request.path === "/api/currencies") return referencePage(CURRENCIES);
     return handler(request);
   };
@@ -78,7 +83,9 @@ function setup(handler: FakeHandler) {
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>
       <ApiClientProvider client={api}>
-        <ToastProvider>{children}</ToastProvider>
+        <WorkspaceContext.Provider value={TEST_WORKSPACE_ID}>
+          <ToastProvider>{children}</ToastProvider>
+        </WorkspaceContext.Provider>
       </ApiClientProvider>
     </QueryClientProvider>
   );
@@ -86,7 +93,7 @@ function setup(handler: FakeHandler) {
 }
 
 function analyticsRequests(api: FakeApiClient) {
-  return api.requests.filter((r) => r.path === "/api/analytics");
+  return api.requests.filter((r) => r.path === `/api/workspaces/${TEST_WORKSPACE_ID}/analytics`);
 }
 
 async function chooseFromDropdown(combobox: HTMLElement, optionLabel: string) {
@@ -204,7 +211,9 @@ describe("AnalyticsPage", () => {
       resolveResponse = resolve;
     });
     const { wrapper } = setup((request) =>
-      request.path === "/api/analytics" ? pending : analyticsResult([]),
+      request.path === `/api/workspaces/${TEST_WORKSPACE_ID}/analytics`
+        ? pending
+        : analyticsResult([]),
     );
     render(<AnalyticsPage />, { wrapper });
     await screen.findByText(INFO_MESSAGE);
@@ -389,7 +398,7 @@ describe("AnalyticsPage", () => {
 
   it("ошибка «неизвестная валюта отображения» показывает toast, список корзин не отображается", async () => {
     const { toast, wrapper } = setup((request) => {
-      if (request.path === "/api/analytics") {
+      if (request.path === `/api/workspaces/${TEST_WORKSPACE_ID}/analytics`) {
         throw new ApiError({
           kind: "validation",
           status: 400,
@@ -408,7 +417,7 @@ describe("AnalyticsPage", () => {
 
   it("ошибка «date_from позже date_to» показывает toast, список корзин не отображается", async () => {
     const { toast, wrapper } = setup((request) => {
-      if (request.path === "/api/analytics") {
+      if (request.path === `/api/workspaces/${TEST_WORKSPACE_ID}/analytics`) {
         throw new ApiError({ kind: "validation", status: 400, detail: "date_from позже date_to" });
       }
       return analyticsResult([]);

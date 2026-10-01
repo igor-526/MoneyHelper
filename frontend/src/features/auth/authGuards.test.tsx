@@ -2,7 +2,9 @@ import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { FakeApiClient } from "@/test/FakeApiClient";
 import { renderApp } from "@/test/renderApp";
-import { AUTHENTICATED_USER, withSession } from "@/test/session";
+import { AUTHENTICATED_USER, DEFAULT_WORKSPACE, withSession } from "@/test/session";
+
+const WORKSPACES_PAGE = { items: [DEFAULT_WORKSPACE], total: 1, limit: 100, offset: 0 };
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -15,9 +17,11 @@ function deferred<T>() {
 describe("RequireAuth", () => {
   it("показывает спиннер, пока сессия проверяется, и контент после её подтверждения", async () => {
     const { promise, resolve } = deferred<typeof AUTHENTICATED_USER>();
-    const api = new FakeApiClient((request) =>
-      request.path === "/api/auth/me" ? promise : { status: "ok" },
-    );
+    const api = new FakeApiClient((request) => {
+      if (request.path === "/api/auth/me") return promise;
+      if (request.path === "/api/workspaces") return WORKSPACES_PAGE;
+      return { status: "ok" };
+    });
 
     renderApp({ apiClient: api, path: "/" });
 

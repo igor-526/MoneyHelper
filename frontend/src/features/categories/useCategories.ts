@@ -1,21 +1,25 @@
 import { useQuery } from "@tanstack/react-query";
 import { useApiClient } from "@/shared/api";
 import type { Page } from "@/shared/api";
+import { useCurrentWorkspaceId } from "@/features/workspaces/WorkspaceContext";
 import type { Category, CategoryType } from "./Category";
 
-export const CATEGORIES_QUERY_KEY = ["categories"] as const;
+export function categoriesQueryKey(workspaceId: string) {
+  return ["categories", workspaceId] as const;
+}
 
-function categoryQueryKey(type: CategoryType | undefined) {
-  return [...CATEGORIES_QUERY_KEY, type ?? "all"] as const;
+export function categoryListKey(workspaceId: string, type: CategoryType | undefined) {
+  return [...categoriesQueryKey(workspaceId), type ?? "all"] as const;
 }
 
 /** Персональный объём категорий пользователя мал, поэтому одной страницы с максимальным limit достаточно. */
 export function useCategories(type: CategoryType | undefined) {
   const api = useApiClient();
+  const workspaceId = useCurrentWorkspaceId();
   return useQuery({
-    queryKey: categoryQueryKey(type),
+    queryKey: categoryListKey(workspaceId, type),
     queryFn: async ({ signal }) => {
-      const page = await api.get<Page<Category>>("/api/categories", {
+      const page = await api.get<Page<Category>>(`/api/workspaces/${workspaceId}/categories`, {
         query: { type, limit: 100, offset: 0 },
         signal,
       });

@@ -1,7 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCurrentWorkspaceId } from "@/features/workspaces/WorkspaceContext";
 import { useApiClient } from "@/shared/api";
-import { TRANSACTIONS_QUERY_KEY } from "./useTransactions";
-import { WALLET_BALANCES_QUERY_KEY } from "./useWalletBalances";
+import { transactionsQueryKey } from "./useTransactions";
+import { walletBalancesQueryKey } from "./useWalletBalances";
 
 /**
  * Без `meta: { silent: true }` и без `onError` — 409 у операций не возникает, но паттерн
@@ -10,11 +11,13 @@ import { WALLET_BALANCES_QUERY_KEY } from "./useWalletBalances";
 export function useDeleteTransaction() {
   const api = useApiClient();
   const queryClient = useQueryClient();
+  const workspaceId = useCurrentWorkspaceId();
   return useMutation({
-    mutationFn: (id: string) => api.delete<undefined>(`/api/transactions/${id}`),
+    mutationFn: (id: string) =>
+      api.delete<undefined>(`/api/workspaces/${workspaceId}/transactions/${id}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: TRANSACTIONS_QUERY_KEY });
-      queryClient.invalidateQueries({ queryKey: WALLET_BALANCES_QUERY_KEY });
+      queryClient.invalidateQueries({ queryKey: transactionsQueryKey(workspaceId) });
+      queryClient.invalidateQueries({ queryKey: walletBalancesQueryKey(workspaceId) });
     },
   });
 }

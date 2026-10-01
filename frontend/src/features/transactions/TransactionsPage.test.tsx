@@ -5,6 +5,7 @@ import dayjs from "dayjs";
 import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it } from "vitest";
+import { WorkspaceContext } from "@/features/workspaces/WorkspaceContext";
 import { ApiError, ApiClientProvider } from "@/shared/api";
 import { createQueryClient } from "@/shared/errors";
 import { ToastProvider } from "@/shared/ui";
@@ -12,6 +13,8 @@ import { type FakeHandler, FakeApiClient } from "@/test/FakeApiClient";
 import { createToastSpy } from "@/test/toastSpy";
 import { DEFAULT_PAGE_SIZE } from "./useTransactions";
 import { TransactionsPage } from "./TransactionsPage";
+
+const TEST_WORKSPACE_ID = "workspace-1";
 
 const WALLETS = [
   {
@@ -105,12 +108,18 @@ function page(
 
 function withFixtures(handler: FakeHandler): FakeHandler {
   return (request) => {
-    if (request.path === "/api/wallets") return page(WALLETS, { limit: 100 });
+    if (request.path === `/api/workspaces/${TEST_WORKSPACE_ID}/wallets`)
+      return page(WALLETS, { limit: 100 });
     if (request.path === "/api/currencies") return page(CURRENCIES, { limit: 100 });
-    if (request.path === "/api/categories") {
+    if (request.path === `/api/workspaces/${TEST_WORKSPACE_ID}/categories`) {
       const type = request.query?.type as string | undefined;
       const items = type ? CATEGORIES.filter((c) => c.type === type) : CATEGORIES;
       return page(items, { limit: 100 });
+    }
+    // `WalletRateCard` — отдельный, не связанный с этими тестами запрос; нейтральный ответ по умолчанию не даёт
+    // ему упасть там, где сами тесты его не проверяют (проверяется отдельно в `WalletRateCard.test.tsx`).
+    if (request.path.endsWith("/rates")) {
+      return { target_currency_id: "", rates: [], unrated_currency_ids: [] };
     }
     return handler(request);
   };
@@ -123,14 +132,16 @@ function setup(handler: FakeHandler) {
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>
       <ApiClientProvider client={api}>
-        <ToastProvider>
-          <MemoryRouter initialEntries={["/transactions"]}>
-            <Routes>
-              <Route path="/transactions" element={children} />
-              <Route path="/transfers" element={<div>Раздел переводов</div>} />
-            </Routes>
-          </MemoryRouter>
-        </ToastProvider>
+        <WorkspaceContext.Provider value={TEST_WORKSPACE_ID}>
+          <ToastProvider>
+            <MemoryRouter initialEntries={["/transactions"]}>
+              <Routes>
+                <Route path="/transactions" element={children} />
+                <Route path="/transfers" element={<div>Раздел переводов</div>} />
+              </Routes>
+            </MemoryRouter>
+          </ToastProvider>
+        </WorkspaceContext.Provider>
       </ApiClientProvider>
     </QueryClientProvider>
   );
@@ -138,7 +149,7 @@ function setup(handler: FakeHandler) {
 }
 
 function transactionsRequests(api: FakeApiClient) {
-  return api.requests.filter((r) => r.path === "/api/transactions");
+  return api.requests.filter((r) => r.path === `/api/workspaces/${TEST_WORKSPACE_ID}/transactions`);
 }
 
 /**
@@ -367,7 +378,7 @@ describe("TransactionsPage", () => {
 
   it("карточка баланса показывается только при конкретном фильтре «Кошелёк»", async () => {
     const { api, wrapper } = setup((request) => {
-      if (request.path.startsWith("/api/wallets/") && request.path.endsWith("/balances")) {
+      if (request.path.endsWith("/balances")) {
         return [{ currency_id: "cur1", balance: "100.00" }];
       }
       return page(TRANSACTIONS);
@@ -405,8 +416,15 @@ describe("TransactionsPage", () => {
   it("сквозной сценарий: создание убирает EmptyState, редактирование обновляет карточку, удаление возвращает к EmptyState", async () => {
     let items: unknown[] = [];
     const handler: FakeHandler = (request) => {
-      if (request.path === "/api/transactions" && request.method === "GET") return page(items);
-      if (request.path === "/api/transactions" && request.method === "POST") {
+      if (
+        request.path === `/api/workspaces/${TEST_WORKSPACE_ID}/transactions` &&
+        request.method === "GET"
+      )
+        return page(items);
+      if (
+        request.path === `/api/workspaces/${TEST_WORKSPACE_ID}/transactions` &&
+        request.method === "POST"
+      ) {
         const body = request.body as {
           wallet_id: string;
           category_id: string;
@@ -425,7 +443,10 @@ describe("TransactionsPage", () => {
         items = [created];
         return created;
       }
-      if (request.path === "/api/transactions/new1" && request.method === "PUT") {
+      if (
+        request.path === `/api/workspaces/${TEST_WORKSPACE_ID}/transactions/new1` &&
+        request.method === "PUT"
+      ) {
         const body = request.body as { currency_id: string; amount: string };
         const updated = {
           ...(items[0] as Record<string, unknown>),
@@ -434,7 +455,10 @@ describe("TransactionsPage", () => {
         items = [updated];
         return updated;
       }
-      if (request.path === "/api/transactions/new1" && request.method === "DELETE") {
+      if (
+        request.path === `/api/workspaces/${TEST_WORKSPACE_ID}/transactions/new1` &&
+        request.method === "DELETE"
+      ) {
         items = [];
         return undefined;
       }
@@ -479,8 +503,15 @@ describe("TransactionsPage", () => {
   it("успешная мутация операции перезапрашивает баланс открытой карточки выбранного кошелька", async () => {
     let items: unknown[] = [];
     const handler: FakeHandler = (request) => {
-      if (request.path === "/api/transactions" && request.method === "GET") return page(items);
-      if (request.path === "/api/transactions" && request.method === "POST") {
+      if (
+        request.path === `/api/workspaces/${TEST_WORKSPACE_ID}/transactions` &&
+        request.method === "GET"
+      )
+        return page(items);
+      if (
+        request.path === `/api/workspaces/${TEST_WORKSPACE_ID}/transactions` &&
+        request.method === "POST"
+      ) {
         const body = request.body as {
           wallet_id: string;
           category_id: string;
@@ -530,8 +561,15 @@ describe("TransactionsPage", () => {
     // непустом списке (design.md, YAGNI), поэтому сценарий стартует с уже существующей операции.
     let items: unknown[] = [...TRANSACTIONS];
     const handler: FakeHandler = (request) => {
-      if (request.path === "/api/transactions" && request.method === "GET") return page(items);
-      if (request.path === "/api/transactions/topups" && request.method === "POST") {
+      if (
+        request.path === `/api/workspaces/${TEST_WORKSPACE_ID}/transactions` &&
+        request.method === "GET"
+      )
+        return page(items);
+      if (
+        request.path === `/api/workspaces/${TEST_WORKSPACE_ID}/transactions/topups` &&
+        request.method === "POST"
+      ) {
         const body = request.body as {
           wallet_id: string;
           category_id: string;

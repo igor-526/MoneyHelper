@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import dayjs from "dayjs";
 import type { ReactNode } from "react";
 import { describe, expect, it } from "vitest";
+import { WorkspaceContext } from "@/features/workspaces/WorkspaceContext";
 import { ApiError, ApiClientProvider } from "@/shared/api";
 import { createQueryClient } from "@/shared/errors";
 import { ToastProvider } from "@/shared/ui";
@@ -11,6 +12,8 @@ import { type FakeHandler, FakeApiClient } from "@/test/FakeApiClient";
 import { createToastSpy } from "@/test/toastSpy";
 import { DEFAULT_PAGE_SIZE } from "./useTransfers";
 import { TransfersPage } from "./TransfersPage";
+
+const TEST_WORKSPACE_ID = "workspace-1";
 
 const WALLETS = [
   {
@@ -67,7 +70,8 @@ function defaultTransfersHandler(overrides: Partial<{ total: number }> = {}): Fa
 
 function withFixtures(handler: FakeHandler): FakeHandler {
   return (request) => {
-    if (request.path === "/api/wallets") return page(WALLETS, { limit: 100 });
+    if (request.path === `/api/workspaces/${TEST_WORKSPACE_ID}/wallets`)
+      return page(WALLETS, { limit: 100 });
     if (request.path === "/api/currencies") return page(CURRENCIES, { limit: 100 });
     return handler(request);
   };
@@ -80,7 +84,9 @@ function setup(handler: FakeHandler) {
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>
       <ApiClientProvider client={api}>
-        <ToastProvider>{children}</ToastProvider>
+        <WorkspaceContext.Provider value={TEST_WORKSPACE_ID}>
+          <ToastProvider>{children}</ToastProvider>
+        </WorkspaceContext.Provider>
       </ApiClientProvider>
     </QueryClientProvider>
   );
@@ -88,7 +94,7 @@ function setup(handler: FakeHandler) {
 }
 
 function transfersRequests(api: FakeApiClient) {
-  return api.requests.filter((r) => r.path === "/api/transfers");
+  return api.requests.filter((r) => r.path === `/api/workspaces/${TEST_WORKSPACE_ID}/transfers`);
 }
 
 async function chooseFromDropdown(combobox: HTMLElement, optionLabel: string) {
@@ -211,8 +217,15 @@ describe("TransfersPage", () => {
   it("сквозной сценарий: создание убирает EmptyState, редактирование обновляет карточку, удаление возвращает к EmptyState", async () => {
     let items: unknown[] = [];
     const handler: FakeHandler = (request) => {
-      if (request.path === "/api/transfers" && request.method === "GET") return page(items);
-      if (request.path === "/api/transfers" && request.method === "POST") {
+      if (
+        request.path === `/api/workspaces/${TEST_WORKSPACE_ID}/transfers` &&
+        request.method === "GET"
+      )
+        return page(items);
+      if (
+        request.path === `/api/workspaces/${TEST_WORKSPACE_ID}/transfers` &&
+        request.method === "POST"
+      ) {
         const body = request.body as {
           from_wallet_id: string;
           to_wallet_id: string;
@@ -229,13 +242,19 @@ describe("TransfersPage", () => {
         items = [created];
         return created;
       }
-      if (request.path === "/api/transfers/new1" && request.method === "PUT") {
+      if (
+        request.path === `/api/workspaces/${TEST_WORKSPACE_ID}/transfers/new1` &&
+        request.method === "PUT"
+      ) {
         const body = request.body as { amount: string };
         const updated = { ...(items[0] as Record<string, unknown>), amount: body.amount };
         items = [updated];
         return updated;
       }
-      if (request.path === "/api/transfers/new1" && request.method === "DELETE") {
+      if (
+        request.path === `/api/workspaces/${TEST_WORKSPACE_ID}/transfers/new1` &&
+        request.method === "DELETE"
+      ) {
         items = [];
         return undefined;
       }

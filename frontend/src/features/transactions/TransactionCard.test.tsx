@@ -4,12 +4,15 @@ import userEvent from "@testing-library/user-event";
 import dayjs from "dayjs";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { WorkspaceContext } from "@/features/workspaces/WorkspaceContext";
 import { ApiClientProvider } from "@/shared/api";
 import { createQueryClient } from "@/shared/errors";
 import { type FakeHandler, FakeApiClient } from "@/test/FakeApiClient";
 import { createToastSpy } from "@/test/toastSpy";
 import type { Transaction } from "./Transaction";
 import { TransactionCard } from "./TransactionCard";
+
+const TEST_WORKSPACE_ID = "workspace-1";
 
 const CURRENCY_CODE_BY_ID = new Map([
   ["cur1", "USD"],
@@ -22,6 +25,7 @@ const TRANSACTION: Transaction = {
   category_id: "c1",
   legs: [{ currency_id: "cur1", amount: "150.00" }],
   occurred_at: "2026-03-05T12:30:00Z",
+  comment: null,
   created_at: "2026-03-05T12:30:00Z",
   updated_at: null,
 };
@@ -40,7 +44,9 @@ function setup(handler: FakeHandler) {
   const client = createQueryClient(createToastSpy());
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>
-      <ApiClientProvider client={api}>{children}</ApiClientProvider>
+      <ApiClientProvider client={api}>
+        <WorkspaceContext.Provider value={TEST_WORKSPACE_ID}>{children}</WorkspaceContext.Provider>
+      </ApiClientProvider>
     </QueryClientProvider>
   );
   return { api, wrapper };
@@ -68,6 +74,40 @@ describe("TransactionCard", () => {
     expect(
       screen.getByText(dayjs(TRANSACTION.occurred_at).format("DD.MM.YYYY HH:mm")),
     ).toBeInTheDocument();
+  });
+
+  it("отображает комментарий, если он задан", () => {
+    const { wrapper } = setup(() => undefined);
+    render(
+      <TransactionCard
+        transaction={{ ...TRANSACTION, comment: "Серый рюкзак" }}
+        walletName="Наличные"
+        category={{ name: "Зарплата", icon: "banknote", type: "income" }}
+        currencyCodeById={CURRENCY_CODE_BY_ID}
+        onEdit={vi.fn()}
+      />,
+      { wrapper },
+    );
+
+    expect(screen.getByText("Серый рюкзак")).toBeInTheDocument();
+  });
+
+  it("не рендерит строку комментария, если он не задан", () => {
+    const { wrapper } = setup(() => undefined);
+    const { container } = render(
+      <TransactionCard
+        transaction={TRANSACTION}
+        walletName="Наличные"
+        category={{ name: "Зарплата", icon: "banknote", type: "income" }}
+        currencyCodeById={CURRENCY_CODE_BY_ID}
+        onEdit={vi.fn()}
+      />,
+      { wrapper },
+    );
+
+    // Комментарий — единственный необязательный текстовый блок карточки; проверяем количество
+    // `Typography.Text[type=secondary]`, а не конкретный текст, которого по определению нет.
+    expect(container.querySelectorAll(".ant-typography-secondary")).toHaveLength(2);
   });
 
   it("отображает список строк с суммами всех валют при нескольких ногах", () => {
@@ -170,7 +210,11 @@ describe("TransactionCard", () => {
 
     await waitFor(() =>
       expect(
-        api.requests.some((r) => r.method === "DELETE" && r.path === "/api/transactions/t1"),
+        api.requests.some(
+          (r) =>
+            r.method === "DELETE" &&
+            r.path === `/api/workspaces/${TEST_WORKSPACE_ID}/transactions/t1`,
+        ),
       ).toBe(true),
     );
   });
@@ -194,7 +238,11 @@ describe("TransactionCard", () => {
 
     await waitFor(() =>
       expect(
-        api.requests.some((r) => r.method === "DELETE" && r.path === "/api/transactions/t2"),
+        api.requests.some(
+          (r) =>
+            r.method === "DELETE" &&
+            r.path === `/api/workspaces/${TEST_WORKSPACE_ID}/transactions/t2`,
+        ),
       ).toBe(true),
     );
   });

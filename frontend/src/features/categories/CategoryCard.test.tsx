@@ -3,12 +3,15 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { WorkspaceContext } from "@/features/workspaces/WorkspaceContext";
 import { ApiClientProvider } from "@/shared/api";
 import { createQueryClient } from "@/shared/errors";
 import { type FakeHandler, FakeApiClient } from "@/test/FakeApiClient";
 import { createToastSpy } from "@/test/toastSpy";
 import type { Category } from "./Category";
 import { CategoryCard } from "./CategoryCard";
+
+const TEST_WORKSPACE_ID = "workspace-1";
 
 const INCOME: Category = {
   id: "5",
@@ -33,7 +36,9 @@ function setup(handler: FakeHandler) {
   const client = createQueryClient(createToastSpy());
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>
-      <ApiClientProvider client={api}>{children}</ApiClientProvider>
+      <ApiClientProvider client={api}>
+        <WorkspaceContext.Provider value={TEST_WORKSPACE_ID}>{children}</WorkspaceContext.Provider>
+      </ApiClientProvider>
     </QueryClientProvider>
   );
   return { api, wrapper };
@@ -68,7 +73,7 @@ describe("CategoryCard", () => {
     expect(onEdit).toHaveBeenCalledWith(INCOME);
   });
 
-  it("подтверждение в Popconfirm вызывает DELETE /api/categories/{id}", async () => {
+  it("подтверждение в Popconfirm вызывает DELETE /api/workspaces/{workspace_id}/categories/{id}", async () => {
     const { api, wrapper } = setup(() => undefined);
     render(<CategoryCard category={INCOME} onEdit={vi.fn()} />, { wrapper });
 
@@ -78,7 +83,10 @@ describe("CategoryCard", () => {
 
     await waitFor(() =>
       expect(
-        api.requests.some((r) => r.method === "DELETE" && r.path === "/api/categories/5"),
+        api.requests.some(
+          (r) =>
+            r.method === "DELETE" && r.path === `/api/workspaces/${TEST_WORKSPACE_ID}/categories/5`,
+        ),
       ).toBe(true),
     );
   });

@@ -1,19 +1,23 @@
 import { useQuery } from "@tanstack/react-query";
+import { useCurrentWorkspaceId } from "@/features/workspaces/WorkspaceContext";
 import { useApiClient } from "@/shared/api";
 import type { AnalyticsFilters, AnalyticsResult } from "./Analytics";
 
-export const ANALYTICS_QUERY_KEY = ["analytics"] as const;
+export function analyticsQueryKey(workspaceId: string) {
+  return ["analytics", workspaceId] as const;
+}
 
 /** `enabled: filters !== null` — то же обобщение паттерна `useWalletBalances(walletId)` (016) на составной вход:
  *  запрос не выполняется, пока не заполнены все обязательные поля. */
 export function useAnalytics(filters: AnalyticsFilters | null) {
   const api = useApiClient();
+  const workspaceId = useCurrentWorkspaceId();
   return useQuery({
-    queryKey: [...ANALYTICS_QUERY_KEY, filters],
+    queryKey: [...analyticsQueryKey(workspaceId), filters],
     queryFn: ({ signal }) =>
       // Ненулевое утверждение `filters!` безопасно: `enabled` ниже гарантирует, что TanStack Query никогда не
       // вызовет `queryFn` при `filters === null`.
-      api.get<AnalyticsResult>("/api/analytics", {
+      api.get<AnalyticsResult>(`/api/workspaces/${workspaceId}/analytics`, {
         query: {
           display_currency: filters!.displayCurrencyId,
           date_from: filters!.dateFrom,

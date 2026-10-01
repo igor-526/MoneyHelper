@@ -3,6 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { WorkspaceContext } from "@/features/workspaces/WorkspaceContext";
 import { ApiError, ApiClientProvider } from "@/shared/api";
 import { createQueryClient } from "@/shared/errors";
 import { ToastProvider } from "@/shared/ui";
@@ -12,6 +13,8 @@ import { createToastSpy } from "@/test/toastSpy";
 import { setMedia } from "@/test/matchMedia";
 import type { Wallet } from "./Wallet";
 import { WalletForm } from "./WalletForm";
+
+const TEST_WORKSPACE_ID = "workspace-1";
 
 const CURRENCIES_PAGE = {
   items: [
@@ -46,7 +49,9 @@ function setup(handler: FakeHandler) {
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>
       <ApiClientProvider client={api}>
-        <ToastProvider>{children}</ToastProvider>
+        <WorkspaceContext.Provider value={TEST_WORKSPACE_ID}>
+          <ToastProvider>{children}</ToastProvider>
+        </WorkspaceContext.Provider>
       </ApiClientProvider>
     </QueryClientProvider>
   );
@@ -85,7 +90,7 @@ describe("WalletForm", () => {
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(api.requests.at(-1)).toMatchObject({
       method: "POST",
-      path: "/api/wallets",
+      path: `/api/workspaces/${TEST_WORKSPACE_ID}/wallets`,
       body: { name: "Новый кошелёк", icon: "wallet", currency_ids: ["1"] },
     });
     expect(await screen.findByText("Кошелёк создан")).toBeInTheDocument();
@@ -108,7 +113,7 @@ describe("WalletForm", () => {
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(api.requests.at(-1)).toMatchObject({
       method: "PUT",
-      path: "/api/wallets/5",
+      path: `/api/workspaces/${TEST_WORKSPACE_ID}/wallets/5`,
       body: { name: "Обновлённый", icon: "wallet", currency_ids: ["1"] },
     });
     expect(await screen.findByText("Кошелёк обновлён")).toBeInTheDocument();

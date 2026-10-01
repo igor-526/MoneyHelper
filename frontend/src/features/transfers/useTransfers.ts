@@ -1,9 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
+import { useCurrentWorkspaceId } from "@/features/workspaces/WorkspaceContext";
 import { useApiClient } from "@/shared/api";
 import type { Page } from "@/shared/api";
 import type { Transfer } from "./Transfer";
 
-export const TRANSFERS_QUERY_KEY = ["transfers"] as const;
 export const DEFAULT_PAGE_SIZE = 20;
 
 export interface TransferFilters {
@@ -17,8 +17,12 @@ interface Pagination {
   limit: number;
 }
 
-function transfersQueryKey(filters: TransferFilters, pagination: Pagination) {
-  return [...TRANSFERS_QUERY_KEY, { ...filters, ...pagination }] as const;
+export function transfersQueryKey(workspaceId: string) {
+  return ["transfers", workspaceId] as const;
+}
+
+function transferListKey(workspaceId: string, filters: TransferFilters, pagination: Pagination) {
+  return [...transfersQueryKey(workspaceId), { ...filters, ...pagination }] as const;
 }
 
 /**
@@ -27,10 +31,11 @@ function transfersQueryKey(filters: TransferFilters, pagination: Pagination) {
  */
 export function useTransfers(filters: TransferFilters, pagination: Pagination) {
   const api = useApiClient();
+  const workspaceId = useCurrentWorkspaceId();
   return useQuery({
-    queryKey: transfersQueryKey(filters, pagination),
+    queryKey: transferListKey(workspaceId, filters, pagination),
     queryFn: ({ signal }) =>
-      api.get<Page<Transfer>>("/api/transfers", {
+      api.get<Page<Transfer>>(`/api/workspaces/${workspaceId}/transfers`, {
         query: {
           wallet_id: filters.walletId,
           date_from: filters.dateFrom,

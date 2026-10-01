@@ -4,12 +4,15 @@ import userEvent from "@testing-library/user-event";
 import dayjs from "dayjs";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { WorkspaceContext } from "@/features/workspaces/WorkspaceContext";
 import { ApiClientProvider } from "@/shared/api";
 import { createQueryClient } from "@/shared/errors";
 import { type FakeHandler, FakeApiClient } from "@/test/FakeApiClient";
 import { createToastSpy } from "@/test/toastSpy";
 import type { Transfer } from "./Transfer";
 import { TransferCard } from "./TransferCard";
+
+const TEST_WORKSPACE_ID = "workspace-1";
 
 const TRANSFER: Transfer = {
   id: "t1",
@@ -27,7 +30,9 @@ function setup(handler: FakeHandler) {
   const client = createQueryClient(createToastSpy());
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>
-      <ApiClientProvider client={api}>{children}</ApiClientProvider>
+      <ApiClientProvider client={api}>
+        <WorkspaceContext.Provider value={TEST_WORKSPACE_ID}>{children}</WorkspaceContext.Provider>
+      </ApiClientProvider>
     </QueryClientProvider>
   );
   return { api, wrapper };
@@ -109,7 +114,10 @@ describe("TransferCard", () => {
 
     await waitFor(() =>
       expect(
-        api.requests.some((r) => r.method === "DELETE" && r.path === "/api/transfers/t1"),
+        api.requests.some(
+          (r) =>
+            r.method === "DELETE" && r.path === `/api/workspaces/${TEST_WORKSPACE_ID}/transfers/t1`,
+        ),
       ).toBe(true),
     );
   });

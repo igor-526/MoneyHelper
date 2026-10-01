@@ -4,7 +4,9 @@ import { describe, expect, it } from "vitest";
 import { ApiError } from "@/shared/api";
 import { FakeApiClient } from "@/test/FakeApiClient";
 import { renderApp } from "@/test/renderApp";
-import { AUTHENTICATED_USER } from "@/test/session";
+import { AUTHENTICATED_USER, DEFAULT_WORKSPACE } from "@/test/session";
+
+const WORKSPACES_PAGE = { items: [DEFAULT_WORKSPACE], total: 1, limit: 100, offset: 0 };
 
 async function fillAndSubmit(email: string, password: string) {
   await userEvent.type(screen.getByLabelText("Email"), email);
@@ -18,6 +20,7 @@ describe("LoginPage", () => {
       if (request.path === "/api/auth/me")
         throw new ApiError({ kind: "unauthorized", status: 401 });
       if (request.path === "/api/auth/login") return AUTHENTICATED_USER;
+      if (request.path === "/api/workspaces") return WORKSPACES_PAGE;
       return { status: "ok" };
     });
 

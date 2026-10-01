@@ -1,10 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import type { CategoryType } from "@/features/categories/Category";
+import { useCurrentWorkspaceId } from "@/features/workspaces/WorkspaceContext";
 import { useApiClient } from "@/shared/api";
 import type { Page } from "@/shared/api";
 import type { Transaction } from "./Transaction";
 
-export const TRANSACTIONS_QUERY_KEY = ["transactions"] as const;
 export const DEFAULT_PAGE_SIZE = 20;
 
 export interface TransactionFilters {
@@ -20,8 +20,16 @@ interface Pagination {
   limit: number;
 }
 
-function transactionsQueryKey(filters: TransactionFilters, pagination: Pagination) {
-  return [...TRANSACTIONS_QUERY_KEY, { ...filters, ...pagination }] as const;
+export function transactionsQueryKey(workspaceId: string) {
+  return ["transactions", workspaceId] as const;
+}
+
+function transactionListKey(
+  workspaceId: string,
+  filters: TransactionFilters,
+  pagination: Pagination,
+) {
+  return [...transactionsQueryKey(workspaceId), { ...filters, ...pagination }] as const;
 }
 
 /**
@@ -30,10 +38,11 @@ function transactionsQueryKey(filters: TransactionFilters, pagination: Paginatio
  */
 export function useTransactions(filters: TransactionFilters, pagination: Pagination) {
   const api = useApiClient();
+  const workspaceId = useCurrentWorkspaceId();
   return useQuery({
-    queryKey: transactionsQueryKey(filters, pagination),
+    queryKey: transactionListKey(workspaceId, filters, pagination),
     queryFn: ({ signal }) =>
-      api.get<Page<Transaction>>("/api/transactions", {
+      api.get<Page<Transaction>>(`/api/workspaces/${workspaceId}/transactions`, {
         query: {
           wallet_id: filters.walletId,
           category_id: filters.categoryId,

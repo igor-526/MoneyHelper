@@ -2,13 +2,16 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { WorkspaceContext } from "@/features/workspaces/WorkspaceContext";
 import { ApiError, ApiClientProvider } from "@/shared/api";
 import { createQueryClient } from "@/shared/errors";
 import { type FakeHandler, FakeApiClient } from "@/test/FakeApiClient";
 import { createToastSpy } from "@/test/toastSpy";
-import { TRANSACTIONS_QUERY_KEY } from "./useTransactions";
+import { transactionsQueryKey } from "./useTransactions";
 import { useDeleteTransaction } from "./useDeleteTransaction";
-import { WALLET_BALANCES_QUERY_KEY } from "./useWalletBalances";
+import { walletBalancesQueryKey } from "./useWalletBalances";
+
+const TEST_WORKSPACE_ID = "workspace-1";
 
 function setup(handler: FakeHandler) {
   const api = new FakeApiClient(handler);
@@ -19,7 +22,10 @@ function setup(handler: FakeHandler) {
     createElement(
       QueryClientProvider,
       { client },
-      createElement(ApiClientProvider, { client: api, children }),
+      createElement(ApiClientProvider, {
+        client: api,
+        children: createElement(WorkspaceContext.Provider, { value: TEST_WORKSPACE_ID, children }),
+      }),
     );
   return { api, toast, invalidateSpy, wrapper };
 }
@@ -34,9 +40,16 @@ describe("useDeleteTransaction", () => {
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(api.requests[0]).toMatchObject({ method: "DELETE", path: "/api/transactions/1" });
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: TRANSACTIONS_QUERY_KEY });
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: WALLET_BALANCES_QUERY_KEY });
+    expect(api.requests[0]).toMatchObject({
+      method: "DELETE",
+      path: `/api/workspaces/${TEST_WORKSPACE_ID}/transactions/1`,
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: transactionsQueryKey(TEST_WORKSPACE_ID),
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: walletBalancesQueryKey(TEST_WORKSPACE_ID),
+    });
   });
 
   it("ошибка не обрабатывается локально — показывается общим глобальным обработчиком", async () => {

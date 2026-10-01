@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { WorkspaceContext } from "@/features/workspaces/WorkspaceContext";
 import { ApiError, ApiClientProvider } from "@/shared/api";
 import { createQueryClient } from "@/shared/errors";
 import { ToastProvider } from "@/shared/ui";
@@ -11,6 +12,8 @@ import { type FakeHandler, FakeApiClient } from "@/test/FakeApiClient";
 import { createToastSpy } from "@/test/toastSpy";
 import { setMedia } from "@/test/matchMedia";
 import { TopupForm } from "./TopupForm";
+
+const TEST_WORKSPACE_ID = "workspace-1";
 
 const WALLETS = [
   {
@@ -53,9 +56,9 @@ function page(items: unknown[]) {
 
 function withFixtures(handler: FakeHandler): FakeHandler {
   return (request) => {
-    if (request.path === "/api/wallets") return page(WALLETS);
+    if (request.path === `/api/workspaces/${TEST_WORKSPACE_ID}/wallets`) return page(WALLETS);
     if (request.path === "/api/currencies") return page(CURRENCIES);
-    if (request.path === "/api/categories") {
+    if (request.path === `/api/workspaces/${TEST_WORKSPACE_ID}/categories`) {
       expect(request.query?.type).toBe("income");
       return page(INCOME_CATEGORIES);
     }
@@ -69,7 +72,9 @@ function setup(handler: FakeHandler) {
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>
       <ApiClientProvider client={api}>
-        <ToastProvider>{children}</ToastProvider>
+        <WorkspaceContext.Provider value={TEST_WORKSPACE_ID}>
+          <ToastProvider>{children}</ToastProvider>
+        </WorkspaceContext.Provider>
       </ApiClientProvider>
     </QueryClientProvider>
   );
@@ -118,7 +123,11 @@ describe("TopupForm", () => {
     await selectOption("Категория", "Зарплата");
 
     expect(
-      api.requests.some((r) => r.path === "/api/categories" && r.query?.type === "income"),
+      api.requests.some(
+        (r) =>
+          r.path === `/api/workspaces/${TEST_WORKSPACE_ID}/categories` &&
+          r.query?.type === "income",
+      ),
     ).toBe(true);
   });
 
@@ -147,7 +156,9 @@ describe("TopupForm", () => {
 
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     const request = api.requests.find(
-      (r) => r.method === "POST" && r.path === "/api/transactions/topups",
+      (r) =>
+        r.method === "POST" &&
+        r.path === `/api/workspaces/${TEST_WORKSPACE_ID}/transactions/topups`,
     );
     expect(request?.body).toMatchObject({
       wallet_id: "w1",
@@ -158,6 +169,40 @@ describe("TopupForm", () => {
       ],
     });
     expect(await screen.findByText("Пополнение создано")).toBeInTheDocument();
+  });
+
+  it("создание с комментарием: тело запроса содержит comment", async () => {
+    const CREATED = {
+      id: "1",
+      wallet_id: "w1",
+      category_id: "c1",
+      legs: [
+        { currency_id: "cur1", amount: "10" },
+        { currency_id: "cur2", amount: "20" },
+      ],
+      occurred_at: "2026-01-01T00:00:00Z",
+      comment: "Обмен в банке",
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: null,
+    };
+    const { api, wrapper } = setup(() => CREATED);
+    const onClose = vi.fn();
+    render(<TopupForm open onClose={onClose} />, { wrapper });
+
+    await selectOption("Кошелёк", "Мультивалютный");
+    await userEvent.type(await screen.findByLabelText("Сумма (USD)"), "10");
+    await userEvent.type(screen.getByLabelText("Сумма (RUB)"), "20");
+    await selectOption("Категория", "Зарплата");
+    await userEvent.type(screen.getByLabelText("Комментарий"), "Обмен в банке");
+    await userEvent.click(screen.getByRole("button", { name: "Создать" }));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    const request = api.requests.find(
+      (r) =>
+        r.method === "POST" &&
+        r.path === `/api/workspaces/${TEST_WORKSPACE_ID}/transactions/topups`,
+    );
+    expect(request?.body).toMatchObject({ comment: "Обмен в банке" });
   });
 
   it("текстовая ошибка бизнес-правила показывается toast без падения формы", async () => {

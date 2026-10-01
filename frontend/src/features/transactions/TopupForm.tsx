@@ -1,4 +1,4 @@
-import { Button, DatePicker, Drawer, Form, Modal, Select } from "antd";
+import { Button, DatePicker, Drawer, Form, Input, Modal, Select } from "antd";
 import type { Dayjs } from "dayjs";
 import { useEffect } from "react";
 import { useCategories } from "@/features/categories/useCategories";
@@ -22,6 +22,7 @@ interface TopupFormFields {
   category_id: string;
   amounts: Record<string, string>;
   occurred_at?: Dayjs;
+  comment?: string;
 }
 
 /** Осознанно узкий список — design.md, раздел «Обработка ошибок»: ошибки по конкретным ногам и текстовые
@@ -51,6 +52,7 @@ export function TopupForm({ open, onClose }: TopupFormProps) {
       category_id: undefined,
       amounts: {},
       occurred_at: undefined,
+      comment: undefined,
     });
   }, [open, form]);
 
@@ -69,6 +71,7 @@ export function TopupForm({ open, onClose }: TopupFormProps) {
         amount: fields.amounts[currencyId] ?? "",
       })),
       occurred_at: fields.occurred_at?.toISOString(),
+      comment: fields.comment,
     };
 
     const onError = (submitError: unknown) => {
@@ -129,6 +132,13 @@ export function TopupForm({ open, onClose }: TopupFormProps) {
       </Form.Item>
       <Form.Item name="occurred_at" label="Дата">
         <DatePicker showTime style={{ width: "100%" }} />
+      </Form.Item>
+      <Form.Item
+        name="comment"
+        label="Комментарий"
+        rules={[{ max: 1000, message: "Не более 1000 символов" }]}
+      >
+        <Input.TextArea rows={2} maxLength={1000} showCount />
       </Form.Item>
       <Form.Item style={{ marginBottom: 0 }}>
         <Button type="primary" htmlType="submit" block loading={createTopup.isPending}>

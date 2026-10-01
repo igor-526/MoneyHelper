@@ -64,6 +64,9 @@ export function TransactionCard({
             </Typography.Text>
           ))}
         </Flex>
+        {transaction.comment ? (
+          <Typography.Text type="secondary">{transaction.comment}</Typography.Text>
+        ) : null}
         <Typography.Text type="secondary">
           {dayjs(transaction.occurred_at).format("DD.MM.YYYY HH:mm")}
         </Typography.Text>

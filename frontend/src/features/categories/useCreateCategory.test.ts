@@ -2,12 +2,15 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { WorkspaceContext } from "@/features/workspaces/WorkspaceContext";
 import { ApiError, ApiClientProvider } from "@/shared/api";
 import { createQueryClient } from "@/shared/errors";
 import { type FakeHandler, FakeApiClient } from "@/test/FakeApiClient";
 import { createToastSpy } from "@/test/toastSpy";
-import { CATEGORIES_QUERY_KEY } from "./useCategories";
+import { categoriesQueryKey } from "./useCategories";
 import { useCreateCategory } from "./useCreateCategory";
+
+const TEST_WORKSPACE_ID = "workspace-1";
 
 function setup(handler: FakeHandler) {
   const api = new FakeApiClient(handler);
@@ -18,7 +21,10 @@ function setup(handler: FakeHandler) {
     createElement(
       QueryClientProvider,
       { client },
-      createElement(ApiClientProvider, { client: api, children }),
+      createElement(ApiClientProvider, {
+        client: api,
+        children: createElement(WorkspaceContext.Provider, { value: TEST_WORKSPACE_ID, children }),
+      }),
     );
   return { api, toast, invalidateSpy, wrapper };
 }
@@ -38,10 +44,10 @@ describe("useCreateCategory", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(api.requests[0]).toMatchObject({
       method: "POST",
-      path: "/api/categories",
+      path: `/api/workspaces/${TEST_WORKSPACE_ID}/categories`,
       body: VALUES,
     });
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: CATEGORIES_QUERY_KEY });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: categoriesQueryKey(TEST_WORKSPACE_ID) });
   });
 
   it("ошибка не вызывает глобальный toast сама по себе (silent)", async () => {

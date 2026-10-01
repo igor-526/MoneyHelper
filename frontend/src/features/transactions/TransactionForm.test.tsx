@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { WorkspaceContext } from "@/features/workspaces/WorkspaceContext";
 import { ApiError, ApiClientProvider } from "@/shared/api";
 import { createQueryClient } from "@/shared/errors";
 import { ToastProvider } from "@/shared/ui";
@@ -12,6 +13,8 @@ import { createToastSpy } from "@/test/toastSpy";
 import { setMedia } from "@/test/matchMedia";
 import type { Transaction } from "./Transaction";
 import { TransactionForm } from "./TransactionForm";
+
+const TEST_WORKSPACE_ID = "workspace-1";
 
 const WALLETS = [
   {
@@ -62,6 +65,7 @@ const TRANSACTION: Transaction = {
   category_id: "c2",
   legs: [{ currency_id: "cur2", amount: "25.00" }],
   occurred_at: "2026-02-01T10:00:00Z",
+  comment: null,
   created_at: "2026-02-01T10:00:00Z",
   updated_at: null,
 };
@@ -72,9 +76,9 @@ function page(items: unknown[]) {
 
 function withFixtures(handler: FakeHandler): FakeHandler {
   return (request) => {
-    if (request.path === "/api/wallets") return page(WALLETS);
+    if (request.path === `/api/workspaces/${TEST_WORKSPACE_ID}/wallets`) return page(WALLETS);
     if (request.path === "/api/currencies") return page(CURRENCIES);
-    if (request.path === "/api/categories") {
+    if (request.path === `/api/workspaces/${TEST_WORKSPACE_ID}/categories`) {
       const type = request.query?.type as string | undefined;
       const items = type ? CATEGORIES.filter((c) => c.type === type) : CATEGORIES;
       return page(items);
@@ -90,7 +94,9 @@ function setup(handler: FakeHandler) {
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>
       <ApiClientProvider client={api}>
-        <ToastProvider>{children}</ToastProvider>
+        <WorkspaceContext.Provider value={TEST_WORKSPACE_ID}>
+          <ToastProvider>{children}</ToastProvider>
+        </WorkspaceContext.Provider>
       </ApiClientProvider>
     </QueryClientProvider>
   );
@@ -150,12 +156,40 @@ describe("TransactionForm", () => {
     await userEvent.click(screen.getByRole("button", { name: "Создать" }));
 
     await waitFor(() => expect(onClose).toHaveBeenCalled());
-    const request = api.requests.find((r) => r.method === "POST" && r.path === "/api/transactions");
+    const request = api.requests.find(
+      (r) => r.method === "POST" && r.path === `/api/workspaces/${TEST_WORKSPACE_ID}/transactions`,
+    );
     expect(request).toMatchObject({
       body: { wallet_id: "w1", category_id: "c1", currency_id: "cur1", amount: "10" },
     });
     expect(request?.body).not.toHaveProperty("type");
     expect(await screen.findByText("Операция создана")).toBeInTheDocument();
+  });
+
+  it("создание с комментарием: тело запроса содержит comment", async () => {
+    const CREATED = {
+      id: "9",
+      wallet_id: "w1",
+      category_id: "c1",
+      legs: [{ currency_id: "cur1", amount: "10" }],
+      occurred_at: "2026-01-01T00:00:00Z",
+      comment: "Серый рюкзак",
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: null,
+    };
+    const { api, wrapper } = setup(() => CREATED);
+    const onClose = vi.fn();
+    render(<TransactionForm open onClose={onClose} />, { wrapper });
+
+    await fillMinimalIncomeForm();
+    await userEvent.type(screen.getByLabelText("Комментарий"), "Серый рюкзак");
+    await userEvent.click(screen.getByRole("button", { name: "Создать" }));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    const request = api.requests.find(
+      (r) => r.method === "POST" && r.path === `/api/workspaces/${TEST_WORKSPACE_ID}/transactions`,
+    );
+    expect(request).toMatchObject({ body: { comment: "Серый рюкзак" } });
   });
 
   it("создание расхода: успех добавляет операцию, тело запроса не содержит поле типа", async () => {
@@ -180,7 +214,9 @@ describe("TransactionForm", () => {
     await userEvent.click(screen.getByRole("button", { name: "Создать" }));
 
     await waitFor(() => expect(onClose).toHaveBeenCalled());
-    const request = api.requests.find((r) => r.method === "POST" && r.path === "/api/transactions");
+    const request = api.requests.find(
+      (r) => r.method === "POST" && r.path === `/api/workspaces/${TEST_WORKSPACE_ID}/transactions`,
+    );
     expect(request).toMatchObject({
       body: { wallet_id: "w1", category_id: "c2", currency_id: "cur2", amount: "5" },
     });
@@ -199,6 +235,27 @@ describe("TransactionForm", () => {
     expect(screen.getByLabelText("Сумма")).toHaveValue("25.00");
   });
 
+  it("редактирование: комментарий предзаполнен, пустой комментарий при сохранении очищает его", async () => {
+    const WITH_COMMENT = { ...TRANSACTION, comment: "Исходный комментарий" };
+    const CLEARED = { ...WITH_COMMENT, comment: null };
+    const { api, wrapper } = setup(() => CLEARED);
+    const onClose = vi.fn();
+    render(<TransactionForm open transaction={WITH_COMMENT} onClose={onClose} />, { wrapper });
+
+    await screen.findByText("Продукты");
+    expect(screen.getByLabelText("Комментарий")).toHaveValue("Исходный комментарий");
+
+    await userEvent.clear(screen.getByLabelText("Комментарий"));
+    await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    const request = api.requests.find(
+      (r) =>
+        r.method === "PUT" && r.path === `/api/workspaces/${TEST_WORKSPACE_ID}/transactions/t1`,
+    );
+    expect(request?.body).toMatchObject({ comment: "" });
+  });
+
   it("успешное редактирование вызывает PUT и закрывает форму", async () => {
     const UPDATED = { ...TRANSACTION, legs: [{ currency_id: "cur2", amount: "30.00" }] };
     const { api, wrapper } = setup(() => UPDATED);
@@ -213,7 +270,7 @@ describe("TransactionForm", () => {
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(api.requests.at(-1)).toMatchObject({
       method: "PUT",
-      path: "/api/transactions/t1",
+      path: `/api/workspaces/${TEST_WORKSPACE_ID}/transactions/t1`,
       body: { wallet_id: "w1", category_id: "c2", currency_id: "cur2", amount: "30.00" },
     });
     expect(await screen.findByText("Операция обновлена")).toBeInTheDocument();

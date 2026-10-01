@@ -2,11 +2,14 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { describe, expect, it } from "vitest";
+import { WorkspaceContext } from "@/features/workspaces/WorkspaceContext";
 import { ApiError, ApiClientProvider } from "@/shared/api";
 import { createQueryClient } from "@/shared/errors";
 import { type FakeHandler, FakeApiClient } from "@/test/FakeApiClient";
 import { createToastSpy } from "@/test/toastSpy";
 import { DEFAULT_PAGE_SIZE, useTransactions } from "./useTransactions";
+
+const TEST_WORKSPACE_ID = "workspace-1";
 
 function setup(handler: FakeHandler) {
   const api = new FakeApiClient(handler);
@@ -15,7 +18,10 @@ function setup(handler: FakeHandler) {
     createElement(
       QueryClientProvider,
       { client },
-      createElement(ApiClientProvider, { client: api, children }),
+      createElement(ApiClientProvider, {
+        client: api,
+        children: createElement(WorkspaceContext.Provider, { value: TEST_WORKSPACE_ID, children }),
+      }),
     );
   return { api, wrapper };
 }
@@ -48,7 +54,7 @@ describe("useTransactions", () => {
     expect(result.current.data).toEqual(page);
     expect(api.requests[0]).toMatchObject({
       method: "GET",
-      path: "/api/transactions",
+      path: `/api/workspaces/${TEST_WORKSPACE_ID}/transactions`,
       query: {
         wallet_id: undefined,
         category_id: undefined,

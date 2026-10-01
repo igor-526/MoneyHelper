@@ -2,11 +2,14 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { describe, expect, it } from "vitest";
+import { WorkspaceContext } from "@/features/workspaces/WorkspaceContext";
 import { ApiError, ApiClientProvider } from "@/shared/api";
 import { createQueryClient } from "@/shared/errors";
 import { type FakeHandler, FakeApiClient } from "@/test/FakeApiClient";
 import { createToastSpy } from "@/test/toastSpy";
 import { WalletBalanceCard } from "./WalletBalanceCard";
+
+const TEST_WORKSPACE_ID = "workspace-1";
 
 const CURRENCY_CODE_BY_ID = new Map([
   ["cur1", "USD"],
@@ -18,7 +21,9 @@ function setup(handler: FakeHandler) {
   const client = createQueryClient(createToastSpy());
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>
-      <ApiClientProvider client={api}>{children}</ApiClientProvider>
+      <ApiClientProvider client={api}>
+        <WorkspaceContext.Provider value={TEST_WORKSPACE_ID}>{children}</WorkspaceContext.Provider>
+      </ApiClientProvider>
     </QueryClientProvider>
   );
   return { api, wrapper };

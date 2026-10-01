@@ -4,12 +4,15 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { describe, expect, it } from "vitest";
 import { WalletBalanceCard } from "@/features/transactions/WalletBalanceCard";
+import { WorkspaceContext } from "@/features/workspaces/WorkspaceContext";
 import { ApiClientProvider } from "@/shared/api";
 import { createQueryClient } from "@/shared/errors";
 import { ToastProvider } from "@/shared/ui";
 import { type FakeHandler, FakeApiClient } from "@/test/FakeApiClient";
 import { createToastSpy } from "@/test/toastSpy";
 import { TransferForm } from "./TransferForm";
+
+const TEST_WORKSPACE_ID = "workspace-1";
 
 /**
  * Проверяет требование «Мутация перевода обновляет кэш балансов затронутых кошельков» (specs/frontend-transfers):
@@ -47,7 +50,7 @@ function page(items: unknown[]) {
 
 function withFixtures(handler: FakeHandler): FakeHandler {
   return (request) => {
-    if (request.path === "/api/wallets") return page(WALLETS);
+    if (request.path === `/api/workspaces/${TEST_WORKSPACE_ID}/wallets`) return page(WALLETS);
     if (request.path === "/api/currencies") return page(CURRENCIES);
     return handler(request);
   };
@@ -59,7 +62,9 @@ function setup(handler: FakeHandler) {
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>
       <ApiClientProvider client={api}>
-        <ToastProvider>{children}</ToastProvider>
+        <WorkspaceContext.Provider value={TEST_WORKSPACE_ID}>
+          <ToastProvider>{children}</ToastProvider>
+        </WorkspaceContext.Provider>
       </ApiClientProvider>
     </QueryClientProvider>
   );
@@ -107,7 +112,7 @@ describe("инвалидация баланса кошелька мутация�
       updated_at: null,
     };
     const { api, wrapper } = setup((request) => {
-      if (request.path === "/api/transfers") return CREATED;
+      if (request.path === `/api/workspaces/${TEST_WORKSPACE_ID}/transfers`) return CREATED;
       if (request.path.endsWith("/balances")) return [{ currency_id: "cur1", balance: "0.00" }];
       return undefined;
     });

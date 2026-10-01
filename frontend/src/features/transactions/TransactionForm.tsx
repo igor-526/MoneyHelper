@@ -1,4 +1,4 @@
-import { Button, DatePicker, Drawer, Form, Modal, Segmented, Select } from "antd";
+import { Button, DatePicker, Drawer, Form, Input, Modal, Segmented, Select } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import { useEffect } from "react";
 import type { CategoryType } from "@/features/categories/Category";
@@ -30,9 +30,17 @@ interface TransactionFormFields {
   currency_id: string;
   amount: string;
   occurred_at?: Dayjs;
+  comment?: string;
 }
 
-const KNOWN_FIELDS = ["wallet_id", "category_id", "currency_id", "amount", "occurred_at"] as const;
+const KNOWN_FIELDS = [
+  "wallet_id",
+  "category_id",
+  "currency_id",
+  "amount",
+  "occurred_at",
+  "comment",
+] as const;
 
 const TYPE_OPTIONS: { label: string; value: CategoryType }[] = [
   { label: "Доход", value: "income" },
@@ -77,6 +85,7 @@ export function TransactionForm({ open, onClose, transaction }: TransactionFormP
         currency_id: leg?.currency_id,
         amount: leg?.amount ?? "",
         occurred_at: dayjs(transaction.occurred_at),
+        comment: transaction.comment ?? undefined,
       });
     } else {
       form.setFieldsValue({
@@ -86,6 +95,7 @@ export function TransactionForm({ open, onClose, transaction }: TransactionFormP
         currency_id: undefined,
         amount: "",
         occurred_at: undefined,
+        comment: undefined,
       });
     }
   }, [open, transaction, allCategories, form]);
@@ -105,6 +115,7 @@ export function TransactionForm({ open, onClose, transaction }: TransactionFormP
       currency_id: fields.currency_id,
       amount: fields.amount,
       occurred_at: fields.occurred_at?.toISOString(),
+      comment: fields.comment,
     };
 
     const onError = (submitError: unknown) => {
@@ -175,6 +186,13 @@ export function TransactionForm({ open, onClose, transaction }: TransactionFormP
       </Form.Item>
       <Form.Item name="occurred_at" label="Дата">
         <DatePicker showTime style={{ width: "100%" }} />
+      </Form.Item>
+      <Form.Item
+        name="comment"
+        label="Комментарий"
+        rules={[{ max: 1000, message: "Не более 1000 символов" }]}
+      >
+        <Input.TextArea rows={2} maxLength={1000} showCount />
       </Form.Item>
       <Form.Item style={{ marginBottom: 0 }}>
         <Button type="primary" htmlType="submit" block loading={mutation.isPending}>

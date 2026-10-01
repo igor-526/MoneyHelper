@@ -1,5 +1,6 @@
 import { Button, Card, Flex, Typography } from "antd";
 import { Link } from "react-router-dom";
+import { WorkspacesSection } from "@/features/workspaces/WorkspacesSection";
 import { ChangePasswordForm } from "./ChangePasswordForm";
 import { InstallSection } from "./InstallSection";
 import { LogoutButton } from "./LogoutButton";
@@ -11,6 +12,9 @@ export function SettingsPage() {
       <Typography.Title level={3} style={{ margin: 0 }}>
         Настройки
       </Typography.Title>
+      <Card title="Воркспейсы">
+        <WorkspacesSection />
+      </Card>
       <Card title="Тема оформления">
         <ThemeSwitch />
       </Card>
