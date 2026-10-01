@@ -1,0 +1,27 @@
+name: moneyhelper
+
+services:
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8201}
+    container_name: moneyhelper-frontend
+    restart: always
+    expose:
+      - "80"
+    ports:
+      - "${EXPOSE_FE_PORT}:80"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - moneyhelper_network
+
+networks:
+  moneyhelper_network:
+    external: true

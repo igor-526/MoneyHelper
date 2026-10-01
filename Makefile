@@ -9,12 +9,14 @@ export COMPOSE_IGNORE_ORPHANS = true
 # Docker compose files
 COMPOSE_BE = $(COMPOSE_DIR)/docker-compose.be.yml
 COMPOSE_INFRA = $(COMPOSE_DIR)/docker-compose.infra.yml
+COMPOSE_FE = $(COMPOSE_DIR)/docker-compose.fe.yml
 
 # Docker compose commands
 DC_BE = docker compose -f $(COMPOSE_BE)
 DC_INFRA = docker compose -f $(COMPOSE_INFRA)
+DC_FE = docker compose -f $(COMPOSE_FE)
 
-.PHONY: network down be-down infra-down ps be-build be-build-nc infra be be-attach test test-unit test-smoke test-infra lint format quality be-makemigrations be-migrate fe-install fe-dev fe-build fe-preview fe-test fe-lint fe-format fe-pwa-assets
+.PHONY: network down be-down infra-down fe-docker-down ps be-build be-build-nc fe-docker-build fe-docker-build-nc infra be be-attach fe-docker test test-unit test-smoke test-infra lint format quality be-makemigrations be-migrate fe-install fe-dev fe-build fe-preview fe-test fe-lint fe-format fe-pwa-assets
 
 # =====NETWORK=====
 
@@ -32,6 +34,15 @@ be-build-nc:
 	@echo "Building backend image without build cache..."
 	$(DC_BE) build --no-cache
 
+# Контейнер frontend (nginx + production-сборка) — отдельно от fe-build (локальная сборка dist/ без Docker)
+fe-docker-build:
+	@echo "Building frontend image..."
+	$(DC_FE) --env-file frontend/.env build
+
+fe-docker-build-nc:
+	@echo "Building frontend image without build cache..."
+	$(DC_FE) --env-file frontend/.env build --no-cache
+
 # =====RUN COMMANDS=====
 
 # Infrastructure
@@ -45,6 +56,10 @@ be: network
 be-attach: network
 	$(DC_BE) --env-file backend/.env up
 
+# Frontend (контейнер, порт из EXPOSE_FE_PORT в frontend/.env — по умолчанию 3200)
+fe-docker: network
+	$(DC_FE) --env-file frontend/.env up -d
+
 # =====STOP / STATUS=====
 
 # Остановка не удаляет тома: данные БД сохраняются
@@ -54,7 +69,10 @@ be-down:
 infra-down:
 	$(DC_INFRA) --env-file $(COMPOSE_DIR)/.env down
 
-down: be-down infra-down
+fe-docker-down:
+	$(DC_FE) --env-file frontend/.env down
+
+down: be-down infra-down fe-docker-down
 
 ps:
 	docker ps -a --filter label=com.docker.compose.project=moneyhelper
