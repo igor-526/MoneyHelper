@@ -1,0 +1,23 @@
+# Deployment settings
+name: moneyhelper-frontend
+componentsLabel: frontend
+replicaCount: 1
+namespace: moneyhelper
+
+# App settings
+containerPort: 80
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# Ingress settings
+url: moneyhelper.devil-on-the.wheel.ru
+
+# Image settings
+image: ghcr.io/igor-526/moneyhelper-frontend
+imagePullSecertName: ghcr-secret-moneyhelper
+imageTag: latest

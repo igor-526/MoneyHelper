@@ -54,3 +54,18 @@ jobs:
             ${{ env.IMAGE }}:${{ github.sha }}
           build-args: |
             VITE_API_URL=${{ secrets.VITE_API_URL }}
+
+      - name: Set up kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > ~/.kube/config
+    
+      - uses: azure/setup-helm@v4
+
+      - name: Deploy
+        run: |
+          helm upgrade --install moneyhelper-frontend .helm/ \
+            --namespace moneyhelper \
+            --create-namespace \
+            --set imageTag=${{ github.sha }} \
+            --wait

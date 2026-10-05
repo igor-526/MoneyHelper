@@ -1,0 +1,28 @@
+# Deployment settings
+name: moneyhelper-backend
+componentsLabel: backend
+replicaCount: 1
+namespace: moneyhelper
+
+# Ingress settings
+url: api.moneyhelper.devil-on-the.wheel.ru
+
+# App settings
+secretName: moneyhelper-backend-secret
+containerPort: 8000
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# Image settings
+image: ghcr.io/igor-526/moneyhelper-backend
+imagePullSecertName: ghcr-secret-moneyhelper
+imageTag: latest
+
+migration:
+  command: ["uv", "run", "alembic", "-c", "alembic.ini", "upgrade", "head"]
+  workingDir: /app/src
