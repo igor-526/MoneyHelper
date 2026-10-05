@@ -22,20 +22,20 @@ spec:
           ports:
             - name: http
               containerPort: {{ .Values.containerPort }}
-            {{- if .Values.metrics.enabled }}
-            - name: metrics
-              containerPort: {{ .Values.metrics.metricsPort }}
-            {{- end }}
           resources: {{ .Values.resources | toYaml | nindent 12 }}
           envFrom:
             - secretRef:
                 name: {{ .Values.secretName }}
-          livenessProbe:
-            exec:
-              command:
-                - curl
-                - --fail
-                - http://localhost:8000/health
-            initialDelaySeconds: 120
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
             periodSeconds: 10
-            failureThreshold: 1
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
