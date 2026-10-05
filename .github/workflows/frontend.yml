@@ -50,6 +50,7 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
+          context: frontend
           push: true
           tags: |
             ${{ env.IMAGE }}:latest
