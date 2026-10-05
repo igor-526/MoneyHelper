@@ -11,12 +11,12 @@ env:
 jobs:
   test:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
-
-      - name: Change directory
-        run: cd frontend
 
       - name: Install deps
         run: npm install
@@ -47,7 +47,7 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
-          context: .
+          context: frontend
           push: true
           tags: |
             ${{ env.IMAGE }}:latest
