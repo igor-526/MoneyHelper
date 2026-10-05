@@ -33,7 +33,7 @@ export const routes: RouteObject[] = [
     ),
     errorElement: <RouteErrorElement />,
     children: [
-      { index: true, element: <Navigate to="/wallets" replace /> },
+      { index: true, element: <Navigate to="/transactions" replace /> },
       { path: "wallets", element: <WalletsPage /> },
       { path: "categories", element: <CategoriesPage /> },
       { path: "transactions", element: <TransactionsPage /> },

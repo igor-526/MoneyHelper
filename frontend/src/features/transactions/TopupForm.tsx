@@ -1,4 +1,4 @@
-import { Button, DatePicker, Drawer, Form, Input, Modal, Select } from "antd";
+import { Button, Drawer, Form, Input, Modal, Select } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import { useEffect } from "react";
 import { useCategories } from "@/features/categories/useCategories";
@@ -13,6 +13,8 @@ import {
   useCurrencies,
   useIsMobile,
   useToast,
+  DayPicker,
+  toOccurredAt,
 } from "@/shared/ui";
 import type { TopupFormValues, Transaction } from "./Transaction";
 import { useCreateTopup } from "./useCreateTopup";
@@ -73,7 +75,7 @@ export function TopupForm({ open, onClose, transaction }: TopupFormProps) {
     form.setFieldsValue({
       wallet_id: transaction?.wallet_id,
       category_id: transaction?.category_id,
-      occurred_at: transaction ? dayjs(transaction.occurred_at) : undefined,
+      occurred_at: dayjs(transaction?.occurred_at),
       comment: transaction?.comment ?? undefined,
     });
     form.setFieldValue(
@@ -99,7 +101,7 @@ export function TopupForm({ open, onClose, transaction }: TopupFormProps) {
         // Сумма каждой валюты обязательна (`rules: required`); `?? ""` — только для типа.
         amount: fields.amounts[currencyId] ?? "",
       })),
-      occurred_at: fields.occurred_at?.toISOString(),
+      occurred_at: fields.occurred_at && toOccurredAt(fields.occurred_at, transaction?.occurred_at),
       comment: fields.comment,
     };
 
@@ -120,7 +122,7 @@ export function TopupForm({ open, onClose, transaction }: TopupFormProps) {
     const onSuccess = () => {
       toast.success(transaction ? "Пополнение обновлено" : "Пополнение создано");
       if (!transaction && fields.add_another) {
-        form.setFieldsValue({ occurred_at: undefined, comment: undefined });
+        form.setFieldsValue({ occurred_at: dayjs(), comment: undefined });
         form.setFieldValue("amounts", {});
         return;
       }
@@ -174,7 +176,7 @@ export function TopupForm({ open, onClose, transaction }: TopupFormProps) {
         />
       </Form.Item>
       <Form.Item name="occurred_at" label="Дата">
-        <DatePicker showTime style={{ width: "100%" }} />
+        <DayPicker />
       </Form.Item>
       <Form.Item
         name="comment"

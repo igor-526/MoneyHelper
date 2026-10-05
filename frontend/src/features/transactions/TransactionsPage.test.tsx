@@ -172,13 +172,19 @@ async function chooseFromDropdown(combobox: HTMLElement, optionLabel: string) {
   await userEvent.click(within(dropdown).getByText(optionLabel));
 }
 
-/** Фильтр страницы: combobox ищется по `aria-label` внутри активной панели. */
+async function openFilters(): Promise<HTMLElement> {
+  await userEvent.click(screen.getByRole("button", { name: "Фильтры" }));
+  return screen.findByRole("dialog");
+}
+
+/** Один фильтр через окно фильтров: открыть, выбрать значение, «Применить». */
 async function chooseOption(comboboxName: string, optionLabel: string) {
-  const panel = activePanel();
+  const dialog = await openFilters();
   await chooseFromDropdown(
-    within(panel).getByRole("combobox", { name: comboboxName }),
+    within(dialog).getByRole("combobox", { name: comboboxName }),
     optionLabel,
   );
+  await userEvent.click(within(dialog).getByRole("button", { name: "Применить" }));
 }
 
 function activePanel(): HTMLElement {
@@ -255,7 +261,8 @@ describe("TransactionsPage", () => {
     render(<TransactionsPage />, { wrapper });
     await screen.findByText("Зарплата");
 
-    await userEvent.click(within(activePanel()).getByRole("combobox", { name: "Категория" }));
+    const dialog = await openFilters();
+    await userEvent.click(within(dialog).getByRole("combobox", { name: "Категория" }));
     const dropdown = await waitFor(() => {
       const nodes = document.querySelectorAll(".ant-select-dropdown-list");
       if (nodes.length === 0) throw new Error("не отрисован");
@@ -276,9 +283,93 @@ describe("TransactionsPage", () => {
     await screen.findByText("Продукты");
     await openTab("Пополнение");
 
-    const panel = activePanel();
-    const wallet = within(panel).getByRole("combobox", { name: "Кошелёк" });
+    const dialog = await openFilters();
+    const wallet = within(dialog).getByRole("combobox", { name: "Кошелёк" });
     expect(wallet.closest(".ant-select-content")).toHaveAttribute("title", "Карта");
+  });
+
+  it("на основном экране фильтров нет, они открываются кнопкой на панели вкладок", async () => {
+    const { wrapper } = setup(defaultHandler());
+    render(<TransactionsPage />, { wrapper });
+    await screen.findByText("Зарплата");
+
+    expect(screen.queryByRole("combobox", { name: "Кошелёк" })).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("Дата от")).not.toBeInTheDocument();
+
+    const dialog = await openFilters();
+    expect(within(dialog).getByRole("combobox", { name: "Кошелёк" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("combobox", { name: "Категория" })).toBeInTheDocument();
+    expect(within(dialog).getByPlaceholderText("Дата от")).toBeInTheDocument();
+  });
+
+  it("изменения в окне применяются только по «Применить»", async () => {
+    const { api, wrapper } = setup(defaultHandler());
+    render(<TransactionsPage />, { wrapper });
+    await screen.findByText("Зарплата");
+    const before = requestsTo(api, TOPUPS_PATH).length;
+
+    const dialog = await openFilters();
+    await chooseFromDropdown(within(dialog).getByRole("combobox", { name: "Кошелёк" }), "Карта");
+    expect(requestsTo(api, TOPUPS_PATH)).toHaveLength(before);
+
+    await userEvent.click(within(dialog).getByRole("button", { name: "Применить" }));
+
+    await waitFor(() =>
+      expect(requestsTo(api, TOPUPS_PATH).at(-1)).toMatchObject({ query: { wallet_id: "w2" } }),
+    );
+  });
+
+  it("закрытие окна без «Применить» не меняет фильтры", async () => {
+    const { api, wrapper } = setup(defaultHandler());
+    render(<TransactionsPage />, { wrapper });
+    await screen.findByText("Зарплата");
+
+    const dialog = await openFilters();
+    await chooseFromDropdown(within(dialog).getByRole("combobox", { name: "Кошелёк" }), "Карта");
+    await userEvent.click(within(dialog).getByRole("button", { name: /Close|Закрыть/ }));
+
+    expect(requestsTo(api, TOPUPS_PATH).every((r) => r.query?.wallet_id === undefined)).toBe(true);
+  });
+
+  it("«Сбросить» снимает все фильтры вкладки и закрывает окно", async () => {
+    const { api, wrapper } = setup(defaultHandler());
+    render(<TransactionsPage />, { wrapper });
+    await screen.findByText("Зарплата");
+    await chooseOption("Кошелёк", "Карта");
+    await waitFor(() =>
+      expect(requestsTo(api, TOPUPS_PATH).at(-1)).toMatchObject({ query: { wallet_id: "w2" } }),
+    );
+
+    const dialog = await openFilters();
+    await userEvent.click(within(dialog).getByRole("button", { name: "Сбросить" }));
+
+    await waitFor(() =>
+      expect(requestsTo(api, TOPUPS_PATH).at(-1)?.query?.wallet_id).toBeUndefined(),
+    );
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("на кнопке фильтров виден счётчик заданных фильтров", async () => {
+    const { wrapper } = setup(defaultHandler());
+    render(<TransactionsPage />, { wrapper });
+    await screen.findByText("Зарплата");
+    await chooseOption("Кошелёк", "Карта");
+
+    const badge = screen
+      .getByRole("button", { name: "Фильтры" })
+      .closest(".ant-badge") as HTMLElement;
+    expect(await within(badge).findByText("1")).toBeInTheDocument();
+  });
+
+  it("у вкладки «Перевод» в окне фильтров нет категории", async () => {
+    const { wrapper } = setup(defaultHandler(), "/transactions?tab=transfer");
+    render(<TransactionsPage />, { wrapper });
+    await screen.findByText("Переводов пока нет");
+
+    const dialog = await openFilters();
+
+    expect(within(dialog).getByRole("combobox", { name: "Кошелёк" })).toBeInTheDocument();
+    expect(within(dialog).queryByRole("combobox", { name: "Категория" })).not.toBeInTheDocument();
   });
 
   it("ссылки «Переводы» нет, переводы — третья вкладка «Перевод»", async () => {
@@ -396,12 +487,16 @@ describe("TransactionsPage", () => {
     render(<TransactionsPage />, { wrapper });
     await screen.findByText("Продукты");
 
-    await chooseOption("Категория", "Продукты");
-    const panel = activePanel();
-    await userEvent.type(within(panel).getByPlaceholderText("Дата от"), "2026-03-01");
+    const dialog = await openFilters();
+    await chooseFromDropdown(
+      within(dialog).getByRole("combobox", { name: "Категория" }),
+      "Продукты",
+    );
+    await userEvent.type(within(dialog).getByPlaceholderText("Дата от"), "2026-03-01");
     await userEvent.keyboard("{Enter}");
-    await userEvent.type(within(panel).getByPlaceholderText("Дата до"), "2026-03-10");
+    await userEvent.type(within(dialog).getByPlaceholderText("Дата до"), "2026-03-10");
     await userEvent.keyboard("{Enter}");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Применить" }));
 
     await waitFor(() =>
       expect(requestsTo(api, EXPENSES_PATH).at(-1)).toMatchObject({

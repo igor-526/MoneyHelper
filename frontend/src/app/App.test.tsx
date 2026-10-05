@@ -77,22 +77,22 @@ describe("маршруты", () => {
     expect(await screen.findByRole("heading", { name: "Вход" })).toBeInTheDocument();
   });
 
-  it("с активной сессией /login ведёт на «Кошельки»", async () => {
+  it("с активной сессией /login ведёт на «Операции»", async () => {
     const { router } = renderApp({ apiClient: authedApi(), path: "/login" });
-    expect(await screen.findByText("Кошельков пока нет")).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe("/wallets");
+    expect(await screen.findByRole("heading", { name: "Операции" })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/transactions");
   });
 
-  it("корневой маршрут / ведёт на «Кошельки»", async () => {
+  it("корневой маршрут / ведёт на «Операции»", async () => {
     const { router } = renderApp({ apiClient: authedApi(), path: "/" });
-    expect(await screen.findByText("Кошельков пока нет")).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe("/wallets");
+    expect(await screen.findByRole("heading", { name: "Операции" })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe("/transactions");
   });
 
   it("приложение не обращается к /health и не показывает статус backend", async () => {
     const api = authedApi();
     renderApp({ apiClient: api });
-    await screen.findByText("Кошельков пока нет");
+    await screen.findByRole("heading", { name: "Операции" });
     expect(api.requests.some((r) => r.path === "/health")).toBe(false);
     expect(screen.queryByText(/Backend/)).not.toBeInTheDocument();
   });

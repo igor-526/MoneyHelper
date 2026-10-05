@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
@@ -12,6 +13,7 @@ class LegRecord(BaseModel):
     currency_id: UUID
     amount: Decimal
     category_type: CategoryType
+    occurred_at: datetime
 
 
 class TopupLegRecord(BaseModel):

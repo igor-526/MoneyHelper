@@ -60,8 +60,8 @@ class InMemoryTransactionRepository:
         self,
         workspace_id: UUID,
         *,
-        date_from: datetime,
-        date_to: datetime,
+        date_from: datetime | None,
+        date_to: datetime | None,
         wallet_id: UUID | None,
         category_id: UUID | None,
         currency_id: UUID | None,
@@ -71,7 +71,9 @@ class InMemoryTransactionRepository:
         for transaction in self._transactions.values():
             if transaction.workspace_id != workspace_id:
                 continue
-            if transaction.occurred_at < date_from or transaction.occurred_at > date_to:
+            if date_from is not None and transaction.occurred_at < date_from:
+                continue
+            if date_to is not None and transaction.occurred_at > date_to:
                 continue
             if wallet_id is not None and transaction.wallet_id != wallet_id:
                 continue
@@ -92,6 +94,7 @@ class InMemoryTransactionRepository:
                         currency_id=leg.currency_id,
                         amount=leg.amount,
                         category_type=category.type,
+                        occurred_at=transaction.occurred_at,
                     )
                 )
         return records

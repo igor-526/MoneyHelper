@@ -26,11 +26,11 @@ describe("адаптивный layout", () => {
     expect(navItems.length).toBeLessThanOrEqual(5);
   });
 
-  it("навигация: «Кошельки», «Операции», «Аналитика», «Настройки», без «Главная»", async () => {
+  it("навигация: «Операции», «Кошельки», «Аналитика», «Настройки», без «Главная»", async () => {
     const { navItems } = await import("../navItems");
     expect(navItems.map((item) => item.label)).toEqual([
-      "Кошельки",
       "Операции",
+      "Кошельки",
       "Аналитика",
       "Настройки",
     ]);
@@ -48,10 +48,10 @@ describe("адаптивный layout", () => {
     }
   });
 
-  it("пункт «Операции» расположен сразу после «Кошельки»", async () => {
+  it("пункт «Операции» расположен перед «Кошельки»", async () => {
     const { navItems } = await import("../navItems");
     const labels = navItems.map((item) => item.label);
-    expect(labels.indexOf("Операции")).toBe(labels.indexOf("Кошельки") + 1);
+    expect(labels.indexOf("Операции")).toBe(labels.indexOf("Кошельки") - 1);
   });
 
   it("контент на телефоне лежит в main, отдельном от фиксированной панели", async () => {
@@ -82,10 +82,10 @@ describe("адаптивный layout", () => {
     expect(screen.getByRole("tab", { name: "Перевод" })).toHaveAttribute("aria-selected", "true");
   });
 
-  it("пункт «Аналитика» расположен между «Операции» и «Настройки», «Настройки» остаётся последним", async () => {
+  it("пункт «Аналитика» расположен между «Кошельки» и «Настройки», «Настройки» остаётся последним", async () => {
     const { navItems } = await import("../navItems");
     const labels = navItems.map((item) => item.label);
-    expect(labels.indexOf("Аналитика")).toBe(labels.indexOf("Операции") + 1);
+    expect(labels.indexOf("Аналитика")).toBe(labels.indexOf("Кошельки") + 1);
     expect(labels.indexOf("Настройки")).toBe(labels.indexOf("Аналитика") + 1);
     expect(labels.at(-1)).toBe("Настройки");
   });

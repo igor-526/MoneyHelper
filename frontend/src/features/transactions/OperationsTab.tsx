@@ -1,24 +1,15 @@
-import { Button, DatePicker, Flex, Pagination, Select, Spin } from "antd";
-import type { Dayjs } from "dayjs";
+import { Button, Flex, Pagination, Spin } from "antd";
 import { useMemo, useState } from "react";
 import { useCategories } from "@/features/categories/useCategories";
 import { useWallets } from "@/features/wallets/useWallets";
 import { WalletRateCard } from "@/features/wallets/WalletRateCard";
 import { EmptyState, useCurrencies, useIsMobile } from "@/shared/ui";
 import type { Transaction } from "./Transaction";
+import type { OperationFiltersState } from "./operationFilters";
 import type { TransactionKind } from "./operationKinds";
 import { TransactionCard } from "./TransactionCard";
 import { DEFAULT_PAGE_SIZE } from "./useTransactions";
 import { WalletBalanceCard } from "./WalletBalanceCard";
-
-const ALL_WALLETS = "all";
-const ALL_CATEGORIES = "all";
-
-interface FiltersState {
-  walletId: string | undefined; // undefined = «Все кошельки»
-  categoryId: string | undefined; // undefined = «Все категории»
-  dateRange: [Dayjs, Dayjs] | null; // null = без фильтра
-}
 
 interface FormState {
   open: boolean;
@@ -27,16 +18,17 @@ interface FormState {
 
 export interface OperationsTabProps {
   kind: TransactionKind;
+  filters: OperationFiltersState;
 }
 
-/** Содержимое одной вкладки: фильтры, баланс/курс, список, пагинация и форма вида операции. */
-export function OperationsTab({ kind }: OperationsTabProps) {
-  const [filters, setFilters] = useState<FiltersState>({
-    walletId: undefined,
-    categoryId: undefined,
-    dateRange: null,
-  });
+/** Содержимое одной вкладки: баланс/курс, список, пагинация и форма вида операции; фильтры приходят со страницы. */
+export function OperationsTab({ kind, filters }: OperationsTabProps) {
   const [page, setPage] = useState(1); // 1-based, antd Pagination
+  const [pageFilters, setPageFilters] = useState(filters);
+  if (pageFilters !== filters) {
+    setPageFilters(filters);
+    setPage(1); // любая смена фильтров сбрасывает пагинацию на первую страницу
+  }
   const [formState, setFormState] = useState<FormState>({ open: false });
   const isMobile = useIsMobile();
 
@@ -66,15 +58,6 @@ export function OperationsTab({ kind }: OperationsTabProps) {
   );
   const selectedWallet = wallets.find((wallet) => wallet.id === filters.walletId);
 
-  const updateFilters = (patch: Partial<FiltersState>) => {
-    setFilters((prev) => ({ ...prev, ...patch }));
-    setPage(1); // любая смена фильтра сбрасывает пагинацию на первую страницу
-  };
-
-  const handleDateRangeChange = (dates: [Dayjs | null, Dayjs | null] | null) => {
-    updateFilters({ dateRange: dates && dates[0] && dates[1] ? [dates[0], dates[1]] : null });
-  };
-
   const openCreate = () => setFormState({ open: true });
   const openEdit = (transaction: Transaction) => setFormState({ open: true, transaction });
   const closeForm = () => setFormState({ open: false });
@@ -84,37 +67,6 @@ export function OperationsTab({ kind }: OperationsTabProps) {
 
   return (
     <Flex vertical gap={16}>
-      <Flex vertical gap={12}>
-        <Select
-          aria-label="Кошелёк"
-          value={filters.walletId ?? ALL_WALLETS}
-          options={[
-            { value: ALL_WALLETS, label: "Все кошельки" },
-            ...wallets.map((wallet) => ({ value: wallet.id, label: wallet.name })),
-          ]}
-          onChange={(value) =>
-            updateFilters({ walletId: value === ALL_WALLETS ? undefined : value })
-          }
-        />
-        <Select
-          aria-label="Категория"
-          value={filters.categoryId ?? ALL_CATEGORIES}
-          options={[
-            { value: ALL_CATEGORIES, label: "Все категории" },
-            ...categories.map((category) => ({ value: category.id, label: category.name })),
-          ]}
-          onChange={(value) =>
-            updateFilters({ categoryId: value === ALL_CATEGORIES ? undefined : value })
-          }
-        />
-        <DatePicker.RangePicker
-          aria-label="Диапазон дат"
-          placeholder={["Дата от", "Дата до"]}
-          value={filters.dateRange}
-          onChange={handleDateRangeChange}
-          allowClear
-        />
-      </Flex>
       {filters.walletId !== undefined ? (
         <WalletBalanceCard walletId={filters.walletId} currencyCodeById={currencyCodeById} />
       ) : null}

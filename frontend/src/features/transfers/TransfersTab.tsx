@@ -1,6 +1,6 @@
-import { Button, DatePicker, Flex, Pagination, Select, Spin } from "antd";
-import type { Dayjs } from "dayjs";
+import { Button, Flex, Pagination, Spin } from "antd";
 import { useMemo, useState } from "react";
+import type { OperationFiltersState } from "@/features/transactions/operationFilters";
 import { useWallets } from "@/features/wallets/useWallets";
 import { EmptyState, useCurrencies, useIsMobile } from "@/shared/ui";
 import { TransferCard } from "./TransferCard";
@@ -8,22 +8,19 @@ import { TransferForm } from "./TransferForm";
 import type { Transfer } from "./Transfer";
 import { DEFAULT_PAGE_SIZE, useTransfers } from "./useTransfers";
 
-const ALL_WALLETS = "all";
-
-interface FiltersState {
-  walletId: string | undefined; // undefined = «Все кошельки»
-  dateRange: [Dayjs, Dayjs] | null; // null = без фильтра
-}
-
 interface FormState {
   open: boolean;
   transfer?: Transfer;
 }
 
-/** Содержимое вкладки «Перевод» страницы «Операции»: фильтры, список, пагинация и форма переводов. */
-export function TransfersTab() {
-  const [filters, setFilters] = useState<FiltersState>({ walletId: undefined, dateRange: null });
+/** Содержимое вкладки «Перевод» страницы «Операции»: список, пагинация и форма переводов; фильтры приходят со страницы. */
+export function TransfersTab({ filters }: { filters: OperationFiltersState }) {
   const [page, setPage] = useState(1); // 1-based, antd Pagination
+  const [pageFilters, setPageFilters] = useState(filters);
+  if (pageFilters !== filters) {
+    setPageFilters(filters);
+    setPage(1); // любая смена фильтров сбрасывает пагинацию на первую страницу
+  }
   const [formState, setFormState] = useState<FormState>({ open: false });
   const isMobile = useIsMobile();
 
@@ -50,19 +47,6 @@ export function TransfersTab() {
     return map;
   }, [currencies]);
 
-  const updateFilters = (patch: Partial<FiltersState>) => {
-    setFilters((prev) => ({ ...prev, ...patch }));
-    setPage(1); // любая смена фильтра сбрасывает пагинацию на первую страницу
-  };
-
-  const handleDateRangeChange = (dates: [Dayjs | null, Dayjs | null] | null) => {
-    if (dates && dates[0] && dates[1]) {
-      updateFilters({ dateRange: [dates[0], dates[1]] });
-    } else {
-      updateFilters({ dateRange: null });
-    }
-  };
-
   const openCreate = () => setFormState({ open: true, transfer: undefined });
   const openEdit = (transfer: Transfer) => setFormState({ open: true, transfer });
   const closeForm = () => setFormState({ open: false });
@@ -72,26 +56,6 @@ export function TransfersTab() {
 
   return (
     <Flex vertical gap={16}>
-      <Flex vertical gap={12}>
-        <Select
-          aria-label="Кошелёк"
-          value={filters.walletId ?? ALL_WALLETS}
-          options={[
-            { value: ALL_WALLETS, label: "Все кошельки" },
-            ...wallets.map((wallet) => ({ value: wallet.id, label: wallet.name })),
-          ]}
-          onChange={(value) =>
-            updateFilters({ walletId: value === ALL_WALLETS ? undefined : value })
-          }
-        />
-        <DatePicker.RangePicker
-          aria-label="Диапазон дат"
-          placeholder={["Дата от", "Дата до"]}
-          value={filters.dateRange}
-          onChange={handleDateRangeChange}
-          allowClear
-        />
-      </Flex>
       {transfersQuery.isPending ? (
         <Spin />
       ) : items.length === 0 ? (

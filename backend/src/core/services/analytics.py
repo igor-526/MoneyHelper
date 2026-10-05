@@ -1,5 +1,5 @@
 from collections import defaultdict
-from datetime import datetime
+from datetime import date, datetime, tzinfo
 from decimal import ROUND_HALF_UP, Decimal
 from uuid import UUID
 
@@ -36,15 +36,16 @@ class AnalyticsService:
         workspace_id: UUID,
         *,
         display_currency_id: UUID | None,
-        date_from: datetime,
-        date_to: datetime,
+        date_from: datetime | None,
+        date_to: datetime | None,
         group_by: str,
         wallet_id: UUID | None,
         category_id: UUID | None,
         currency_id: UUID | None,
         type: CategoryType | None,
-    ) -> tuple[UUID, list[tuple[UUID, Decimal, Decimal]], list[UUID]]:
-        if date_from > date_to:
+        tz: tzinfo,
+    ) -> tuple[UUID, list[tuple[UUID | date, Decimal, Decimal]], list[UUID]]:
+        if date_from is not None and date_to is not None and date_from > date_to:
             raise ClientError(INVALID_DATE_RANGE_MESSAGE)
         workspace_currency_id = await self._workspaces.get_currency_id(workspace_id)
         if workspace_currency_id is None:
@@ -73,7 +74,7 @@ class AnalyticsService:
         )
 
         dimension = DIMENSIONS[group_by]
-        totals: dict[UUID, list[Decimal]] = defaultdict(lambda: [Decimal("0"), Decimal("0")])
+        totals: dict[UUID | date, list[Decimal]] = defaultdict(lambda: [Decimal("0"), Decimal("0")])
         unconverted: set[UUID] = set()
         for leg in legs:
             if leg.currency_id == display_currency_id:
@@ -83,7 +84,7 @@ class AnalyticsService:
             else:
                 unconverted.add(leg.currency_id)
                 continue
-            bucket = totals[dimension.key(leg)]
+            bucket = totals[dimension.key(leg, tz)]
             bucket[0 if leg.category_type is CategoryType.INCOME else 1] += converted
 
         buckets = [
@@ -93,7 +94,12 @@ class AnalyticsService:
         return display_currency_id, buckets, sorted(unconverted, key=str)
 
     async def _average_rates(
-        self, workspace_id: UUID, target_id: UUID, source_ids: set[UUID], date_from: datetime, date_to: datetime
+        self,
+        workspace_id: UUID,
+        target_id: UUID,
+        source_ids: set[UUID],
+        date_from: datetime | None,
+        date_to: datetime | None,
     ) -> dict[UUID, Decimal]:
         topup_legs = await self._transactions.list_topup_legs_for_rates(
             workspace_id, wallet_id=None, date_from=date_from, date_to=date_to

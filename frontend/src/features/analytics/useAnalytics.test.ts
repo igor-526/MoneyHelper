@@ -7,7 +7,6 @@ import { ApiError, ApiClientProvider } from "@/shared/api";
 import { createQueryClient } from "@/shared/errors";
 import { type FakeHandler, FakeApiClient } from "@/test/FakeApiClient";
 import { createToastSpy } from "@/test/toastSpy";
-import type { AnalyticsFilters } from "./Analytics";
 import { useAnalytics } from "./useAnalytics";
 
 const TEST_WORKSPACE_ID = "workspace-1";
@@ -30,137 +29,56 @@ function setup(handler: FakeHandler) {
 
 const RESULT = {
   display_currency_id: "cur1",
-  buckets: [{ group_key: "w1", income: "100.00", expense: "0" }],
+  buckets: [{ group_key: "c1", income: "0", expense: "100.00" }],
   unconverted_currencies: [],
 };
 
-const BASE_FILTERS: AnalyticsFilters = {
-  displayCurrencyId: "cur1",
-  dateFrom: "2026-01-01T00:00:00.000Z",
-  dateTo: "2026-01-31T23:59:59.999Z",
-  groupBy: "wallet",
-};
-
 describe("useAnalytics", () => {
-  it("filters === null: запрос не выполняется", async () => {
+  it("без диапазона запрос идёт без date_from/date_to и без display_currency", async () => {
     const { api, wrapper } = setup(() => RESULT);
 
-    const { result } = renderHook(() => useAnalytics(null), { wrapper });
-
-    expect(result.current.isPending).toBe(true);
-    expect(result.current.fetchStatus).toBe("idle");
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(api.requests).toHaveLength(0);
-  });
-
-  it("заполнены все обязательные поля: запрос выполняется с корректными query-параметрами", async () => {
-    const { api, wrapper } = setup(() => RESULT);
-
-    const { result } = renderHook(() => useAnalytics(BASE_FILTERS), { wrapper });
+    const { result } = renderHook(() => useAnalytics({ groupBy: "category", type: "expense" }), {
+      wrapper,
+    });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual(RESULT);
     expect(api.requests[0]).toMatchObject({
       method: "GET",
       path: `/api/workspaces/${TEST_WORKSPACE_ID}/analytics`,
-      query: {
-        display_currency: "cur1",
-        date_from: "2026-01-01T00:00:00.000Z",
-        date_to: "2026-01-31T23:59:59.999Z",
-        group_by: "wallet",
-        wallet_id: undefined,
-        category_id: undefined,
-        currency_id: undefined,
-        type: undefined,
-      },
+      query: { group_by: "category", type: "expense" },
     });
-  });
-
-  it("без валюты отображения параметр display_currency не передаётся", async () => {
-    const { api, wrapper } = setup(() => RESULT);
-
-    renderHook(() => useAnalytics({ ...BASE_FILTERS, displayCurrencyId: undefined }), { wrapper });
-
-    await waitFor(() => expect(api.requests).toHaveLength(1));
     expect(api.requests[0]?.query?.display_currency).toBeUndefined();
   });
 
-  it("каждый сужающий фильтр по отдельности передаётся в query", async () => {
-    const { api: walletApi, wrapper: walletWrapper } = setup(() => RESULT);
-    renderHook(() => useAnalytics({ ...BASE_FILTERS, walletId: "w1" }), {
-      wrapper: walletWrapper,
-    });
-    await waitFor(() => expect(walletApi.requests).toHaveLength(1));
-    expect(walletApi.requests[0]).toMatchObject({ query: { wallet_id: "w1" } });
-
-    const { api: categoryApi, wrapper: categoryWrapper } = setup(() => RESULT);
-    renderHook(() => useAnalytics({ ...BASE_FILTERS, categoryId: "c1" }), {
-      wrapper: categoryWrapper,
-    });
-    await waitFor(() => expect(categoryApi.requests).toHaveLength(1));
-    expect(categoryApi.requests[0]).toMatchObject({ query: { category_id: "c1" } });
-
-    const { api: currencyApi, wrapper: currencyWrapper } = setup(() => RESULT);
-    renderHook(() => useAnalytics({ ...BASE_FILTERS, currencyId: "cur2" }), {
-      wrapper: currencyWrapper,
-    });
-    await waitFor(() => expect(currencyApi.requests).toHaveLength(1));
-    expect(currencyApi.requests[0]).toMatchObject({ query: { currency_id: "cur2" } });
-
-    const { api: typeApi, wrapper: typeWrapper } = setup(() => RESULT);
-    renderHook(() => useAnalytics({ ...BASE_FILTERS, type: "income" }), { wrapper: typeWrapper });
-    await waitFor(() => expect(typeApi.requests).toHaveLength(1));
-    expect(typeApi.requests[0]).toMatchObject({ query: { type: "income" } });
-  });
-
-  it("комбинация сужающих фильтров: все параметры передаются одновременно", async () => {
+  it("диапазон передаётся как date_from/date_to", async () => {
     const { api, wrapper } = setup(() => RESULT);
 
-    renderHook(
+    const { result } = renderHook(
       () =>
         useAnalytics({
-          ...BASE_FILTERS,
-          walletId: "w1",
-          categoryId: "c1",
-          currencyId: "cur2",
+          groupBy: "category",
           type: "expense",
+          dateFrom: "2026-01-01T00:00:00.000Z",
+          dateTo: "2026-01-31T23:59:59.999Z",
         }),
       { wrapper },
     );
 
-    await waitFor(() => expect(api.requests).toHaveLength(1));
-    expect(api.requests[0]).toMatchObject({
-      query: {
-        wallet_id: "w1",
-        category_id: "c1",
-        currency_id: "cur2",
-        type: "expense",
-      },
-    });
-  });
-
-  it("отсутствующий сужающий фильтр не передаётся (undefined)", async () => {
-    const { api, wrapper } = setup(() => RESULT);
-
-    renderHook(() => useAnalytics(BASE_FILTERS), { wrapper });
-
-    await waitFor(() => expect(api.requests).toHaveLength(1));
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(api.requests[0]?.query).toMatchObject({
-      wallet_id: undefined,
-      category_id: undefined,
-      currency_id: undefined,
-      type: undefined,
+      date_from: "2026-01-01T00:00:00.000Z",
+      date_to: "2026-01-31T23:59:59.999Z",
     });
   });
 
-  it("ошибка запроса не подавляется (без meta.silent)", async () => {
+  it("ошибка показывается toast общим обработчиком", async () => {
     const { toast, wrapper } = setup(() => {
       throw new ApiError({ kind: "not_found", status: 404, detail: "Не найдено" });
     });
 
-    const { result } = renderHook(() => useAnalytics(BASE_FILTERS), { wrapper });
+    renderHook(() => useAnalytics({ groupBy: "category", type: "expense" }), { wrapper });
 
-    await waitFor(() => expect(result.current.isError).toBe(true));
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Не найдено"));
   });
 });

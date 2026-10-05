@@ -11,6 +11,7 @@ import { ToastProvider } from "@/shared/ui";
 import { type FakeHandler, FakeApiClient } from "@/test/FakeApiClient";
 import { createToastSpy } from "@/test/toastSpy";
 import { DEFAULT_PAGE_SIZE } from "./useTransfers";
+import { EMPTY_OPERATION_FILTERS } from "@/features/transactions/operationFilters";
 import { TransfersTab } from "./TransfersTab";
 
 const TEST_WORKSPACE_ID = "workspace-1";
@@ -106,10 +107,6 @@ async function chooseFromDropdown(combobox: HTMLElement, optionLabel: string) {
   await userEvent.click(within(dropdown).getByText(optionLabel));
 }
 
-async function chooseOption(comboboxName: string, optionLabel: string) {
-  await chooseFromDropdown(screen.getByRole("combobox", { name: comboboxName }), optionLabel);
-}
-
 async function fillFormOption(labelText: string, optionLabel: string) {
   const label = screen.getByText(labelText);
   const formItem = label.closest(".ant-form-item") as HTMLElement;
@@ -123,7 +120,7 @@ async function goToPage(pageNumber: number) {
 describe("TransfersTab", () => {
   it("загрузка и рендер списка карточек", async () => {
     const { wrapper } = setup(defaultTransfersHandler());
-    render(<TransfersTab />, { wrapper });
+    render(<TransfersTab filters={EMPTY_OPERATION_FILTERS} />, { wrapper });
 
     expect(await screen.findByText("Наличные → Карта")).toBeInTheDocument();
     expect(screen.getByText("10.00 USD")).toBeInTheDocument();
@@ -131,7 +128,7 @@ describe("TransfersTab", () => {
 
   it("пустой список показывает EmptyState, кнопка действия открывает форму создания", async () => {
     const { wrapper } = setup(() => page([]));
-    render(<TransfersTab />, { wrapper });
+    render(<TransfersTab filters={EMPTY_OPERATION_FILTERS} />, { wrapper });
 
     expect(await screen.findByText("Переводов пока нет")).toBeInTheDocument();
 
@@ -140,9 +137,9 @@ describe("TransfersTab", () => {
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
   });
 
-  it("фильтр по кошельку передаёт wallet_id и сбрасывает страницу на 1", async () => {
+  it("фильтр по кошельку передаёт wallet_id, смена фильтров сбрасывает страницу на 1", async () => {
     const { api, wrapper } = setup(defaultTransfersHandler({ total: 40 }));
-    render(<TransfersTab />, { wrapper });
+    const { rerender } = render(<TransfersTab filters={EMPTY_OPERATION_FILTERS} />, { wrapper });
     await screen.findByText("Наличные → Карта");
 
     await goToPage(2);
@@ -150,7 +147,7 @@ describe("TransfersTab", () => {
       expect(transfersRequests(api).at(-1)).toMatchObject({ query: { offset: DEFAULT_PAGE_SIZE } }),
     );
 
-    await chooseOption("Кошелёк", "Наличные");
+    rerender(<TransfersTab filters={{ ...EMPTY_OPERATION_FILTERS, walletId: "w1" }} />);
 
     await waitFor(() =>
       expect(transfersRequests(api).at(-1)).toMatchObject({
@@ -159,15 +156,18 @@ describe("TransfersTab", () => {
     );
   });
 
-  it("фильтр по диапазону дат передаёт date_from/date_to", async () => {
+  it("диапазон дат передаётся как date_from/date_to", async () => {
     const { api, wrapper } = setup(defaultTransfersHandler());
-    render(<TransfersTab />, { wrapper });
-    await screen.findByText("Наличные → Карта");
 
-    await userEvent.type(screen.getByPlaceholderText("Дата от"), "2026-03-01");
-    await userEvent.keyboard("{Enter}");
-    await userEvent.type(screen.getByPlaceholderText("Дата до"), "2026-03-10");
-    await userEvent.keyboard("{Enter}");
+    render(
+      <TransfersTab
+        filters={{
+          ...EMPTY_OPERATION_FILTERS,
+          dateRange: [dayjs("2026-03-01"), dayjs("2026-03-10")],
+        }}
+      />,
+      { wrapper },
+    );
 
     await waitFor(() =>
       expect(transfersRequests(api).at(-1)).toMatchObject({
@@ -179,9 +179,18 @@ describe("TransfersTab", () => {
     );
   });
 
+  it("не показывает фильтры на экране вкладки", async () => {
+    const { wrapper } = setup(defaultTransfersHandler());
+    render(<TransfersTab filters={EMPTY_OPERATION_FILTERS} />, { wrapper });
+    await screen.findByText("Наличные → Карта");
+
+    expect(screen.queryByRole("combobox", { name: "Кошелёк" })).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText("Дата от")).not.toBeInTheDocument();
+  });
+
   it("переключение страницы запрашивает нужный offset", async () => {
     const { api, wrapper } = setup(defaultTransfersHandler({ total: 40 }));
-    render(<TransfersTab />, { wrapper });
+    render(<TransfersTab filters={EMPTY_OPERATION_FILTERS} />, { wrapper });
     await screen.findByText("Наличные → Карта");
 
     await goToPage(2);
@@ -195,7 +204,7 @@ describe("TransfersTab", () => {
 
   it("нажатие на карточку открывает форму с ожидаемыми пропами", async () => {
     const { wrapper } = setup(defaultTransfersHandler());
-    render(<TransfersTab />, { wrapper });
+    render(<TransfersTab filters={EMPTY_OPERATION_FILTERS} />, { wrapper });
     await screen.findByText("Наличные → Карта");
 
     await userEvent.click(screen.getByText("Наличные → Карта"));
@@ -208,7 +217,7 @@ describe("TransfersTab", () => {
     const { toast, wrapper } = setup(() => {
       throw new ApiError({ kind: "not_found", status: 404, detail: "Не найдено" });
     });
-    render(<TransfersTab />, { wrapper });
+    render(<TransfersTab filters={EMPTY_OPERATION_FILTERS} />, { wrapper });
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Не найдено"));
   });
@@ -259,7 +268,7 @@ describe("TransfersTab", () => {
       return page(items);
     };
     const { wrapper } = setup(handler);
-    render(<TransfersTab />, { wrapper });
+    render(<TransfersTab filters={EMPTY_OPERATION_FILTERS} />, { wrapper });
 
     expect(await screen.findByText("Переводов пока нет")).toBeInTheDocument();
 

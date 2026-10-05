@@ -27,10 +27,10 @@ describe("RequireAuth", () => {
 
     renderApp({ apiClient: api, path: "/" });
 
-    expect(screen.queryByText("Кошельков пока нет")).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Операции" })).not.toBeInTheDocument();
     resolve(AUTHENTICATED_USER);
 
-    expect(await screen.findByText("Кошельков пока нет")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Операции" })).toBeInTheDocument();
   });
 
   it("без сессии перенаправляет на /login и сохраняет исходный путь", async () => {
@@ -59,12 +59,12 @@ describe("RequireAuth", () => {
 });
 
 describe("GuestOnly", () => {
-  it("с активной сессией /register тоже ведёт на «Кошельки»", async () => {
+  it("с активной сессией /register тоже ведёт на «Операции»", async () => {
     const api = new FakeApiClient(withSession(() => EMPTY_PAGE));
 
     renderApp({ apiClient: api, path: "/register" });
 
-    expect(await screen.findByText("Кошельков пока нет")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Операции" })).toBeInTheDocument();
   });
 
   it("без сессии /register показывает форму регистрации", async () => {

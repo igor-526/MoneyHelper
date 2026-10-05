@@ -8,6 +8,7 @@ import {
   CreditCard,
   Download,
   Film,
+  Funnel,
   Gamepad2,
   Gift,
   GraduationCap,
@@ -70,6 +71,7 @@ const UI_ICONS: Record<string, LucideIcon> = {
   moon: Moon,
   "log-out": LogOut,
   download: Download,
+  funnel: Funnel,
   share: Share,
   "wifi-off": WifiOff,
 };

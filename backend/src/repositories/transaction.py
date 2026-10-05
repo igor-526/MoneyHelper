@@ -70,8 +70,8 @@ class TransactionRepository:
         self,
         workspace_id: UUID,
         *,
-        date_from: datetime,
-        date_to: datetime,
+        date_from: datetime | None,
+        date_to: datetime | None,
         wallet_id: UUID | None,
         category_id: UUID | None,
         currency_id: UUID | None,
@@ -83,6 +83,7 @@ class TransactionRepository:
                 transactions.c.category_id,
                 transaction_legs.c.currency_id,
                 transaction_legs.c.amount,
+                transactions.c.occurred_at,
                 categories.c.type,
             )
             .select_from(
@@ -90,12 +91,12 @@ class TransactionRepository:
                     categories, categories.c.id == transactions.c.category_id
                 )
             )
-            .where(
-                transactions.c.workspace_id == workspace_id,
-                transactions.c.occurred_at >= date_from,
-                transactions.c.occurred_at <= date_to,
-            )
+            .where(transactions.c.workspace_id == workspace_id)
         )
+        if date_from is not None:
+            query = query.where(transactions.c.occurred_at >= date_from)
+        if date_to is not None:
+            query = query.where(transactions.c.occurred_at <= date_to)
         if wallet_id is not None:
             query = query.where(transactions.c.wallet_id == wallet_id)
         if category_id is not None:
@@ -112,6 +113,7 @@ class TransactionRepository:
                 currency_id=row.currency_id,
                 amount=row.amount,
                 category_type=row.type,
+                occurred_at=row.occurred_at,
             )
             for row in rows
         ]

@@ -178,15 +178,28 @@ async def test_filters_wallet_category_currency_type() -> None:
     assert keys(type="expense") == {str(env.rub_wallet)}
 
 
-async def test_missing_dates_and_inverted_range_rejected() -> None:
+async def test_inverted_range_rejected() -> None:
     env = Environment()
     await env.setup()
     url = f"/api/workspaces/{env.workspace_id}/analytics"
 
-    assert env.client.get(url, params={"date_to": DATE_TO, "group_by": "wallet"}).status_code == 400
-    assert env.client.get(url, params={"date_from": DATE_FROM, "group_by": "wallet"}).status_code == 400
     inverted = env.client.get(url, params={"date_from": DATE_TO, "date_to": DATE_FROM, "group_by": "wallet"})
+
     assert inverted.status_code == 400
+
+
+async def test_missing_dates_mean_all_time() -> None:
+    env = Environment()
+    await env.setup()
+    await env.topup_cny()
+    await env.add_operation(env.cny_wallet, env.expense, {env.cny.id: "30"})
+    url = f"/api/workspaces/{env.workspace_id}/analytics"
+
+    for params in ({"group_by": "wallet"}, {"date_to": DATE_TO, "group_by": "wallet"}):
+        response = env.client.get(url, params=params)
+
+        assert response.status_code == 200
+        assert response.json()["buckets"][0]["expense"] == "300.00"
 
 
 async def test_foreign_workspace_returns_404() -> None:
@@ -254,3 +267,22 @@ async def test_requires_authentication() -> None:
     await env.setup()
 
     assert env.get().status_code == 401
+
+
+async def test_groups_by_day_with_timezone() -> None:
+    env = Environment()
+    await env.setup()
+    await env.add_operation(env.rub_wallet, env.expense, {env.rub.id: "10"})
+
+    utc_body = env.get("day", type="expense").json()
+    tokyo_body = env.get("day", type="expense", timezone="Asia/Tokyo").json()
+
+    assert [bucket["group_key"] for bucket in utc_body["buckets"]] == ["2026-01-15"]
+    assert [bucket["group_key"] for bucket in tokyo_body["buckets"]] == ["2026-01-15"]
+
+
+async def test_unknown_timezone_rejected() -> None:
+    env = Environment()
+    await env.setup()
+
+    assert env.get("day", timezone="Mars/Base").status_code == 400

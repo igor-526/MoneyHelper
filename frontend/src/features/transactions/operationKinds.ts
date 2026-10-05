@@ -4,6 +4,7 @@ import type { CategoryType } from "@/features/categories/Category";
 import type { Page } from "@/shared/api";
 import { TransfersTab } from "@/features/transfers/TransfersTab";
 import { OperationsTab } from "./OperationsTab";
+import type { OperationFiltersState } from "./operationFilters";
 import { TopupForm } from "./TopupForm";
 import { TransactionForm } from "./TransactionForm";
 import type { Transaction } from "./Transaction";
@@ -53,19 +54,31 @@ export const EXPENSE_KIND: TransactionKind = {
 export interface OperationKind {
   key: string;
   label: string;
-  Panel: ComponentType;
+  /** `undefined` — у вкладки нет категорий, фильтр категории в окне фильтров не показывается. */
+  categoryType: CategoryType | undefined;
+  Panel: ComponentType<{ filters: OperationFiltersState }>;
 }
 
-function transactionPanel(kind: TransactionKind): ComponentType {
-  return function TransactionPanel() {
-    return createElement(OperationsTab, { kind });
+function transactionPanel(kind: TransactionKind): OperationKind["Panel"] {
+  return function TransactionPanel({ filters }) {
+    return createElement(OperationsTab, { kind, filters });
   };
 }
 
 export const OPERATION_KINDS: readonly OperationKind[] = [
-  { key: "expense", label: "Расход", Panel: transactionPanel(EXPENSE_KIND) },
-  { key: "topup", label: "Пополнение", Panel: transactionPanel(TOPUP_KIND) },
-  { key: "transfer", label: "Перевод", Panel: TransfersTab },
+  {
+    key: "expense",
+    label: "Расход",
+    categoryType: EXPENSE_KIND.categoryType,
+    Panel: transactionPanel(EXPENSE_KIND),
+  },
+  {
+    key: "topup",
+    label: "Пополнение",
+    categoryType: TOPUP_KIND.categoryType,
+    Panel: transactionPanel(TOPUP_KIND),
+  },
+  { key: "transfer", label: "Перевод", categoryType: undefined, Panel: TransfersTab },
 ];
 
 export const DEFAULT_OPERATION_KIND = OPERATION_KINDS[0]!;

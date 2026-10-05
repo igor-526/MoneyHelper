@@ -120,10 +120,10 @@ def test_wallet_rates_endpoint_has_no_target_currency_parameter() -> None:
     assert set(schema["required"]) == {"workspace_currency_id", "wallet_currency_id", "rate"}
 
 
-def test_analytics_display_currency_is_optional() -> None:
+def test_analytics_display_currency_and_dates_are_optional() -> None:
     openapi = TestClient(app).get("/openapi.json").json()
     parameters = openapi["paths"]["/api/workspaces/{workspace_id}/analytics"]["get"]["parameters"]
     required = {parameter["name"] for parameter in parameters if parameter["required"]}
 
-    assert "display_currency" not in required
-    assert {"date_from", "date_to", "group_by"} <= required
+    assert not {"display_currency", "date_from", "date_to"} & required
+    assert "group_by" in required

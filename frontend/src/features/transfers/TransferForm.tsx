@@ -1,4 +1,4 @@
-import { Alert, Button, DatePicker, Drawer, Form, Modal, Select } from "antd";
+import { Alert, Button, Drawer, Form, Modal, Select } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import { useEffect } from "react";
 import { useWallets } from "@/features/wallets/useWallets";
@@ -11,6 +11,8 @@ import {
   useCurrencies,
   useIsMobile,
   useToast,
+  DayPicker,
+  toOccurredAt,
 } from "@/shared/ui";
 import type { Transfer, TransferFormValues } from "./Transfer";
 import { useCreateTransfer } from "./useCreateTransfer";
@@ -72,7 +74,7 @@ export function TransferForm({ open, onClose, transfer }: TransferFormProps) {
         from_wallet_id: undefined,
         to_wallet_id: undefined,
         amount: "",
-        occurred_at: undefined,
+        occurred_at: dayjs(),
       });
     }
   }, [open, transfer, form]);
@@ -98,7 +100,7 @@ export function TransferForm({ open, onClose, transfer }: TransferFormProps) {
       from_wallet_id: fields.from_wallet_id,
       to_wallet_id: fields.to_wallet_id,
       amount: fields.amount,
-      occurred_at: fields.occurred_at?.toISOString(),
+      occurred_at: fields.occurred_at && toOccurredAt(fields.occurred_at, transfer?.occurred_at),
     };
 
     const onError = (submitError: unknown) => {
@@ -118,7 +120,7 @@ export function TransferForm({ open, onClose, transfer }: TransferFormProps) {
     const onSuccess = () => {
       toast.success(transfer ? "Перевод обновлён" : "Перевод создан");
       if (!transfer && fields.add_another) {
-        form.setFieldsValue({ amount: "", occurred_at: undefined });
+        form.setFieldsValue({ amount: "", occurred_at: dayjs() });
         return;
       }
       onClose();
@@ -177,7 +179,7 @@ export function TransferForm({ open, onClose, transfer }: TransferFormProps) {
         <MoneyInput value="" onChange={() => {}} decimalPlaces={currency?.decimalPlaces} />
       </Form.Item>
       <Form.Item name="occurred_at" label="Дата">
-        <DatePicker showTime style={{ width: "100%" }} />
+        <DayPicker />
       </Form.Item>
       {transfer ? null : <AddAnotherCheckbox />}
       <Form.Item style={{ marginBottom: 0 }}>

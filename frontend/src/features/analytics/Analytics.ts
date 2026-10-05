@@ -1,6 +1,4 @@
-import type { CategoryType } from "@/features/categories/Category";
-
-export type GroupBy = "wallet" | "category" | "currency";
+export type GroupBy = "wallet" | "category" | "currency" | "day";
 
 /** Форма элемента `buckets` ответа backend (`AnalyticsBucketOut`) — без camelCase-маппинга. */
 export interface AnalyticsBucket {
@@ -16,15 +14,18 @@ export interface AnalyticsResult {
   unconverted_currencies: string[];
 }
 
-/** Вход `useAnalytics`: два обязательных поля запроса (диапазон и срез), валюта отображения и сужающие опциональные. camelCase — как `TransferFilters`. */
-export interface AnalyticsFilters {
-  /** `undefined` — валюта воркспейса: параметр не передаётся, умолчание определяет backend. */
-  displayCurrencyId: string | undefined;
-  dateFrom: string;
-  dateTo: string;
+/** Диапазон дат в ISO; границы необязательны — без них backend считает весь период воркспейса. */
+export interface AnalyticsRange {
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+/** Вход `useAnalytics`: срез, тип операций, диапазон и отбор. Валюта отображения — всегда валюта воркспейса. */
+export interface AnalyticsFilters extends AnalyticsRange {
   groupBy: GroupBy;
+  type?: "income" | "expense";
   walletId?: string;
   categoryId?: string;
-  currencyId?: string;
-  type?: CategoryType;
+  /** IANA-пояс, по суткам которого считается срез `day`. */
+  timezone?: string;
 }

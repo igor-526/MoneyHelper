@@ -1,4 +1,4 @@
-import { Button, DatePicker, Drawer, Form, Input, Modal, Select } from "antd";
+import { Button, Drawer, Form, Input, Modal, Select } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import { useEffect } from "react";
 import { useCategories } from "@/features/categories/useCategories";
@@ -12,6 +12,8 @@ import {
   useCurrencies,
   useIsMobile,
   useToast,
+  DayPicker,
+  toOccurredAt,
 } from "@/shared/ui";
 import type { Transaction, TransactionFormValues } from "./Transaction";
 import { useCreateTransaction } from "./useCreateTransaction";
@@ -64,7 +66,7 @@ export function TransactionForm({ open, onClose, transaction }: TransactionFormP
       wallet_id: transaction?.wallet_id,
       category_id: transaction?.category_id,
       amount: formatAmount(transaction?.legs[0]?.amount ?? ""),
-      occurred_at: transaction ? dayjs(transaction.occurred_at) : undefined,
+      occurred_at: dayjs(transaction?.occurred_at),
       comment: transaction?.comment ?? undefined,
     });
   }, [open, transaction, form]);
@@ -74,7 +76,7 @@ export function TransactionForm({ open, onClose, transaction }: TransactionFormP
       wallet_id: fields.wallet_id,
       category_id: fields.category_id,
       amount: fields.amount,
-      occurred_at: fields.occurred_at?.toISOString(),
+      occurred_at: fields.occurred_at && toOccurredAt(fields.occurred_at, transaction?.occurred_at),
       comment: fields.comment,
     };
 
@@ -95,7 +97,7 @@ export function TransactionForm({ open, onClose, transaction }: TransactionFormP
     const onSuccess = () => {
       toast.success(transaction ? "Расход обновлён" : "Расход создан");
       if (!transaction && fields.add_another) {
-        form.setFieldsValue({ amount: "", occurred_at: undefined, comment: undefined });
+        form.setFieldsValue({ amount: "", occurred_at: dayjs(), comment: undefined });
         return;
       }
       onClose();
@@ -139,7 +141,7 @@ export function TransactionForm({ open, onClose, transaction }: TransactionFormP
         <MoneyInput value="" onChange={() => {}} decimalPlaces={walletCurrency?.decimalPlaces} />
       </Form.Item>
       <Form.Item name="occurred_at" label="Дата">
-        <DatePicker showTime style={{ width: "100%" }} />
+        <DayPicker />
       </Form.Item>
       <Form.Item
         name="comment"
