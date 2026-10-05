@@ -5,7 +5,7 @@ replicaCount: 1
 namespace: moneyhelper
 
 # Ingress settings
-url: api.moneyhelper.devil-on-the.wheel.ru
+url: api.moneyhelper.devil-on-the-wheel.ru
 ingressProxyBodySize: 1m
 
 # App settings
