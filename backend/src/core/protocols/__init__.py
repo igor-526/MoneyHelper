@@ -9,10 +9,15 @@ from .repositories import (
     TransactionRepository,
     TransferRepository,
     UserRepository,
+    WalletCounter,
+    WalletCurrencyReader,
     WalletRepository,
+    WalletUsageChecker,
+    WorkspaceCurrencyReader,
     WorkspaceRepository,
 )
 from .tokens import TokenIssuer, TokenVerifier
+from .topup_legs_rule import TopupLegsRule
 
 __all__ = [
     "AnalyticsDimension",
@@ -24,9 +29,14 @@ __all__ = [
     "PasswordHasher",
     "TokenIssuer",
     "TokenVerifier",
+    "TopupLegsRule",
     "TransactionRepository",
     "TransferRepository",
     "UserRepository",
+    "WalletCounter",
+    "WalletCurrencyReader",
     "WalletRepository",
+    "WalletUsageChecker",
+    "WorkspaceCurrencyReader",
     "WorkspaceRepository",
 ]

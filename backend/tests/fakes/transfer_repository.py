@@ -1,4 +1,3 @@
-from collections import defaultdict
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
@@ -73,7 +72,6 @@ class InMemoryTransferRepository:
         *,
         from_wallet_id: UUID,
         to_wallet_id: UUID,
-        currency_id: UUID,
         amount: Decimal,
         occurred_at: datetime,
         now: datetime,
@@ -85,7 +83,6 @@ class InMemoryTransferRepository:
             update={
                 "from_wallet_id": from_wallet_id,
                 "to_wallet_id": to_wallet_id,
-                "currency_id": currency_id,
                 "amount": amount,
                 "occurred_at": occurred_at,
                 "updated_at": now,
@@ -102,19 +99,17 @@ class InMemoryTransferRepository:
         return True
 
     async def references_wallet(self, wallet_id: UUID) -> bool:
-        """Не часть протокола — вспомогательный метод для тестов, симулирующих `ON DELETE RESTRICT`
-        `transfers.from_wallet_id`/`transfers.to_wallet_id` на fake-репозиториях кошельков."""
         return any(
             wallet_id in (transfer.from_wallet_id, transfer.to_wallet_id) for transfer in self._transfers.values()
         )
 
-    async def balance_delta(self, wallet_id: UUID, workspace_id: UUID) -> dict[UUID, Decimal]:
-        totals: dict[UUID, Decimal] = defaultdict(lambda: Decimal("0"))
+    async def balance_delta(self, wallet_id: UUID, workspace_id: UUID, currency_id: UUID) -> Decimal:
+        total = Decimal("0")
         for transfer in self._transfers.values():
             if transfer.workspace_id != workspace_id:
                 continue
             if transfer.to_wallet_id == wallet_id:
-                totals[transfer.currency_id] += transfer.amount
+                total += transfer.amount
             elif transfer.from_wallet_id == wallet_id:
-                totals[transfer.currency_id] -= transfer.amount
-        return dict(totals)
+                total -= transfer.amount
+        return total

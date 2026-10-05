@@ -9,7 +9,7 @@ from core.schemas import Money
 
 
 class AnalyticsQueryParams(BaseModel):
-    display_currency: UUID
+    display_currency: UUID | None = None
     date_from: datetime
     date_to: datetime
     group_by: Literal["wallet", "category", "currency"]

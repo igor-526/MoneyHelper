@@ -4,7 +4,8 @@ import { FakeApiClient } from "@/test/FakeApiClient";
 import { renderApp } from "@/test/renderApp";
 import { withSession } from "@/test/session";
 
-const api = () => new FakeApiClient(withSession(() => ({ status: "ok" })));
+const EMPTY_PAGE = { items: [], total: 0, limit: 100, offset: 0 };
+const api = () => new FakeApiClient(withSession(() => EMPTY_PAGE));
 
 describe("адаптивный layout", () => {
   it("на телефоне: нижняя панель навигации, верхней навигации нет", async () => {
@@ -23,6 +24,28 @@ describe("адаптивный layout", () => {
   it("нижняя панель содержит не более 5 пунктов", async () => {
     const { navItems } = await import("../navItems");
     expect(navItems.length).toBeLessThanOrEqual(5);
+  });
+
+  it("навигация: «Кошельки», «Операции», «Аналитика», «Настройки», без «Главная»", async () => {
+    const { navItems } = await import("../navItems");
+    expect(navItems.map((item) => item.label)).toEqual([
+      "Кошельки",
+      "Операции",
+      "Аналитика",
+      "Настройки",
+    ]);
+  });
+
+  it.each([
+    ["на телефоне", true],
+    ["на широком экране", false],
+  ])("%s в навигации нет пункта «Главная»", async (_name, mobile) => {
+    renderApp({ apiClient: api(), mobile });
+    await screen.findByTestId(mobile ? "mobile-shell" : "desktop-shell");
+    expect(screen.queryByText("Главная")).not.toBeInTheDocument();
+    for (const label of ["Кошельки", "Операции", "Аналитика", "Настройки"]) {
+      expect(screen.getByRole("link", { name: new RegExp(label) })).toBeInTheDocument();
+    }
   });
 
   it("пункт «Операции» расположен сразу после «Кошельки»", async () => {
@@ -53,9 +76,10 @@ describe("адаптивный layout", () => {
     expect(navItems.some((item) => item.path === "/transfers")).toBe(false);
   });
 
-  it("переход на /transfers рендерит раздел переводов", async () => {
+  it("переход на /transfers открывает вкладку «Перевод» страницы «Операции»", async () => {
     renderApp({ apiClient: api(), path: "/transfers" });
-    expect(await screen.findByRole("heading", { name: "Переводы" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Операции" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Перевод" })).toHaveAttribute("aria-selected", "true");
   });
 
   it("пункт «Аналитика» расположен между «Операции» и «Настройки», «Настройки» остаётся последним", async () => {

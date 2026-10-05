@@ -11,7 +11,7 @@ import { ToastProvider } from "@/shared/ui";
 import { type FakeHandler, FakeApiClient } from "@/test/FakeApiClient";
 import { createToastSpy } from "@/test/toastSpy";
 import { DEFAULT_PAGE_SIZE } from "./useTransfers";
-import { TransfersPage } from "./TransfersPage";
+import { TransfersTab } from "./TransfersTab";
 
 const TEST_WORKSPACE_ID = "workspace-1";
 
@@ -20,7 +20,7 @@ const WALLETS = [
     id: "w1",
     name: "Наличные",
     icon: "wallet",
-    currency_ids: ["cur1", "cur2"],
+    currency_id: "cur1",
     created_at: "2026-01-01T00:00:00Z",
     updated_at: null,
   },
@@ -28,7 +28,7 @@ const WALLETS = [
     id: "w2",
     name: "Карта",
     icon: "credit-card",
-    currency_ids: ["cur1", "cur2"],
+    currency_id: "cur1",
     created_at: "2026-01-01T00:00:00Z",
     updated_at: null,
   },
@@ -44,7 +44,6 @@ const TRANSFERS = [
     id: "t1",
     from_wallet_id: "w1",
     to_wallet_id: "w2",
-    currency_id: "cur1",
     amount: "10.00",
     occurred_at: "2026-03-01T12:00:00Z",
     created_at: "2026-03-01T12:00:00Z",
@@ -121,10 +120,10 @@ async function goToPage(pageNumber: number) {
   await userEvent.click(screen.getByTitle(String(pageNumber)));
 }
 
-describe("TransfersPage", () => {
+describe("TransfersTab", () => {
   it("загрузка и рендер списка карточек", async () => {
     const { wrapper } = setup(defaultTransfersHandler());
-    render(<TransfersPage />, { wrapper });
+    render(<TransfersTab />, { wrapper });
 
     expect(await screen.findByText("Наличные → Карта")).toBeInTheDocument();
     expect(screen.getByText("10.00 USD")).toBeInTheDocument();
@@ -132,7 +131,7 @@ describe("TransfersPage", () => {
 
   it("пустой список показывает EmptyState, кнопка действия открывает форму создания", async () => {
     const { wrapper } = setup(() => page([]));
-    render(<TransfersPage />, { wrapper });
+    render(<TransfersTab />, { wrapper });
 
     expect(await screen.findByText("Переводов пока нет")).toBeInTheDocument();
 
@@ -143,7 +142,7 @@ describe("TransfersPage", () => {
 
   it("фильтр по кошельку передаёт wallet_id и сбрасывает страницу на 1", async () => {
     const { api, wrapper } = setup(defaultTransfersHandler({ total: 40 }));
-    render(<TransfersPage />, { wrapper });
+    render(<TransfersTab />, { wrapper });
     await screen.findByText("Наличные → Карта");
 
     await goToPage(2);
@@ -162,7 +161,7 @@ describe("TransfersPage", () => {
 
   it("фильтр по диапазону дат передаёт date_from/date_to", async () => {
     const { api, wrapper } = setup(defaultTransfersHandler());
-    render(<TransfersPage />, { wrapper });
+    render(<TransfersTab />, { wrapper });
     await screen.findByText("Наличные → Карта");
 
     await userEvent.type(screen.getByPlaceholderText("Дата от"), "2026-03-01");
@@ -182,7 +181,7 @@ describe("TransfersPage", () => {
 
   it("переключение страницы запрашивает нужный offset", async () => {
     const { api, wrapper } = setup(defaultTransfersHandler({ total: 40 }));
-    render(<TransfersPage />, { wrapper });
+    render(<TransfersTab />, { wrapper });
     await screen.findByText("Наличные → Карта");
 
     await goToPage(2);
@@ -196,20 +195,20 @@ describe("TransfersPage", () => {
 
   it("кнопка «Редактировать» карточки открывает форму с ожидаемыми пропами", async () => {
     const { wrapper } = setup(defaultTransfersHandler());
-    render(<TransfersPage />, { wrapper });
+    render(<TransfersTab />, { wrapper });
     await screen.findByText("Наличные → Карта");
 
     await userEvent.click(screen.getByRole("button", { name: "Редактировать" }));
 
     expect(await screen.findByText("Редактировать перевод")).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByLabelText("Сумма")).toHaveValue("10.00"));
+    await waitFor(() => expect(screen.getByLabelText("Сумма (USD)")).toHaveValue("10.00"));
   });
 
   it("ошибка загрузки показывает toast (общий обработчик)", async () => {
     const { toast, wrapper } = setup(() => {
       throw new ApiError({ kind: "not_found", status: 404, detail: "Не найдено" });
     });
-    render(<TransfersPage />, { wrapper });
+    render(<TransfersTab />, { wrapper });
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Не найдено"));
   });
@@ -229,7 +228,6 @@ describe("TransfersPage", () => {
         const body = request.body as {
           from_wallet_id: string;
           to_wallet_id: string;
-          currency_id: string;
           amount: string;
         };
         const created = {
@@ -261,7 +259,7 @@ describe("TransfersPage", () => {
       return page(items);
     };
     const { wrapper } = setup(handler);
-    render(<TransfersPage />, { wrapper });
+    render(<TransfersTab />, { wrapper });
 
     expect(await screen.findByText("Переводов пока нет")).toBeInTheDocument();
 
@@ -269,9 +267,8 @@ describe("TransfersPage", () => {
     await userEvent.click(screen.getByRole("button", { name: "Создать перевод" }));
     await fillFormOption("Откуда", "Наличные");
     await fillFormOption("Куда", "Карта");
-    await fillFormOption("Валюта", "USD — Доллар США");
     let dialog = screen.getByRole("dialog");
-    await userEvent.type(within(dialog).getByLabelText("Сумма"), "10");
+    await userEvent.type(within(dialog).getByLabelText("Сумма (USD)"), "10");
     await userEvent.click(within(dialog).getByRole("button", { name: "Создать" }));
 
     expect(await screen.findByText("10 USD")).toBeInTheDocument();
@@ -280,8 +277,8 @@ describe("TransfersPage", () => {
     // редактирование
     await userEvent.click(screen.getByRole("button", { name: "Редактировать" }));
     dialog = await screen.findByRole("dialog");
-    await userEvent.clear(within(dialog).getByLabelText("Сумма"));
-    await userEvent.type(within(dialog).getByLabelText("Сумма"), "20");
+    await userEvent.clear(within(dialog).getByLabelText("Сумма (USD)"));
+    await userEvent.type(within(dialog).getByLabelText("Сумма (USD)"), "20");
     await userEvent.click(within(dialog).getByRole("button", { name: "Сохранить" }));
 
     expect(await screen.findByText("20 USD")).toBeInTheDocument();

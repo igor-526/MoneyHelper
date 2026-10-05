@@ -1,208 +1,158 @@
 from datetime import UTC, datetime
+from decimal import Decimal
 from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
 
-from core.entities import Category, CategoryType, Currency, Wallet, Workspace
+from core.entities import Category, CategoryType, Transaction, TransactionLeg, Wallet, Workspace
 from depends.auth import get_current_user
 from depends.category import get_category_repository
-from depends.currency import get_currency_repository
 from depends.transaction import get_transaction_repository
 from depends.wallet import get_wallet_repository
 from depends.workspace import get_workspace_repository
 from main import create_app
 from tests.fakes import (
     InMemoryCategoryRepository,
-    InMemoryCurrencyRepository,
     InMemoryTransactionRepository,
     InMemoryWalletRepository,
     InMemoryWorkspaceRepository,
 )
 
-
-def make_client(
-    *,
-    wallets: InMemoryWalletRepository | None = None,
-    categories: InMemoryCategoryRepository | None = None,
-    currencies: InMemoryCurrencyRepository | None = None,
-    transactions: InMemoryTransactionRepository | None = None,
-    workspaces: InMemoryWorkspaceRepository | None = None,
-    user_id: UUID | None = None,
-    workspace_id: UUID | None = None,
-    authenticated: bool = True,
-) -> tuple[TestClient, UUID]:
-    wallets = wallets if wallets is not None else InMemoryWalletRepository()
-    categories = categories if categories is not None else InMemoryCategoryRepository()
-    currencies = currencies if currencies is not None else InMemoryCurrencyRepository()
-    transactions = transactions if transactions is not None else InMemoryTransactionRepository(categories)
-    workspaces = workspaces if workspaces is not None else InMemoryWorkspaceRepository()
-    user_id = user_id if user_id is not None else uuid4()
-    workspace_id = workspace_id if workspace_id is not None else uuid4()
-    workspaces.seed(Workspace(id=workspace_id, user_id=user_id, created_at=datetime(2026, 1, 1, tzinfo=UTC), name="Т"))
-    app = create_app()
-    app.dependency_overrides[get_wallet_repository] = lambda: wallets
-    app.dependency_overrides[get_category_repository] = lambda: categories
-    app.dependency_overrides[get_currency_repository] = lambda: currencies
-    app.dependency_overrides[get_transaction_repository] = lambda: transactions
-    app.dependency_overrides[get_workspace_repository] = lambda: workspaces
-    if authenticated:
-        app.dependency_overrides[get_current_user] = lambda: user_id
-    return TestClient(app), workspace_id
+CREATED_AT = datetime(2026, 1, 1, tzinfo=UTC)
 
 
-def rates_url(workspace_id: UUID, wallet_id: UUID, target_currency_id: UUID) -> str:
-    return f"/api/workspaces/{workspace_id}/wallets/{wallet_id}/rates?target_currency_id={target_currency_id}"
+class Environment:
+    def __init__(self, *, authenticated: bool = True) -> None:
+        self.categories = InMemoryCategoryRepository()
+        self.wallets = InMemoryWalletRepository()
+        self.transactions = InMemoryTransactionRepository(self.categories)
+        self.workspaces = InMemoryWorkspaceRepository()
+        self.user_id = uuid4()
+        self.rub = uuid4()
+        self.cny = uuid4()
+        self.income_category_id = uuid4()
+        self.workspace_id = uuid4()
+        self.workspaces.seed(
+            Workspace(
+                id=self.workspace_id, user_id=self.user_id, created_at=CREATED_AT, name="Т", currency_id=self.rub
+            )
+        )
+        app = create_app()
+        app.dependency_overrides[get_wallet_repository] = lambda: self.wallets
+        app.dependency_overrides[get_category_repository] = lambda: self.categories
+        app.dependency_overrides[get_transaction_repository] = lambda: self.transactions
+        app.dependency_overrides[get_workspace_repository] = lambda: self.workspaces
+        if authenticated:
+            app.dependency_overrides[get_current_user] = lambda: self.user_id
+        self.client = TestClient(app)
+
+    async def make_wallet(self, currency_id: UUID) -> Wallet:
+        wallet = Wallet(
+            id=uuid4(),
+            workspace_id=self.workspace_id,
+            name="Кошелёк",
+            icon="wallet",
+            currency_id=currency_id,
+            created_at=CREATED_AT,
+        )
+        return await self.wallets.add(wallet)
+
+    async def topup(self, wallet: Wallet, rub: str, cny: str) -> None:
+        if await self.categories.get_by_id(self.income_category_id, self.workspace_id) is None:
+            await self.categories.add(
+                Category(
+                    id=self.income_category_id,
+                    workspace_id=self.workspace_id,
+                    type=CategoryType.INCOME,
+                    name="Доход",
+                    icon="wallet",
+                    created_at=CREATED_AT,
+                )
+            )
+        await self.transactions.add(
+            Transaction(
+                id=uuid4(),
+                workspace_id=self.workspace_id,
+                wallet_id=wallet.id,
+                category_id=self.income_category_id,
+                legs=(
+                    TransactionLeg(currency_id=self.rub, amount=Decimal(rub)),
+                    TransactionLeg(currency_id=self.cny, amount=Decimal(cny)),
+                ),
+                occurred_at=CREATED_AT,
+                created_at=CREATED_AT,
+            )
+        )
+
+    def rates_url(self, wallet_id: UUID, workspace_id: UUID | None = None) -> str:
+        return f"/api/workspaces/{workspace_id or self.workspace_id}/wallets/{wallet_id}/rates"
 
 
-def topups_url(workspace_id: UUID) -> str:
-    return f"/api/workspaces/{workspace_id}/transactions/topups"
+async def test_rate_is_average_of_wallet_topups() -> None:
+    env = Environment()
+    wallet = await env.make_wallet(env.cny)
+    await env.topup(wallet, "100", "10")
+    await env.topup(wallet, "300", "20")
 
+    response = env.client.get(env.rates_url(wallet.id))
 
-async def make_currency(
-    currencies: InMemoryCurrencyRepository, code: str = "RUB", decimal_places: int = 2
-) -> Currency:
-    currency = Currency(id=uuid4(), code=code, name=code, decimal_places=decimal_places)
-    await currencies.upsert_many([currency])
-    return currency
-
-
-async def make_wallet(wallets: InMemoryWalletRepository, workspace_id: UUID, currency_ids: list[UUID]) -> Wallet:
-    wallet = Wallet(
-        id=uuid4(),
-        workspace_id=workspace_id,
-        name="Кошелёк",
-        icon="wallet",
-        currency_ids=tuple(currency_ids),
-        created_at=datetime(2026, 1, 1, tzinfo=UTC),
-    )
-    return await wallets.add(wallet)
-
-
-async def make_income_category(categories: InMemoryCategoryRepository, workspace_id: UUID) -> Category:
-    category = Category(
-        id=uuid4(),
-        workspace_id=workspace_id,
-        type=CategoryType.INCOME,
-        name=f"Категория {uuid4()}",
-        icon="wallet",
-        created_at=datetime(2026, 1, 1, tzinfo=UTC),
-    )
-    return await categories.add(category)
-
-
-EnvironmentTuple = tuple[
-    InMemoryWalletRepository,
-    InMemoryCategoryRepository,
-    InMemoryCurrencyRepository,
-    Wallet,
-    Currency,
-    Currency,
-    Category,
-]
-
-
-async def make_environment(workspace_id: UUID) -> EnvironmentTuple:
-    wallets = InMemoryWalletRepository()
-    categories = InMemoryCategoryRepository()
-    currencies = InMemoryCurrencyRepository()
-    rub = await make_currency(currencies, "RUB")
-    cny = await make_currency(currencies, "CNY")
-    wallet = await make_wallet(wallets, workspace_id, [rub.id, cny.id])
-    income = await make_income_category(categories, workspace_id)
-    return wallets, categories, currencies, wallet, rub, cny, income
-
-
-def topup_payload(*, wallet_id: UUID, category_id: UUID, legs: list[tuple[UUID, str]]) -> dict:
-    return {
-        "wallet_id": str(wallet_id),
-        "category_id": str(category_id),
-        "legs": [{"currency_id": str(currency_id), "amount": amount} for currency_id, amount in legs],
+    assert response.status_code == 200
+    assert response.json() == {
+        "workspace_currency_id": str(env.rub),
+        "wallet_currency_id": str(env.cny),
+        "rate": "12.5000000000",
     }
 
 
-async def test_average_rate_from_topups() -> None:
-    workspace_id = uuid4()
-    wallets, categories, currencies, wallet, rub, cny, income = await make_environment(workspace_id)
-    client, workspace_id = make_client(
-        wallets=wallets, categories=categories, currencies=currencies, workspace_id=workspace_id
-    )
-    client.post(
-        topups_url(workspace_id),
-        json=topup_payload(
-            wallet_id=wallet.id, category_id=income.id, legs=[(rub.id, "10000.00"), (cny.id, "780.00")]
-        ),
-    )
-    client.post(
-        topups_url(workspace_id),
-        json=topup_payload(wallet_id=wallet.id, category_id=income.id, legs=[(rub.id, "5000.00"), (cny.id, "400.00")]),
-    )
+async def test_rate_is_null_without_topups() -> None:
+    env = Environment()
+    wallet = await env.make_wallet(env.cny)
 
-    response = client.get(rates_url(workspace_id, wallet.id, rub.id))
+    response = env.client.get(env.rates_url(wallet.id))
 
     assert response.status_code == 200
-    body = response.json()
-    assert body["target_currency_id"] == str(rub.id)
-    assert body["unrated_currency_ids"] == []
-    assert len(body["rates"]) == 1
-    assert body["rates"][0]["currency_id"] == str(cny.id)
+    assert response.json()["rate"] is None
 
 
-async def test_currency_without_topups_is_reported_as_unrated() -> None:
-    workspace_id = uuid4()
-    wallets, categories, currencies, wallet, rub, cny, _ = await make_environment(workspace_id)
-    client, workspace_id = make_client(
-        wallets=wallets, categories=categories, currencies=currencies, workspace_id=workspace_id
-    )
+async def test_rate_is_one_for_workspace_currency_wallet() -> None:
+    env = Environment()
+    wallet = await env.make_wallet(env.rub)
 
-    response = client.get(rates_url(workspace_id, wallet.id, rub.id))
+    response = env.client.get(env.rates_url(wallet.id))
 
     assert response.status_code == 200
-    body = response.json()
-    assert body["rates"] == []
-    assert body["unrated_currency_ids"] == [str(cny.id)]
+    assert response.json() == {
+        "workspace_currency_id": str(env.rub),
+        "wallet_currency_id": str(env.rub),
+        "rate": "1.0000000000",
+    }
 
 
-async def test_missing_target_currency_query_param_is_rejected() -> None:
-    workspace_id = uuid4()
-    wallets, categories, currencies, wallet, _, _, _ = await make_environment(workspace_id)
-    client, workspace_id = make_client(
-        wallets=wallets, categories=categories, currencies=currencies, workspace_id=workspace_id
-    )
+async def test_rate_is_not_mixed_between_wallets() -> None:
+    env = Environment()
+    first = await env.make_wallet(env.cny)
+    second = await env.make_wallet(env.cny)
+    await env.topup(second, "100", "10")
 
-    response = client.get(f"/api/workspaces/{workspace_id}/wallets/{wallet.id}/rates")
-
-    assert response.status_code == 400
+    assert env.client.get(env.rates_url(first.id)).json()["rate"] is None
+    assert env.client.get(env.rates_url(second.id)).json()["rate"] == "10.0000000000"
 
 
-async def test_target_currency_not_in_wallet_is_rejected() -> None:
-    workspace_id = uuid4()
-    wallets, categories, currencies, wallet, _, _, _ = await make_environment(workspace_id)
-    other_currency = await make_currency(currencies, "USDT", decimal_places=6)
-    client, workspace_id = make_client(
-        wallets=wallets, categories=categories, currencies=currencies, workspace_id=workspace_id
-    )
+async def test_unknown_wallet_returns_404() -> None:
+    env = Environment()
 
-    response = client.get(rates_url(workspace_id, wallet.id, other_currency.id))
-
-    assert response.status_code == 400
+    assert env.client.get(env.rates_url(uuid4())).status_code == 404
 
 
-async def test_unknown_or_foreign_wallet_returns_404() -> None:
-    workspace_id = uuid4()
-    wallets, categories, currencies, wallet, rub, _, _ = await make_environment(workspace_id)
-    client, other_workspace_id = make_client(wallets=wallets, categories=categories, currencies=currencies)
+async def test_foreign_workspace_returns_404() -> None:
+    env = Environment()
+    wallet = await env.make_wallet(env.cny)
 
-    assert client.get(rates_url(other_workspace_id, uuid4(), rub.id)).status_code == 404
-    assert client.get(rates_url(other_workspace_id, wallet.id, rub.id)).status_code == 404
+    assert env.client.get(env.rates_url(wallet.id, uuid4())).status_code == 404
 
 
 async def test_requires_authentication() -> None:
-    workspace_id = uuid4()
-    wallets, categories, currencies, wallet, rub, _, _ = await make_environment(workspace_id)
-    client, workspace_id = make_client(
-        wallets=wallets, categories=categories, currencies=currencies, workspace_id=workspace_id, authenticated=False
-    )
+    env = Environment(authenticated=False)
+    wallet = await env.make_wallet(env.cny)
 
-    response = client.get(rates_url(workspace_id, wallet.id, rub.id))
-
-    assert response.status_code == 401
+    assert env.client.get(env.rates_url(wallet.id)).status_code == 401

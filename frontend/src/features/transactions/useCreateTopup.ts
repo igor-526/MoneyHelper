@@ -1,9 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCurrentWorkspaceId } from "@/features/workspaces/WorkspaceContext";
 import { useApiClient } from "@/shared/api";
+import { invalidateOperationCaches } from "./invalidateOperationCaches";
 import type { Transaction, TopupFormValues } from "./Transaction";
-import { transactionsQueryKey } from "./useTransactions";
-import { walletBalancesQueryKey } from "./useWalletBalances";
 
 /** 400 по полям обрабатывает сама форма (`applyFieldErrors`), поэтому глобальный toast отключён. */
 export function useCreateTopup() {
@@ -12,11 +11,10 @@ export function useCreateTopup() {
   const workspaceId = useCurrentWorkspaceId();
   return useMutation({
     mutationFn: (values: TopupFormValues) =>
-      api.post<Transaction>(`/api/workspaces/${workspaceId}/transactions/topups`, values),
+      api.post<Transaction>(`/api/workspaces/${workspaceId}/topups`, values),
     meta: { silent: true },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: transactionsQueryKey(workspaceId) });
-      queryClient.invalidateQueries({ queryKey: walletBalancesQueryKey(workspaceId) });
+      invalidateOperationCaches(queryClient, workspaceId);
     },
   });
 }

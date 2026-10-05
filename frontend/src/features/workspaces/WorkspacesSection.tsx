@@ -1,5 +1,6 @@
 import { Button, Flex, Popconfirm, Tag, Typography } from "antd";
 import { useState } from "react";
+import { useCurrencies } from "@/shared/ui";
 import { useCurrentWorkspaceId } from "./WorkspaceContext";
 import { useWorkspaceActions } from "./WorkspaceActionsContext";
 import { WorkspaceForm } from "./WorkspaceForm";
@@ -24,20 +25,19 @@ function WorkspaceRow({
 }) {
   const { switchWorkspace } = useWorkspaceActions();
   const deleteWorkspace = useDeleteWorkspace();
+  const { data: currencies } = useCurrencies();
+  const currency = currencies?.find((item) => item.id === workspace.currency_id);
 
   return (
     <Flex align="center" gap={8} wrap>
       <Typography.Text strong={isCurrent}>{workspace.name}</Typography.Text>
+      {currency ? <Tag>{currency.code}</Tag> : null}
       {isCurrent ? <Tag color="blue">текущий</Tag> : null}
-      <Flex gap={8} style={{ marginLeft: "auto" }}>
+      <Flex gap={8} wrap style={{ marginLeft: "auto" }}>
         {isCurrent ? null : (
-          <Button size="small" onClick={() => switchWorkspace(workspace.id)}>
-            Переключить
-          </Button>
+          <Button onClick={() => switchWorkspace(workspace.id)}>Переключить</Button>
         )}
-        <Button size="small" onClick={() => onEdit(workspace)}>
-          Переименовать
-        </Button>
+        <Button onClick={() => onEdit(workspace)}>Переименовать</Button>
         <Popconfirm
           title={`Удалить воркспейс «${workspace.name}»? Все его кошельки, категории и операции будут удалены.`}
           okText="Удалить"
@@ -45,7 +45,7 @@ function WorkspaceRow({
           cancelText="Отмена"
           onConfirm={() => deleteWorkspace.mutate(workspace.id)}
         >
-          <Button size="small" danger loading={deleteWorkspace.isPending}>
+          <Button danger loading={deleteWorkspace.isPending}>
             Удалить
           </Button>
         </Popconfirm>
@@ -54,7 +54,7 @@ function WorkspaceRow({
   );
 }
 
-/** Секция управления воркспейсами на главной странице: переключение, создание, переименование, удаление. */
+/** Секция управления воркспейсами в «Настройках»: переключение, создание, переименование, удаление. */
 export function WorkspacesSection() {
   const workspacesQuery = useWorkspaces();
   const currentWorkspaceId = useCurrentWorkspaceId();

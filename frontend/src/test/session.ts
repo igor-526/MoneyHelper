@@ -16,6 +16,7 @@ export const AUTHENTICATED_USER: User = {
 export const DEFAULT_WORKSPACE: Workspace = {
   id: "22222222-2222-2222-2222-222222222222",
   name: "Тестовый воркспейс",
+  currency_id: "33333333-3333-3333-3333-333333333333",
   created_at: "2026-01-01T00:00:00Z",
   updated_at: null,
 };

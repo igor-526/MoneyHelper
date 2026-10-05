@@ -6,6 +6,8 @@ import { AUTHENTICATED_USER, DEFAULT_WORKSPACE, withSession } from "@/test/sessi
 
 const WORKSPACES_PAGE = { items: [DEFAULT_WORKSPACE], total: 1, limit: 100, offset: 0 };
 
+const EMPTY_PAGE = { items: [], total: 0, limit: 100, offset: 0 };
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((res) => {
@@ -20,15 +22,15 @@ describe("RequireAuth", () => {
     const api = new FakeApiClient((request) => {
       if (request.path === "/api/auth/me") return promise;
       if (request.path === "/api/workspaces") return WORKSPACES_PAGE;
-      return { status: "ok" };
+      return EMPTY_PAGE;
     });
 
     renderApp({ apiClient: api, path: "/" });
 
-    expect(screen.queryByText("Backend доступен")).not.toBeInTheDocument();
+    expect(screen.queryByText("Кошельков пока нет")).not.toBeInTheDocument();
     resolve(AUTHENTICATED_USER);
 
-    expect(await screen.findByText("Backend доступен")).toBeInTheDocument();
+    expect(await screen.findByText("Кошельков пока нет")).toBeInTheDocument();
   });
 
   it("без сессии перенаправляет на /login и сохраняет исходный путь", async () => {
@@ -57,12 +59,12 @@ describe("RequireAuth", () => {
 });
 
 describe("GuestOnly", () => {
-  it("с активной сессией /register тоже ведёт на главную", async () => {
-    const api = new FakeApiClient(withSession(() => ({ status: "ok" })));
+  it("с активной сессией /register тоже ведёт на «Кошельки»", async () => {
+    const api = new FakeApiClient(withSession(() => EMPTY_PAGE));
 
     renderApp({ apiClient: api, path: "/register" });
 
-    expect(await screen.findByText("Backend доступен")).toBeInTheDocument();
+    expect(await screen.findByText("Кошельков пока нет")).toBeInTheDocument();
   });
 
   it("без сессии /register показывает форму регистрации", async () => {

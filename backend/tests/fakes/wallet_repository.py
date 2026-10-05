@@ -1,4 +1,3 @@
-from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
@@ -27,15 +26,18 @@ class InMemoryWalletRepository:
     async def count(self, workspace_id: UUID) -> int:
         return sum(1 for wallet in self._wallets.values() if wallet.workspace_id == workspace_id)
 
+    async def get_currency_id_by_wallet(self, workspace_id: UUID) -> dict[UUID, UUID]:
+        return {
+            wallet.id: wallet.currency_id for wallet in self._wallets.values() if wallet.workspace_id == workspace_id
+        }
+
     async def update(
-        self, wallet_id: UUID, workspace_id: UUID, *, name: str, icon: str, currency_ids: Sequence[UUID], now: datetime
+        self, wallet_id: UUID, workspace_id: UUID, *, name: str, icon: str, currency_id: UUID, now: datetime
     ) -> Wallet | None:
         wallet = self._wallets.get(wallet_id)
         if wallet is None or wallet.workspace_id != workspace_id:
             return None
-        updated = wallet.model_copy(
-            update={"name": name, "icon": icon, "currency_ids": tuple(currency_ids), "updated_at": now}
-        )
+        updated = wallet.model_copy(update={"name": name, "icon": icon, "currency_id": currency_id, "updated_at": now})
         self._wallets[wallet_id] = updated
         return updated
 

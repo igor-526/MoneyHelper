@@ -18,19 +18,13 @@ const CURRENCY_CODE_BY_ID = new Map([
   ["cur3", "USDT"],
 ]);
 
-const MULTI_CURRENCY_WALLET: Wallet = {
+const WALLET: Wallet = {
   id: "w1",
   name: "Alipay",
   icon: "wallet",
-  currency_ids: ["cur1", "cur2", "cur3"],
+  currency_id: "cur2",
   created_at: "2026-01-01T00:00:00Z",
   updated_at: null,
-};
-
-const SINGLE_CURRENCY_WALLET: Wallet = {
-  ...MULTI_CURRENCY_WALLET,
-  id: "w2",
-  currency_ids: ["cur1"],
 };
 
 function setup(handler: FakeHandler) {
@@ -46,49 +40,72 @@ function setup(handler: FakeHandler) {
   return { api, wrapper };
 }
 
+function renderCard(handler: FakeHandler) {
+  const { api, wrapper } = setup(handler);
+  const view = render(<WalletRateCard wallet={WALLET} currencyCodeById={CURRENCY_CODE_BY_ID} />, {
+    wrapper,
+  });
+  return { api, ...view };
+}
+
 describe("WalletRateCard", () => {
-  it("рендерит курс относительно первой по коду валюты кошелька (currency_ids[0])", async () => {
-    const { api, wrapper } = setup(() => ({
-      target_currency_id: "cur1",
-      rates: [{ currency_id: "cur2", rate: "12.8205" }],
-      unrated_currency_ids: ["cur3"],
+  it("рендерит курс валюты кошелька к валюте воркспейса", async () => {
+    const { api } = renderCard(() => ({
+      workspace_currency_id: "cur1",
+      wallet_currency_id: "cur2",
+      rate: "12.8205",
     }));
-    render(
-      <WalletRateCard wallet={MULTI_CURRENCY_WALLET} currencyCodeById={CURRENCY_CODE_BY_ID} />,
-      {
-        wrapper,
-      },
-    );
 
     expect(await screen.findByText("1 CNY ≈ 12.8205 RUB")).toBeInTheDocument();
-    expect(screen.getByText("USDT: нет данных для курса")).toBeInTheDocument();
+    expect(
+      screen.getByText("Среднее по пополнениям этого кошелька за всё время"),
+    ).toBeInTheDocument();
     expect(api.requests[0]).toMatchObject({
       path: `/api/workspaces/${TEST_WORKSPACE_ID}/wallets/w1/rates`,
-      query: { target_currency_id: "cur1" },
     });
+    expect(api.requests[0]?.query).toBeUndefined();
   });
 
-  it("кошелёк с одной валютой — компонент ничего не рендерит и не делает запрос", () => {
-    const { api, wrapper } = setup(() => {
-      throw new Error("не должно вызываться для кошелька с одной валютой");
-    });
-    const { container } = render(
-      <WalletRateCard wallet={SINGLE_CURRENCY_WALLET} currencyCodeById={CURRENCY_CODE_BY_ID} />,
-      { wrapper },
-    );
+  it("rate === null: объясняет, что курс пока не определён", async () => {
+    renderCard(() => ({
+      workspace_currency_id: "cur1",
+      wallet_currency_id: "cur2",
+      rate: null,
+    }));
 
+    expect(
+      await screen.findByText(
+        "Курс пока не определён: пополните кошелёк, указав суммы в обеих валютах.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("валюты совпадают: карточка не отображается", async () => {
+    const { container } = renderCard(() => ({
+      workspace_currency_id: "cur1",
+      wallet_currency_id: "cur1",
+      rate: "1",
+    }));
+
+    await waitFor(() => expect(container.querySelector(".ant-spin")).not.toBeInTheDocument());
     expect(container).toBeEmptyDOMElement();
-    expect(api.requests).toHaveLength(0);
+  });
+
+  it("валюты совпадают и rate === null: карточка не отображается", async () => {
+    const { container } = renderCard(() => ({
+      workspace_currency_id: "cur1",
+      wallet_currency_id: "cur1",
+      rate: null,
+    }));
+
+    await waitFor(() => expect(container.querySelector(".ant-spin")).not.toBeInTheDocument());
+    expect(container).toBeEmptyDOMElement();
   });
 
   it("ошибка загрузки не приводит к падению компонента", async () => {
-    const { wrapper } = setup(() => {
+    const { container } = renderCard(() => {
       throw new ApiError({ kind: "not_found", status: 404 });
     });
-    const { container } = render(
-      <WalletRateCard wallet={MULTI_CURRENCY_WALLET} currencyCodeById={CURRENCY_CODE_BY_ID} />,
-      { wrapper },
-    );
 
     await waitFor(() => expect(container.querySelector(".ant-spin")).not.toBeInTheDocument());
     expect(container).toBeEmptyDOMElement();

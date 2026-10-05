@@ -4,7 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
-class WorkspaceCreate(BaseModel):
+class WorkspaceName(BaseModel):
     name: str = Field(min_length=1, max_length=100)
 
     @field_validator("name")
@@ -16,7 +16,12 @@ class WorkspaceCreate(BaseModel):
         return stripped
 
 
-WorkspaceUpdate = WorkspaceCreate
+class WorkspaceCreate(WorkspaceName):
+    currency_id: UUID
+
+
+class WorkspaceUpdate(WorkspaceName):
+    currency_id: UUID | None = None
 
 
 class WorkspaceOut(BaseModel):
@@ -24,5 +29,6 @@ class WorkspaceOut(BaseModel):
 
     id: UUID
     name: str
+    currency_id: UUID
     created_at: datetime
     updated_at: datetime | None

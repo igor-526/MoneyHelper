@@ -32,7 +32,6 @@ function setup(handler: FakeHandler) {
 const VALUES = {
   from_wallet_id: "w1",
   to_wallet_id: "w2",
-  currency_id: "cur1",
   amount: "10.00",
 };
 const CREATED = {

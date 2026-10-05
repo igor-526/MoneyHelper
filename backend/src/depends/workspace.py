@@ -5,10 +5,12 @@ from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.exceptions import NotFoundError
-from core.protocols import Clock, IdGenerator, WorkspaceRepository
+from core.protocols import Clock, CurrencyRepository, IdGenerator, WalletCounter, WorkspaceRepository
 from core.services.workspace import WorkspaceService
 from depends.auth import get_current_user
+from depends.currency import get_currency_repository
 from depends.providers import get_clock, get_id_generator
+from depends.wallet import get_wallet_repository
 from repositories.workspace import WorkspaceRepository as SqlWorkspaceRepository
 from utils.database import get_session
 
@@ -21,10 +23,12 @@ def get_workspace_repository(session: Annotated[AsyncSession, Depends(get_sessio
 
 def get_workspace_service(
     workspaces: Annotated[WorkspaceRepository, Depends(get_workspace_repository)],
+    currencies: Annotated[CurrencyRepository, Depends(get_currency_repository)],
+    wallets: Annotated[WalletCounter, Depends(get_wallet_repository)],
     clock: Annotated[Clock, Depends(get_clock)],
     ids: Annotated[IdGenerator, Depends(get_id_generator)],
 ) -> WorkspaceService:
-    return WorkspaceService(workspaces, clock, ids)
+    return WorkspaceService(workspaces, currencies, wallets, clock, ids)
 
 
 async def require_workspace(

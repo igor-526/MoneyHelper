@@ -2,10 +2,14 @@ import { Select } from "antd";
 import { useCurrencies } from "./useCurrencies";
 
 interface CurrencyPickerBaseProps {
+  /** Подставляется `Form.Item`, чтобы подпись поля связывалась с выбором. */
+  id?: string;
   placeholder?: string;
   disabled?: boolean;
   /** Ограничивает список опций переданными id валют. При отсутствии — список полный (текущее поведение). */
   allowedIds?: string[];
+  /** Кнопка очистки одиночного выбора; по умолчанию включена. */
+  allowClear?: boolean;
 }
 
 interface SingleCurrencyPickerProps extends CurrencyPickerBaseProps {
@@ -40,6 +44,7 @@ export function CurrencyPicker(props: CurrencyPickerProps) {
   if (props.multiple) {
     return (
       <Select
+        id={props.id}
         mode="multiple"
         value={props.value}
         onChange={props.onChange}
@@ -53,13 +58,14 @@ export function CurrencyPicker(props: CurrencyPickerProps) {
 
   return (
     <Select
+      id={props.id}
       value={props.value}
       onChange={props.onChange}
       options={options}
       loading={isPending}
       disabled={props.disabled || isError}
       placeholder={placeholder}
-      allowClear
+      allowClear={props.allowClear ?? true}
     />
   );
 }

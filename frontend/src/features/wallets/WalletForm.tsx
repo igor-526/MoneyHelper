@@ -13,7 +13,7 @@ export interface WalletFormProps {
   wallet?: Wallet;
 }
 
-const KNOWN_FIELDS = ["name", "icon", "currency_ids"] as const;
+const KNOWN_FIELDS = ["name", "icon", "currency_id"] as const;
 
 /** Один компонент для создания и редактирования кошелька (design.md, раздел «WalletForm»). */
 export function WalletForm({ open, onClose, wallet }: WalletFormProps) {
@@ -30,7 +30,7 @@ export function WalletForm({ open, onClose, wallet }: WalletFormProps) {
       form.setFieldsValue({
         name: wallet.name,
         icon: wallet.icon,
-        currency_ids: wallet.currency_ids,
+        currency_id: wallet.currency_id,
       });
     } else {
       form.resetFields();
@@ -48,6 +48,9 @@ export function WalletForm({ open, onClose, wallet }: WalletFormProps) {
         }
         toast.error(toastMessage);
         return;
+      }
+      if (apiError.kind === "conflict") {
+        form.setFields([{ name: "currency_id", errors: [resolveErrorMessage(apiError)] }]);
       }
       toast.error(resolveErrorMessage(apiError));
     };
@@ -83,11 +86,11 @@ export function WalletForm({ open, onClose, wallet }: WalletFormProps) {
         <IconPicker value={undefined} onChange={() => {}} />
       </Form.Item>
       <Form.Item
-        name="currency_ids"
-        label="Валюты"
-        rules={[{ required: true, type: "array", message: "Выберите хотя бы одну валюту" }]}
+        name="currency_id"
+        label="Валюта"
+        rules={[{ required: true, message: "Выберите валюту" }]}
       >
-        <CurrencyPicker multiple value={[]} onChange={() => {}} />
+        <CurrencyPicker value={undefined} onChange={() => {}} />
       </Form.Item>
       <Form.Item style={{ marginBottom: 0 }}>
         <Button type="primary" htmlType="submit" block loading={mutation.isPending}>
@@ -98,11 +101,11 @@ export function WalletForm({ open, onClose, wallet }: WalletFormProps) {
   );
 
   return isMobile ? (
-    <Drawer placement="bottom" height="80vh" open={open} onClose={onClose} title={title}>
+    <Drawer placement="bottom" size="80vh" open={open} onClose={onClose} title={title}>
       {content}
     </Drawer>
   ) : (
-    <Modal open={open} onCancel={onClose} footer={null} width={960} title={title} destroyOnClose>
+    <Modal open={open} onCancel={onClose} footer={null} width={960} title={title} destroyOnHidden>
       {content}
     </Modal>
   );

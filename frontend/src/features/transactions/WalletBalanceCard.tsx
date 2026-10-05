@@ -1,4 +1,5 @@
-import { Card, Flex, Spin, Typography } from "antd";
+import { Card, Spin, Typography } from "antd";
+import { formatAmount } from "@/shared/ui";
 import { useWalletBalances } from "./useWalletBalances";
 
 export interface WalletBalanceCardProps {
@@ -7,7 +8,7 @@ export interface WalletBalanceCardProps {
   currencyCodeById: Map<string, string>;
 }
 
-/** Баланс выбранного кошелька по валютам (design.md, раздел «WalletBalanceCard»). Владеет своим запросом. */
+/** Баланс выбранного кошелька одной суммой (design.md, раздел «WalletBalanceCard»). Владеет своим запросом. */
 export function WalletBalanceCard({ walletId, currencyCodeById }: WalletBalanceCardProps) {
   const balancesQuery = useWalletBalances(walletId);
 
@@ -25,13 +26,10 @@ export function WalletBalanceCard({ walletId, currencyCodeById }: WalletBalanceC
 
   return (
     <Card title="Баланс кошелька">
-      <Flex vertical gap={4}>
-        {balancesQuery.data.map((balance) => (
-          <Typography.Text key={balance.currency_id}>
-            {currencyCodeById.get(balance.currency_id) ?? "…"}: {balance.balance}
-          </Typography.Text>
-        ))}
-      </Flex>
+      <Typography.Text>
+        {currencyCodeById.get(balancesQuery.data.currency_id) ?? "…"}:{" "}
+        {formatAmount(balancesQuery.data.balance)}
+      </Typography.Text>
     </Card>
   );
 }

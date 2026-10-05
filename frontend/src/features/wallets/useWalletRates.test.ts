@@ -27,34 +27,23 @@ function setup(handler: FakeHandler) {
 }
 
 const RATES = {
-  target_currency_id: "cur1",
-  rates: [{ currency_id: "cur2", rate: "12.8205" }],
-  unrated_currency_ids: [],
+  workspace_currency_id: "cur1",
+  wallet_currency_id: "cur2",
+  rate: "12.8205",
 };
 
 describe("useWalletRates", () => {
   it("успешная загрузка возвращает курс без маппинга", async () => {
     const { api, wrapper } = setup(() => RATES);
 
-    const { result } = renderHook(() => useWalletRates("w1", "cur1", true), { wrapper });
+    const { result } = renderHook(() => useWalletRates("w1"), { wrapper });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual(RATES);
     expect(api.requests[0]).toMatchObject({
       method: "GET",
       path: `/api/workspaces/${TEST_WORKSPACE_ID}/wallets/w1/rates`,
-      query: { target_currency_id: "cur1" },
     });
-  });
-
-  it("enabled === false: запрос не выполняется", async () => {
-    const { api, wrapper } = setup(() => RATES);
-
-    const { result } = renderHook(() => useWalletRates("w1", "cur1", false), { wrapper });
-
-    await waitFor(() => expect(result.current.isPending).toBe(true));
-    expect(result.current.fetchStatus).toBe("idle");
-    expect(api.requests).toHaveLength(0);
   });
 
   it("состояние ошибки", async () => {
@@ -62,7 +51,7 @@ describe("useWalletRates", () => {
       throw new ApiError({ kind: "not_found", status: 404 });
     });
 
-    const { result } = renderHook(() => useWalletRates("w1", "cur1", true), { wrapper });
+    const { result } = renderHook(() => useWalletRates("w1"), { wrapper });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.data).toBeUndefined();

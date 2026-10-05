@@ -17,7 +17,7 @@ const WALLET: Wallet = {
   id: "5",
   name: "Наличные",
   icon: "wallet",
-  currency_ids: ["1", "2"],
+  currency_id: "1",
   created_at: "2026-01-01T00:00:00Z",
   updated_at: null,
 };
@@ -36,22 +36,29 @@ function setup(handler: FakeHandler) {
 }
 
 describe("WalletCard", () => {
-  it("отображает иконку, название и чипы валют в переданном порядке", () => {
+  it("отображает иконку, название и один чип валюты", () => {
     const { wrapper } = setup(() => undefined);
-    render(<WalletCard wallet={WALLET} currencyCodes={["USD", "RUB"]} onEdit={vi.fn()} />, {
+    render(<WalletCard wallet={WALLET} currencyCode="USD" onEdit={vi.fn()} />, {
       wrapper,
     });
 
     expect(document.querySelector('[data-icon="wallet"]')).toBeInTheDocument();
     expect(screen.getByText("Наличные")).toBeInTheDocument();
-    const tags = screen.getAllByText(/USD|RUB/);
-    expect(tags.map((tag) => tag.textContent)).toEqual(["USD", "RUB"]);
+    expect(screen.getAllByText("USD")).toHaveLength(1);
+  });
+
+  it("пока код валюты неизвестен, чип не отображается", () => {
+    const { wrapper } = setup(() => undefined);
+    render(<WalletCard wallet={WALLET} currencyCode={undefined} onEdit={vi.fn()} />, { wrapper });
+
+    expect(screen.getByText("Наличные")).toBeInTheDocument();
+    expect(screen.queryByText("USD")).not.toBeInTheDocument();
   });
 
   it("нажатие «Редактировать» вызывает onEdit с этим кошельком", async () => {
     const { wrapper } = setup(() => undefined);
     const onEdit = vi.fn();
-    render(<WalletCard wallet={WALLET} currencyCodes={["USD"]} onEdit={onEdit} />, { wrapper });
+    render(<WalletCard wallet={WALLET} currencyCode="USD" onEdit={onEdit} />, { wrapper });
 
     await userEvent.click(screen.getByRole("button", { name: "Редактировать" }));
 
@@ -60,7 +67,7 @@ describe("WalletCard", () => {
 
   it("подтверждение в Popconfirm вызывает DELETE /api/workspaces/{workspace_id}/wallets/{id}", async () => {
     const { api, wrapper } = setup(() => undefined);
-    render(<WalletCard wallet={WALLET} currencyCodes={["USD"]} onEdit={vi.fn()} />, { wrapper });
+    render(<WalletCard wallet={WALLET} currencyCode="USD" onEdit={vi.fn()} />, { wrapper });
 
     await userEvent.click(screen.getByRole("button", { name: "Удалить" }));
     const popup = await screen.findByRole("tooltip");
@@ -78,7 +85,7 @@ describe("WalletCard", () => {
 
   it("отмена подтверждения не вызывает запрос", async () => {
     const { api, wrapper } = setup(() => undefined);
-    render(<WalletCard wallet={WALLET} currencyCodes={["USD"]} onEdit={vi.fn()} />, { wrapper });
+    render(<WalletCard wallet={WALLET} currencyCode="USD" onEdit={vi.fn()} />, { wrapper });
 
     await userEvent.click(screen.getByRole("button", { name: "Удалить" }));
     const popup = await screen.findByRole("tooltip");

@@ -40,11 +40,29 @@ async def _create_database_if_missing(name: str) -> None:
         await connection.close()
 
 
-def upgrade_to_head() -> None:
+def alembic_config() -> Config:
     # Без ini-файла: env.py не вызывает fileConfig, поэтому логирование тестов не сбрасывается.
     config = Config()
     config.set_main_option("script_location", str(SRC_DIR / "migration"))
-    command.upgrade(config, "head")
+    return config
+
+
+def upgrade_to_head() -> None:
+    command.upgrade(alembic_config(), "head")
+
+
+async def run_sql(*statements: tuple[str, tuple]) -> list[list[asyncpg.Record]]:
+    connection = await asyncpg.connect(
+        host=settings.postgres_host,
+        port=settings.postgres_port,
+        user=settings.postgres_user,
+        password=settings.postgres_password,
+        database=settings.postgres_db,
+    )
+    try:
+        return [list(await connection.fetch(sql, *args)) for sql, args in statements]
+    finally:
+        await connection.close()
 
 
 def prepare_test_database() -> None:

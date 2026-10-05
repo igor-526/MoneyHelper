@@ -17,6 +17,7 @@ from repositories.transaction import TransactionRepository
 from repositories.user import UserRepository
 from repositories.wallet import WalletRepository
 from repositories.workspace import WorkspaceRepository
+from tests.infrastructure.factories import make_workspace_currency
 
 pytestmark = pytest.mark.infrastructure
 
@@ -38,7 +39,10 @@ async def make_user(db_session: AsyncSession) -> User:
 
 async def make_workspace(db_session: AsyncSession, owner: User | None = None) -> Workspace:
     owner = owner if owner is not None else await make_user(db_session)
-    workspace = Workspace(id=uuid4(), user_id=owner.id, name="Воркспейс", created_at=DEFAULT_CREATED_AT)
+    currency = await make_workspace_currency(db_session)
+    workspace = Workspace(
+        id=uuid4(), user_id=owner.id, name="Воркспейс", currency_id=currency.id, created_at=DEFAULT_CREATED_AT
+    )
     await WorkspaceRepository(db_session).add(workspace)
     await db_session.flush()
     return workspace
@@ -321,7 +325,7 @@ async def test_delete_category_with_transactions_raises_conflict_error(db_sessio
             workspace_id=user.id,
             name="Кошелёк",
             icon="wallet",
-            currency_ids=(currency.id,),
+            currency_id=currency.id,
             created_at=DEFAULT_CREATED_AT,
         )
     )

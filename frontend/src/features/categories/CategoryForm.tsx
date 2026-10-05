@@ -110,7 +110,7 @@ export function CategoryForm({ open, onClose, defaultType, category }: CategoryF
       {content}
     </Drawer>
   ) : (
-    <Modal open={open} onCancel={onClose} footer={null} width={960} title={title} destroyOnClose>
+    <Modal open={open} onCancel={onClose} footer={null} width={960} title={title} destroyOnHidden>
       {content}
     </Modal>
   );

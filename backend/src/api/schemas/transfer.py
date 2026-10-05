@@ -7,9 +7,10 @@ from core.schemas import Money, PageParams
 
 
 class TransferCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     from_wallet_id: UUID
     to_wallet_id: UUID
-    currency_id: UUID
     amount: Money = Field(gt=0)
     occurred_at: datetime | None = None
 
@@ -23,7 +24,6 @@ class TransferOut(BaseModel):
     id: UUID
     from_wallet_id: UUID
     to_wallet_id: UUID
-    currency_id: UUID
     amount: Money
     occurred_at: datetime
     created_at: datetime

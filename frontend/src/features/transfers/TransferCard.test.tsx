@@ -18,7 +18,6 @@ const TRANSFER: Transfer = {
   id: "t1",
   from_wallet_id: "w1",
   to_wallet_id: "w2",
-  currency_id: "cur1",
   amount: "150.00",
   occurred_at: "2026-03-05T12:30:00Z",
   created_at: "2026-03-05T12:30:00Z",

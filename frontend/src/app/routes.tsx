@@ -1,14 +1,12 @@
-import type { RouteObject } from "react-router-dom";
+import { Navigate, type RouteObject } from "react-router-dom";
 import { AnalyticsPage } from "@/features/analytics/AnalyticsPage";
 import { GuestOnly } from "@/features/auth/GuestOnly";
 import { LoginPage } from "@/features/auth/LoginPage";
 import { RegisterPage } from "@/features/auth/RegisterPage";
 import { RequireAuth } from "@/features/auth/RequireAuth";
 import { CategoriesPage } from "@/features/categories/CategoriesPage";
-import { HealthPage } from "@/features/health/HealthPage";
 import { SettingsPage } from "@/features/settings/SettingsPage";
 import { TransactionsPage } from "@/features/transactions/TransactionsPage";
-import { TransfersPage } from "@/features/transfers/TransfersPage";
 import { WalletsPage } from "@/features/wallets/WalletsPage";
 import { RequireWorkspace } from "@/features/workspaces/RequireWorkspace";
 import { AppLayout } from "./layout/AppLayout";
@@ -35,11 +33,11 @@ export const routes: RouteObject[] = [
     ),
     errorElement: <RouteErrorElement />,
     children: [
-      { index: true, element: <HealthPage /> },
+      { index: true, element: <Navigate to="/wallets" replace /> },
       { path: "wallets", element: <WalletsPage /> },
       { path: "categories", element: <CategoriesPage /> },
       { path: "transactions", element: <TransactionsPage /> },
-      { path: "transfers", element: <TransfersPage /> },
+      { path: "transfers", element: <Navigate to="/transactions?tab=transfer" replace /> },
       { path: "analytics", element: <AnalyticsPage /> },
       { path: "settings", element: <SettingsPage /> },
       { path: "*", element: <NotFoundPage /> },

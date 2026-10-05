@@ -16,9 +16,10 @@ export interface AnalyticsResult {
   unconverted_currencies: string[];
 }
 
-/** Вход `useAnalytics`: три обязательных поля запроса + сужающие опциональные. camelCase — как `TransferFilters`. */
+/** Вход `useAnalytics`: два обязательных поля запроса (диапазон и срез), валюта отображения и сужающие опциональные. camelCase — как `TransferFilters`. */
 export interface AnalyticsFilters {
-  displayCurrencyId: string;
+  /** `undefined` — валюта воркспейса: параметр не передаётся, умолчание определяет backend. */
+  displayCurrencyId: string | undefined;
   dateFrom: string;
   dateTo: string;
   groupBy: GroupBy;

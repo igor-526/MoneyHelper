@@ -23,7 +23,7 @@ function setup(handler: FakeHandler) {
   return { api, toast, invalidateSpy, wrapper };
 }
 
-const VALUES = { name: "Поездка в Японию" };
+const VALUES = { name: "Поездка в Японию", currency_id: "cur-1" };
 const UPDATED = { id: "1", ...VALUES, created_at: "2026-01-01T00:00:00Z", updated_at: null };
 
 describe("useRenameWorkspace", () => {

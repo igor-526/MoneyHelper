@@ -13,7 +13,12 @@ from models import workspaces
 
 def _map_row(row: Row[Any]) -> Workspace:
     return Workspace(
-        id=row.id, user_id=row.user_id, name=row.name, created_at=row.created_at, updated_at=row.updated_at
+        id=row.id,
+        user_id=row.user_id,
+        name=row.name,
+        currency_id=row.currency_id,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
     )
 
 
@@ -27,6 +32,7 @@ class WorkspaceRepository:
                 id=workspace.id,
                 user_id=workspace.user_id,
                 name=workspace.name,
+                currency_id=workspace.currency_id,
                 created_at=workspace.created_at,
                 updated_at=workspace.updated_at,
             )
@@ -40,6 +46,11 @@ class WorkspaceRepository:
             )
         ).first()
         return _map_row(row) if row is not None else None
+
+    async def get_currency_id(self, workspace_id: UUID) -> UUID | None:
+        return (
+            await self._session.execute(select(workspaces.c.currency_id).where(workspaces.c.id == workspace_id))
+        ).scalar_one_or_none()
 
     async def list(self, user_id: UUID, *, limit: int, offset: int) -> list[Workspace]:
         rows = (
@@ -60,11 +71,13 @@ class WorkspaceRepository:
             )
         ).scalar_one()
 
-    async def update(self, workspace_id: UUID, user_id: UUID, *, name: str, now: datetime) -> Workspace | None:
+    async def update(
+        self, workspace_id: UUID, user_id: UUID, *, name: str, currency_id: UUID, now: datetime
+    ) -> Workspace | None:
         result = await self._session.execute(
             sa_update(workspaces)
             .where(workspaces.c.id == workspace_id, workspaces.c.user_id == user_id)
-            .values(name=name, updated_at=now)
+            .values(name=name, currency_id=currency_id, updated_at=now)
             .returning(workspaces)
         )
         row = result.first()

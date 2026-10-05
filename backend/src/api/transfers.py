@@ -22,7 +22,6 @@ async def create_transfer(
         workspace_id,
         from_wallet_id=body.from_wallet_id,
         to_wallet_id=body.to_wallet_id,
-        currency_id=body.currency_id,
         amount=body.amount,
         occurred_at=body.occurred_at,
     )
@@ -73,7 +72,6 @@ async def update_transfer(
         workspace_id,
         from_wallet_id=body.from_wallet_id,
         to_wallet_id=body.to_wallet_id,
-        currency_id=body.currency_id,
         amount=body.amount,
         occurred_at=body.occurred_at,
     )

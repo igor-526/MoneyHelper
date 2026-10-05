@@ -2,29 +2,36 @@ from collections.abc import Sequence
 from uuid import UUID
 
 from core.entities import Wallet
-from core.exceptions import ClientError, NotFoundError
-from core.protocols import Clock, CurrencyRepository, IdGenerator, WalletRepository
+from core.exceptions import ClientError, ConflictError, NotFoundError
+from core.protocols import Clock, CurrencyRepository, IdGenerator, WalletRepository, WalletUsageChecker
 
 NOT_FOUND_MESSAGE = "Кошелёк не найден"
+CURRENCY_CHANGE_CONFLICT_MESSAGE = "Валюту кошелька нельзя изменить: есть операции или переводы"
 
 
 class WalletService:
     def __init__(
-        self, wallets: WalletRepository, currencies: CurrencyRepository, clock: Clock, ids: IdGenerator
+        self,
+        wallets: WalletRepository,
+        currencies: CurrencyRepository,
+        usage_checkers: Sequence[WalletUsageChecker],
+        clock: Clock,
+        ids: IdGenerator,
     ) -> None:
         self._wallets = wallets
         self._currencies = currencies
+        self._usage_checkers = usage_checkers
         self._clock = clock
         self._ids = ids
 
-    async def create_wallet(self, workspace_id: UUID, *, name: str, icon: str, currency_ids: Sequence[UUID]) -> Wallet:
-        await self._ensure_currencies_exist(currency_ids)
+    async def create_wallet(self, workspace_id: UUID, *, name: str, icon: str, currency_id: UUID) -> Wallet:
+        await self._ensure_currency_exists(currency_id)
         wallet = Wallet(
             id=self._ids.new(),
             workspace_id=workspace_id,
             name=name,
             icon=icon,
-            currency_ids=tuple(currency_ids),
+            currency_id=currency_id,
             created_at=self._clock.now(),
         )
         return await self._wallets.add(wallet)
@@ -41,11 +48,14 @@ class WalletService:
         return items, total
 
     async def update_wallet(
-        self, wallet_id: UUID, workspace_id: UUID, *, name: str, icon: str, currency_ids: Sequence[UUID]
+        self, wallet_id: UUID, workspace_id: UUID, *, name: str, icon: str, currency_id: UUID
     ) -> Wallet:
-        await self._ensure_currencies_exist(currency_ids)
+        current = await self.get_wallet(wallet_id, workspace_id)
+        if currency_id != current.currency_id:
+            await self._ensure_currency_exists(currency_id)
+            await self._ensure_wallet_unused(wallet_id)
         wallet = await self._wallets.update(
-            wallet_id, workspace_id, name=name, icon=icon, currency_ids=currency_ids, now=self._clock.now()
+            wallet_id, workspace_id, name=name, icon=icon, currency_id=currency_id, now=self._clock.now()
         )
         if wallet is None:
             raise NotFoundError(NOT_FOUND_MESSAGE)
@@ -56,8 +66,11 @@ class WalletService:
         if not deleted:
             raise NotFoundError(NOT_FOUND_MESSAGE)
 
-    async def _ensure_currencies_exist(self, currency_ids: Sequence[UUID]) -> None:
-        missing = await self._currencies.missing_ids(currency_ids)
-        if missing:
-            ids_text = ", ".join(str(currency_id) for currency_id in sorted(missing))
-            raise ClientError(f"Неизвестные currency_id: {ids_text}")
+    async def _ensure_currency_exists(self, currency_id: UUID) -> None:
+        if await self._currencies.missing_ids([currency_id]):
+            raise ClientError(f"Неизвестный currency_id: {currency_id}")
+
+    async def _ensure_wallet_unused(self, wallet_id: UUID) -> None:
+        for checker in self._usage_checkers:
+            if await checker.references_wallet(wallet_id):
+                raise ConflictError(CURRENCY_CHANGE_CONFLICT_MESSAGE)

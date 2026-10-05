@@ -3,10 +3,16 @@ import type { Dayjs } from "dayjs";
 import { useMemo, useState } from "react";
 import type { CategoryType } from "@/features/categories/Category";
 import { useCategories } from "@/features/categories/useCategories";
+import { useCurrentWorkspace } from "@/features/workspaces/useCurrentWorkspace";
 import { useWallets } from "@/features/wallets/useWallets";
 import { CurrencyPicker, EmptyState, useCurrencies } from "@/shared/ui";
 import { AnalyticsBucketCard } from "./AnalyticsBucketCard";
 import type { GroupBy } from "./Analytics";
+import {
+  allowedDisplayCurrencyIds,
+  unconvertedMessage,
+  walletCurrencyIds,
+} from "./analyticsCurrencies";
 import { INITIAL_ANALYTICS_STATE, buildAnalyticsFilters } from "./buildAnalyticsFilters";
 import { useAnalytics } from "./useAnalytics";
 import { useBucketLabelResolvers } from "./useBucketLabelResolvers";
@@ -35,6 +41,13 @@ export function AnalyticsPage() {
   const { data: wallets = [] } = useWallets();
   const { data: allCategories = [] } = useCategories(undefined);
   const { data: currencies = [] } = useCurrencies();
+  const workspace = useCurrentWorkspace();
+
+  const displayCurrencyIds = useMemo(
+    () => allowedDisplayCurrencyIds(workspace?.currency_id, wallets),
+    [workspace, wallets],
+  );
+  const operationCurrencyIds = useMemo(() => walletCurrencyIds(wallets), [wallets]);
 
   const currencyCodeById = useMemo(
     () => new Map(currencies.map((c) => [c.id, c.code])),
@@ -83,8 +96,10 @@ export function AnalyticsPage() {
             обычных `Select` ниже), поэтому доступное имя для тестов и вспомогательных технологий даёт обёртка. */}
         <div role="group" aria-label="Валюта отображения">
           <CurrencyPicker
-            value={state.displayCurrencyId}
+            value={state.displayCurrencyId ?? workspace?.currency_id}
             onChange={(value) => updateState({ displayCurrencyId: value })}
+            allowedIds={displayCurrencyIds}
+            allowClear={false}
             placeholder="Валюта отображения"
           />
         </div>
@@ -137,7 +152,9 @@ export function AnalyticsPage() {
           value={state.currencyId ?? ALL_CURRENCIES}
           options={[
             { value: ALL_CURRENCIES, label: "Все валюты" },
-            ...currencies.map((currency) => ({ value: currency.id, label: currency.code })),
+            ...currencies
+              .filter((currency) => operationCurrencyIds.includes(currency.id))
+              .map((currency) => ({ value: currency.id, label: currency.code })),
           ]}
           onChange={(value) =>
             updateState({ currencyId: value === ALL_CURRENCIES ? undefined : value })
@@ -145,28 +162,34 @@ export function AnalyticsPage() {
         />
       </Flex>
       {filters === null ? (
-        <Alert
-          type="info"
-          message="Выберите валюту отображения, диапазон дат и срез, чтобы увидеть аналитику"
-        />
+        <Alert type="info" title="Выберите диапазон дат и срез, чтобы увидеть аналитику" />
       ) : analyticsQuery.isPending ? (
         <Spin />
-      ) : sortedBuckets.length === 0 ? (
-        <EmptyState icon="trending-up" title="Нет данных за выбранный период" />
       ) : (
         <>
           {unconvertedCodes.length > 0 ? (
             <Alert
               type="warning"
-              message={`Не удалось пересчитать суммы в валютах: ${unconvertedCodes.join(", ")} — нет курса за выбранный период`}
+              title={unconvertedMessage(unconvertedCodes, displayCurrencyCode ?? "…")}
             />
           ) : null}
-          <Typography.Text type="secondary">Суммы в {displayCurrencyCode}</Typography.Text>
-          <Flex vertical gap={12}>
-            {sortedBuckets.map(({ bucket, label }) => (
-              <AnalyticsBucketCard key={bucket.group_key} label={label} bucket={bucket} />
-            ))}
-          </Flex>
+          {sortedBuckets.length === 0 ? (
+            <EmptyState icon="trending-up" title="Нет данных за выбранный период" />
+          ) : (
+            <>
+              <Typography.Text type="secondary">Суммы в {displayCurrencyCode}</Typography.Text>
+              <Flex vertical gap={12}>
+                {sortedBuckets.map(({ bucket, label }) => (
+                  <AnalyticsBucketCard
+                    key={bucket.group_key}
+                    label={label}
+                    bucket={bucket}
+                    currencyCode={displayCurrencyCode}
+                  />
+                ))}
+              </Flex>
+            </>
+          )}
         </>
       )}
     </Flex>

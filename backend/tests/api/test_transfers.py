@@ -34,7 +34,15 @@ def make_client(
     workspaces = workspaces if workspaces is not None else InMemoryWorkspaceRepository()
     user_id = user_id if user_id is not None else uuid4()
     workspace_id = workspace_id if workspace_id is not None else uuid4()
-    workspaces.seed(Workspace(id=workspace_id, user_id=user_id, created_at=datetime(2026, 1, 1, tzinfo=UTC), name="Т"))
+    workspaces.seed(
+        Workspace(
+            id=workspace_id,
+            user_id=user_id,
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+            name="Т",
+            currency_id=uuid4(),
+        )
+    )
     app = create_app()
     app.dependency_overrides[get_wallet_repository] = lambda: wallets
     app.dependency_overrides[get_currency_repository] = lambda: currencies
@@ -57,13 +65,13 @@ async def make_currency(
     return currency
 
 
-async def make_wallet(wallets: InMemoryWalletRepository, workspace_id: UUID, currency_ids: list[UUID]) -> Wallet:
+async def make_wallet(wallets: InMemoryWalletRepository, workspace_id: UUID, currency_id: UUID) -> Wallet:
     wallet = Wallet(
         id=uuid4(),
         workspace_id=workspace_id,
         name="Кошелёк",
         icon="wallet",
-        currency_ids=tuple(currency_ids),
+        currency_id=currency_id,
         created_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
     return await wallets.add(wallet)
@@ -73,14 +81,12 @@ def transfer_payload(
     *,
     from_wallet_id: UUID,
     to_wallet_id: UUID,
-    currency_id: UUID,
     amount: str = "10.00",
     occurred_at: str | None = None,
 ) -> dict:
     payload = {
         "from_wallet_id": str(from_wallet_id),
         "to_wallet_id": str(to_wallet_id),
-        "currency_id": str(currency_id),
         "amount": amount,
     }
     if occurred_at is not None:
@@ -94,8 +100,8 @@ async def make_environment(
     wallets = InMemoryWalletRepository()
     currencies = InMemoryCurrencyRepository()
     currency = await make_currency(currencies)
-    from_wallet = await make_wallet(wallets, workspace_id, [currency.id])
-    to_wallet = await make_wallet(wallets, workspace_id, [currency.id])
+    from_wallet = await make_wallet(wallets, workspace_id, currency.id)
+    to_wallet = await make_wallet(wallets, workspace_id, currency.id)
     return wallets, currencies, from_wallet, to_wallet, currency
 
 
@@ -109,7 +115,6 @@ async def test_create_transfer_with_explicit_date() -> None:
         json=transfer_payload(
             from_wallet_id=from_wallet.id,
             to_wallet_id=to_wallet.id,
-            currency_id=currency.id,
             occurred_at="2026-03-01T12:00:00Z",
         ),
     )
@@ -118,7 +123,6 @@ async def test_create_transfer_with_explicit_date() -> None:
     body = response.json()
     assert body["from_wallet_id"] == str(from_wallet.id)
     assert body["to_wallet_id"] == str(to_wallet.id)
-    assert body["currency_id"] == str(currency.id)
     assert body["amount"] == "10.00"
     assert body["occurred_at"] == "2026-03-01T12:00:00Z"
     assert body["created_at"] is not None
@@ -132,29 +136,60 @@ async def test_create_transfer_without_date_uses_server_time() -> None:
 
     response = client.post(
         transfers_url(workspace_id),
-        json=transfer_payload(from_wallet_id=from_wallet.id, to_wallet_id=to_wallet.id, currency_id=currency.id),
+        json=transfer_payload(from_wallet_id=from_wallet.id, to_wallet_id=to_wallet.id),
     )
 
     assert response.status_code == 201
     assert response.json()["occurred_at"] is not None
 
 
-async def test_create_transfer_rejects_no_shared_currency() -> None:
+async def test_create_transfer_rejects_different_wallet_currencies() -> None:
     workspace_id = uuid4()
     wallets = InMemoryWalletRepository()
     currencies = InMemoryCurrencyRepository()
     rub = await make_currency(currencies, "RUB")
     cny = await make_currency(currencies, "CNY")
-    from_wallet = await make_wallet(wallets, workspace_id, [rub.id])
-    to_wallet = await make_wallet(wallets, workspace_id, [cny.id])
+    from_wallet = await make_wallet(wallets, workspace_id, rub.id)
+    to_wallet = await make_wallet(wallets, workspace_id, cny.id)
     client, workspace_id = make_client(wallets=wallets, currencies=currencies, workspace_id=workspace_id)
 
     response = client.post(
         transfers_url(workspace_id),
-        json=transfer_payload(from_wallet_id=from_wallet.id, to_wallet_id=to_wallet.id, currency_id=rub.id),
+        json=transfer_payload(from_wallet_id=from_wallet.id, to_wallet_id=to_wallet.id),
     )
 
     assert response.status_code == 400
+    assert "одной валюты" in response.json()["detail"]
+
+
+async def test_create_transfer_rejects_currency_id_in_request() -> None:
+    workspace_id = uuid4()
+    wallets, currencies, from_wallet, to_wallet, currency = await make_environment(workspace_id)
+    client, workspace_id = make_client(wallets=wallets, currencies=currencies, workspace_id=workspace_id)
+
+    response = client.post(
+        transfers_url(workspace_id),
+        json={
+            **transfer_payload(from_wallet_id=from_wallet.id, to_wallet_id=to_wallet.id),
+            "currency_id": str(currency.id),
+        },
+    )
+
+    assert response.status_code == 400
+    assert client.get(transfers_url(workspace_id)).json()["total"] == 0
+
+
+async def test_create_transfer_response_has_no_currency_id() -> None:
+    workspace_id = uuid4()
+    wallets, currencies, from_wallet, to_wallet, _ = await make_environment(workspace_id)
+    client, workspace_id = make_client(wallets=wallets, currencies=currencies, workspace_id=workspace_id)
+
+    created = client.post(
+        transfers_url(workspace_id), json=transfer_payload(from_wallet_id=from_wallet.id, to_wallet_id=to_wallet.id)
+    ).json()
+
+    assert "currency_id" not in created
+    assert "currency_id" not in client.get(transfers_url(workspace_id, f"/{created['id']}")).json()
 
 
 async def test_create_transfer_rejects_same_wallet() -> None:
@@ -164,7 +199,7 @@ async def test_create_transfer_rejects_same_wallet() -> None:
 
     response = client.post(
         transfers_url(workspace_id),
-        json=transfer_payload(from_wallet_id=from_wallet.id, to_wallet_id=from_wallet.id, currency_id=currency.id),
+        json=transfer_payload(from_wallet_id=from_wallet.id, to_wallet_id=from_wallet.id),
     )
 
     assert response.status_code == 400
@@ -177,7 +212,7 @@ async def test_create_transfer_rejects_unknown_from_wallet() -> None:
 
     response = client.post(
         transfers_url(workspace_id),
-        json=transfer_payload(from_wallet_id=uuid4(), to_wallet_id=to_wallet.id, currency_id=currency.id),
+        json=transfer_payload(from_wallet_id=uuid4(), to_wallet_id=to_wallet.id),
     )
 
     assert response.status_code == 404
@@ -187,12 +222,12 @@ async def test_create_transfer_rejects_foreign_to_wallet() -> None:
     workspace_id = uuid4()
     wallets, currencies, from_wallet, to_wallet, currency = await make_environment(uuid4())
     wallets2 = InMemoryWalletRepository()
-    own_from_wallet = await make_wallet(wallets2, workspace_id, [currency.id])
+    own_from_wallet = await make_wallet(wallets2, workspace_id, currency.id)
     client, workspace_id = make_client(wallets=wallets2, currencies=currencies, workspace_id=workspace_id)
 
     response = client.post(
         transfers_url(workspace_id),
-        json=transfer_payload(from_wallet_id=own_from_wallet.id, to_wallet_id=to_wallet.id, currency_id=currency.id),
+        json=transfer_payload(from_wallet_id=own_from_wallet.id, to_wallet_id=to_wallet.id),
     )
 
     assert response.status_code == 404
@@ -205,9 +240,7 @@ async def test_create_transfer_rejects_nonpositive_amount() -> None:
 
     response = client.post(
         transfers_url(workspace_id),
-        json=transfer_payload(
-            from_wallet_id=from_wallet.id, to_wallet_id=to_wallet.id, currency_id=currency.id, amount="0"
-        ),
+        json=transfer_payload(from_wallet_id=from_wallet.id, to_wallet_id=to_wallet.id, amount="0"),
     )
 
     assert response.status_code == 400
@@ -220,9 +253,7 @@ async def test_create_transfer_rejects_amount_exceeding_decimal_places() -> None
 
     response = client.post(
         transfers_url(workspace_id),
-        json=transfer_payload(
-            from_wallet_id=from_wallet.id, to_wallet_id=to_wallet.id, currency_id=currency.id, amount="1.005"
-        ),
+        json=transfer_payload(from_wallet_id=from_wallet.id, to_wallet_id=to_wallet.id, amount="1.005"),
     )
 
     assert response.status_code == 400
@@ -233,7 +264,7 @@ async def test_create_transfer_without_session_is_401() -> None:
 
     response = client.post(
         transfers_url(workspace_id),
-        json=transfer_payload(from_wallet_id=uuid4(), to_wallet_id=uuid4(), currency_id=uuid4()),
+        json=transfer_payload(from_wallet_id=uuid4(), to_wallet_id=uuid4()),
     )
 
     assert response.status_code == 401
@@ -242,12 +273,12 @@ async def test_create_transfer_without_session_is_401() -> None:
 async def test_get_list_put_delete_full_cycle() -> None:
     workspace_id = uuid4()
     wallets, currencies, from_wallet, to_wallet, currency = await make_environment(workspace_id)
-    other_wallet = await make_wallet(wallets, workspace_id, [currency.id])
+    other_wallet = await make_wallet(wallets, workspace_id, currency.id)
     client, workspace_id = make_client(wallets=wallets, currencies=currencies, workspace_id=workspace_id)
 
     created = client.post(
         transfers_url(workspace_id),
-        json=transfer_payload(from_wallet_id=from_wallet.id, to_wallet_id=to_wallet.id, currency_id=currency.id),
+        json=transfer_payload(from_wallet_id=from_wallet.id, to_wallet_id=to_wallet.id),
     ).json()
     transfer_id = created["id"]
 
@@ -262,9 +293,7 @@ async def test_get_list_put_delete_full_cycle() -> None:
 
     updated = client.put(
         transfers_url(workspace_id, f"/{transfer_id}"),
-        json=transfer_payload(
-            from_wallet_id=to_wallet.id, to_wallet_id=other_wallet.id, currency_id=currency.id, amount="55.00"
-        ),
+        json=transfer_payload(from_wallet_id=to_wallet.id, to_wallet_id=other_wallet.id, amount="55.00"),
     )
     assert updated.status_code == 200
     assert updated.json()["from_wallet_id"] == str(to_wallet.id)
@@ -294,7 +323,7 @@ async def test_put_unknown_transfer_returns_404() -> None:
 
     response = client.put(
         transfers_url(workspace_id, f"/{uuid4()}"),
-        json=transfer_payload(from_wallet_id=from_wallet.id, to_wallet_id=to_wallet.id, currency_id=currency.id),
+        json=transfer_payload(from_wallet_id=from_wallet.id, to_wallet_id=to_wallet.id),
     )
 
     assert response.status_code == 404
@@ -306,20 +335,18 @@ async def test_put_validates_input_like_create() -> None:
     client, workspace_id = make_client(wallets=wallets, currencies=currencies, workspace_id=workspace_id)
     transfer_id = client.post(
         transfers_url(workspace_id),
-        json=transfer_payload(from_wallet_id=from_wallet.id, to_wallet_id=to_wallet.id, currency_id=currency.id),
+        json=transfer_payload(from_wallet_id=from_wallet.id, to_wallet_id=to_wallet.id),
     ).json()["id"]
 
     same_wallet_response = client.put(
         transfers_url(workspace_id, f"/{transfer_id}"),
-        json=transfer_payload(from_wallet_id=from_wallet.id, to_wallet_id=from_wallet.id, currency_id=currency.id),
+        json=transfer_payload(from_wallet_id=from_wallet.id, to_wallet_id=from_wallet.id),
     )
     assert same_wallet_response.status_code == 400
 
     amount_response = client.put(
         transfers_url(workspace_id, f"/{transfer_id}"),
-        json=transfer_payload(
-            from_wallet_id=from_wallet.id, to_wallet_id=to_wallet.id, currency_id=currency.id, amount="0"
-        ),
+        json=transfer_payload(from_wallet_id=from_wallet.id, to_wallet_id=to_wallet.id, amount="0"),
     )
     assert amount_response.status_code == 400
 
@@ -336,19 +363,19 @@ class TestFiltersAndSorting:
     async def test_filter_by_wallet_matches_from_or_to(self) -> None:
         workspace_id = uuid4()
         wallets, currencies, wallet_a, wallet_b, currency = await make_environment(workspace_id)
-        wallet_c = await make_wallet(wallets, workspace_id, [currency.id])
+        wallet_c = await make_wallet(wallets, workspace_id, currency.id)
         client, workspace_id = make_client(wallets=wallets, currencies=currencies, workspace_id=workspace_id)
         client.post(
             transfers_url(workspace_id),
-            json=transfer_payload(from_wallet_id=wallet_a.id, to_wallet_id=wallet_b.id, currency_id=currency.id),
+            json=transfer_payload(from_wallet_id=wallet_a.id, to_wallet_id=wallet_b.id),
         )
         client.post(
             transfers_url(workspace_id),
-            json=transfer_payload(from_wallet_id=wallet_b.id, to_wallet_id=wallet_c.id, currency_id=currency.id),
+            json=transfer_payload(from_wallet_id=wallet_b.id, to_wallet_id=wallet_c.id),
         )
         client.post(
             transfers_url(workspace_id),
-            json=transfer_payload(from_wallet_id=wallet_c.id, to_wallet_id=wallet_a.id, currency_id=currency.id),
+            json=transfer_payload(from_wallet_id=wallet_c.id, to_wallet_id=wallet_a.id),
         )
 
         response = client.get(transfers_url(workspace_id), params={"wallet_id": str(wallet_b.id)})
@@ -365,7 +392,6 @@ class TestFiltersAndSorting:
             json=transfer_payload(
                 from_wallet_id=from_wallet.id,
                 to_wallet_id=to_wallet.id,
-                currency_id=currency.id,
                 occurred_at="2026-01-01T00:00:00Z",
             ),
         )
@@ -374,7 +400,6 @@ class TestFiltersAndSorting:
             json=transfer_payload(
                 from_wallet_id=from_wallet.id,
                 to_wallet_id=to_wallet.id,
-                currency_id=currency.id,
                 occurred_at="2026-06-01T00:00:00Z",
             ),
         )
@@ -406,7 +431,6 @@ class TestFiltersAndSorting:
             json=transfer_payload(
                 from_wallet_id=from_wallet.id,
                 to_wallet_id=to_wallet.id,
-                currency_id=currency.id,
                 occurred_at="2026-01-01T00:00:00Z",
             ),
         ).json()
@@ -415,7 +439,6 @@ class TestFiltersAndSorting:
             json=transfer_payload(
                 from_wallet_id=from_wallet.id,
                 to_wallet_id=to_wallet.id,
-                currency_id=currency.id,
                 occurred_at="2026-06-01T00:00:00Z",
             ),
         ).json()
@@ -453,7 +476,7 @@ class TestWorkspaceIsolation:
         client_b, workspace_b = make_client(wallets=wallets, currencies=currencies, workspaces=workspaces)
         transfer_id = client_a.post(
             transfers_url(workspace_a),
-            json=transfer_payload(from_wallet_id=from_wallet.id, to_wallet_id=to_wallet.id, currency_id=currency.id),
+            json=transfer_payload(from_wallet_id=from_wallet.id, to_wallet_id=to_wallet.id),
         ).json()["id"]
 
         response = client_b.get(transfers_url(workspace_b, f"/{transfer_id}"))
@@ -470,14 +493,12 @@ class TestWorkspaceIsolation:
         client_b, workspace_b = make_client(wallets=wallets, currencies=currencies, workspaces=workspaces)
         transfer_id = client_a.post(
             transfers_url(workspace_a),
-            json=transfer_payload(from_wallet_id=from_wallet.id, to_wallet_id=to_wallet.id, currency_id=currency.id),
+            json=transfer_payload(from_wallet_id=from_wallet.id, to_wallet_id=to_wallet.id),
         ).json()["id"]
 
         response = client_b.put(
             transfers_url(workspace_b, f"/{transfer_id}"),
-            json=transfer_payload(
-                from_wallet_id=from_wallet.id, to_wallet_id=to_wallet.id, currency_id=currency.id, amount="1.00"
-            ),
+            json=transfer_payload(from_wallet_id=from_wallet.id, to_wallet_id=to_wallet.id, amount="1.00"),
         )
 
         assert response.status_code == 404
@@ -493,7 +514,7 @@ class TestWorkspaceIsolation:
         client_b, workspace_b = make_client(wallets=wallets, currencies=currencies, workspaces=workspaces)
         transfer_id = client_a.post(
             transfers_url(workspace_a),
-            json=transfer_payload(from_wallet_id=from_wallet.id, to_wallet_id=to_wallet.id, currency_id=currency.id),
+            json=transfer_payload(from_wallet_id=from_wallet.id, to_wallet_id=to_wallet.id),
         ).json()["id"]
 
         response = client_b.delete(transfers_url(workspace_b, f"/{transfer_id}"))
@@ -511,7 +532,7 @@ class TestWorkspaceIsolation:
         client_b, workspace_b = make_client(wallets=wallets, currencies=currencies, workspaces=workspaces)
         client_a.post(
             transfers_url(workspace_a),
-            json=transfer_payload(from_wallet_id=from_wallet.id, to_wallet_id=to_wallet.id, currency_id=currency.id),
+            json=transfer_payload(from_wallet_id=from_wallet.id, to_wallet_id=to_wallet.id),
         )
 
         response = client_b.get(transfers_url(workspace_b))

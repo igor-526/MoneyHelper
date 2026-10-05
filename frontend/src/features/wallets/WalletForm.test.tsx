@@ -30,7 +30,7 @@ const WALLET: Wallet = {
   id: "5",
   name: "Наличные",
   icon: "wallet",
-  currency_ids: ["1"],
+  currency_id: "1",
   created_at: "2026-01-01T00:00:00Z",
   updated_at: null,
 };
@@ -74,7 +74,7 @@ describe("WalletForm", () => {
       id: "9",
       name: "Новый кошелёк",
       icon: "wallet",
-      currency_ids: ["1"],
+      currency_id: "1",
       created_at: "2026-01-01T00:00:00Z",
       updated_at: null,
     };
@@ -91,7 +91,7 @@ describe("WalletForm", () => {
     expect(api.requests.at(-1)).toMatchObject({
       method: "POST",
       path: `/api/workspaces/${TEST_WORKSPACE_ID}/wallets`,
-      body: { name: "Новый кошелёк", icon: "wallet", currency_ids: ["1"] },
+      body: { name: "Новый кошелёк", icon: "wallet", currency_id: "1" },
     });
     expect(await screen.findByText("Кошелёк создан")).toBeInTheDocument();
   });
@@ -114,9 +114,37 @@ describe("WalletForm", () => {
     expect(api.requests.at(-1)).toMatchObject({
       method: "PUT",
       path: `/api/workspaces/${TEST_WORKSPACE_ID}/wallets/5`,
-      body: { name: "Обновлённый", icon: "wallet", currency_ids: ["1"] },
+      body: { name: "Обновлённый", icon: "wallet", currency_id: "1" },
     });
     expect(await screen.findByText("Кошелёк обновлён")).toBeInTheDocument();
+  });
+
+  it("валюта не выбрана: запрос не выполняется, у поля сообщение", async () => {
+    const { api, wrapper } = setup(() => ({}));
+    render(<WalletForm open onClose={vi.fn()} />, { wrapper });
+
+    await userEvent.type(screen.getByLabelText("Название"), "Без валюты");
+    await selectIcon("wallet");
+    await userEvent.click(screen.getByRole("button", { name: "Создать" }));
+
+    expect(await screen.findByText("Выберите валюту")).toBeInTheDocument();
+    expect(api.requests.some((r) => r.method === "POST")).toBe(false);
+  });
+
+  it("409 при смене валюты кошелька с операциями: сообщение у поля и в toast, форма открыта", async () => {
+    const DETAIL = "Нельзя изменить валюту кошелька, у которого есть операции";
+    const { wrapper } = setup(() => {
+      throw new ApiError({ kind: "conflict", status: 409, detail: DETAIL });
+    });
+    const onClose = vi.fn();
+    render(<WalletForm open wallet={WALLET} onClose={onClose} />, { wrapper });
+
+    await screen.findByText("USD — Доллар США");
+    await selectCurrency("RUB — Российский рубль");
+    await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(screen.getAllByText(DETAIL)).toHaveLength(2));
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it("ошибка валидации по полю остаётся в форме и не закрывает её", async () => {

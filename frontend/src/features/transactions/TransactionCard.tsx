@@ -1,47 +1,28 @@
-import { Button, Card, Flex, Tag, Tooltip, Typography, Popconfirm } from "antd";
+import { Button, Card, Flex, Popconfirm, Typography } from "antd";
 import dayjs from "dayjs";
-import type { CategoryType } from "@/features/categories/Category";
-import { Icon } from "@/shared/ui";
+import { formatAmount, Icon } from "@/shared/ui";
+import type { TransactionKind } from "./operationKinds";
 import type { Transaction } from "./Transaction";
-import { useDeleteTransaction } from "./useDeleteTransaction";
-
-const MULTI_LEG_TOOLTIP =
-  "Пополнение с несколькими валютами нельзя редактировать — удалите и создайте заново";
 
 export interface TransactionCardProps {
   transaction: Transaction;
   walletName: string | undefined;
-  category: { name: string; icon: string; type: CategoryType } | undefined;
+  category: { name: string; icon: string } | undefined;
   currencyCodeById: Map<string, string>;
+  kind: Pick<TransactionKind, "useDelete" | "deleteTitle">;
   onEdit: (transaction: Transaction) => void;
 }
 
-/**
- * Локальная копия таблицы из `CategoryCard` (015), не импорт из `features/categories` — в проекте нет
- * прецедента импорта одной фичи из другой для UI-таблиц, а сама таблица — три строки без логики (design.md).
- */
-const TYPE_TAG: Record<CategoryType, { label: string; color: "success" | "error" }> = {
-  income: { label: "Доход", color: "success" },
-  expense: { label: "Расход", color: "error" },
-};
-
-/** Сама владеет удалением (по образцу `WalletCard`/`CategoryCard`) — не получает мутацию от родителя. */
+/** Карточка пополнения или расхода; сама владеет удалением (через `kind.useDelete`), как `WalletCard`. */
 export function TransactionCard({
   transaction,
   walletName,
   category,
   currencyCodeById,
+  kind,
   onEdit,
 }: TransactionCardProps) {
-  const deleteTransaction = useDeleteTransaction();
-  const typeTag = category ? TYPE_TAG[category.type] : undefined;
-  const isMultiLeg = transaction.legs.length > 1;
-
-  const editButton = (
-    <Button disabled={isMultiLeg} onClick={() => onEdit(transaction)}>
-      Редактировать
-    </Button>
-  );
+  const deleteOperation = kind.useDelete();
 
   return (
     <Card>
@@ -50,17 +31,11 @@ export function TransactionCard({
         <Flex align="center" gap={8}>
           {category ? <Icon name={category.icon} /> : null}
           <Typography.Text strong>{category?.name ?? "…"}</Typography.Text>
-          {typeTag ? <Tag color={typeTag.color}>{typeTag.label}</Tag> : null}
         </Flex>
-        {/*
-          Одна строка «сумма код» при одной ноге, список таких строк (одна на каждую валюту) при нескольких —
-          `Flex` с одним ребёнком визуально не отличим от одинокого `Typography.Text` (design.md, п. 4.2), а
-          единый рендер через `.map()` избегает индексации `legs[0]`, небезопасной при `noUncheckedIndexedAccess`.
-        */}
         <Flex vertical gap={4}>
           {transaction.legs.map((leg) => (
             <Typography.Text key={leg.currency_id}>
-              {leg.amount} {currencyCodeById.get(leg.currency_id) ?? "…"}
+              {formatAmount(leg.amount)} {currencyCodeById.get(leg.currency_id) ?? "…"}
             </Typography.Text>
           ))}
         </Flex>
@@ -71,22 +46,15 @@ export function TransactionCard({
           {dayjs(transaction.occurred_at).format("DD.MM.YYYY HH:mm")}
         </Typography.Text>
         <Flex gap={8}>
-          {/* antd Tooltip не всплывает над disabled-элементом без обёртки — стандартный приём antd. */}
-          {isMultiLeg ? (
-            <Tooltip title={MULTI_LEG_TOOLTIP}>
-              <span>{editButton}</span>
-            </Tooltip>
-          ) : (
-            editButton
-          )}
+          <Button onClick={() => onEdit(transaction)}>Редактировать</Button>
           <Popconfirm
-            title="Удалить операцию?"
+            title={kind.deleteTitle}
             okText="Удалить"
             okType="danger"
             cancelText="Отмена"
-            onConfirm={() => deleteTransaction.mutate(transaction.id)}
+            onConfirm={() => deleteOperation.mutate(transaction.id)}
           >
-            <Button danger loading={deleteTransaction.isPending}>
+            <Button danger loading={deleteOperation.isPending}>
               Удалить
             </Button>
           </Popconfirm>

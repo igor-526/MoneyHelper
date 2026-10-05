@@ -10,6 +10,12 @@
   padding: 16px 16px calc(var(--tab-bar-height) + env(safe-area-inset-bottom) + 16px);
 }
 
+/* Полоса с индикатором воркспейса: в потоке над содержимым страницы */
+.workspace {
+  display: flex;
+  margin-bottom: 8px;
+}
+
 .tabBar {
   position: fixed;
   left: 0;

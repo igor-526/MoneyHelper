@@ -76,6 +76,15 @@ describe("useAnalytics", () => {
     });
   });
 
+  it("без валюты отображения параметр display_currency не передаётся", async () => {
+    const { api, wrapper } = setup(() => RESULT);
+
+    renderHook(() => useAnalytics({ ...BASE_FILTERS, displayCurrencyId: undefined }), { wrapper });
+
+    await waitFor(() => expect(api.requests).toHaveLength(1));
+    expect(api.requests[0]?.query?.display_currency).toBeUndefined();
+  });
+
   it("каждый сужающий фильтр по отдельности передаётся в query", async () => {
     const { api: walletApi, wrapper: walletWrapper } = setup(() => RESULT);
     renderHook(() => useAnalytics({ ...BASE_FILTERS, walletId: "w1" }), {

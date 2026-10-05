@@ -1,4 +1,5 @@
 import { Card, Flex, Spin, Typography } from "antd";
+import { formatAmount } from "@/shared/ui";
 import type { Wallet } from "./Wallet";
 import { useWalletRates } from "./useWalletRates";
 
@@ -9,18 +10,11 @@ export interface WalletRateCardProps {
 }
 
 /**
- * Средний курс многовалютного кошелька (021) относительно первой по коду валюты кошелька (`currency_ids[0]` —
- * backend уже отдаёт валюты отсортированными по коду). Не рендерится для кошелька с одной валютой — курсу не с
- * чем сравниваться (design.md, раздел 7).
+ * Средний курс кошелька к валюте воркспейса (029). Не рендерится, если валюты совпадают или запрос завершился
+ * ошибкой (уведомление показывает глобальный обработчик); при отсутствии пополнений с обеими ногами объясняет это.
  */
 export function WalletRateCard({ wallet, currencyCodeById }: WalletRateCardProps) {
-  const targetCurrencyId = wallet.currency_ids[0];
-  const hasMultipleCurrencies = wallet.currency_ids.length > 1 && targetCurrencyId !== undefined;
-  const ratesQuery = useWalletRates(wallet.id, targetCurrencyId ?? "", hasMultipleCurrencies);
-
-  if (!hasMultipleCurrencies) {
-    return null;
-  }
+  const ratesQuery = useWalletRates(wallet.id);
 
   if (ratesQuery.isPending) {
     return (
@@ -34,22 +28,28 @@ export function WalletRateCard({ wallet, currencyCodeById }: WalletRateCardProps
     return null;
   }
 
-  const targetCode = currencyCodeById.get(targetCurrencyId) ?? "…";
+  const { workspace_currency_id, wallet_currency_id, rate } = ratesQuery.data;
+  if (workspace_currency_id === wallet_currency_id) {
+    return null;
+  }
 
   return (
     <Card title="Курс кошелька">
-      <Flex vertical gap={4}>
-        {ratesQuery.data.rates.map((rate) => (
-          <Typography.Text key={rate.currency_id}>
-            1 {currencyCodeById.get(rate.currency_id) ?? "…"} ≈ {rate.rate} {targetCode}
+      {rate === null ? (
+        <Typography.Text type="secondary">
+          Курс пока не определён: пополните кошелёк, указав суммы в обеих валютах.
+        </Typography.Text>
+      ) : (
+        <Flex vertical gap={4}>
+          <Typography.Text>
+            1 {currencyCodeById.get(wallet_currency_id) ?? "…"} ≈ {formatAmount(rate, 0)}{" "}
+            {currencyCodeById.get(workspace_currency_id) ?? "…"}
           </Typography.Text>
-        ))}
-        {ratesQuery.data.unrated_currency_ids.map((currencyId) => (
-          <Typography.Text key={currencyId} type="secondary">
-            {currencyCodeById.get(currencyId) ?? "…"}: нет данных для курса
+          <Typography.Text type="secondary">
+            Среднее по пополнениям этого кошелька за всё время
           </Typography.Text>
-        ))}
-      </Flex>
+        </Flex>
+      )}
     </Card>
   );
 }

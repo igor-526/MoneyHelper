@@ -6,10 +6,9 @@ import { WorkspaceContext } from "@/features/workspaces/WorkspaceContext";
 import { ApiError, ApiClientProvider } from "@/shared/api";
 import { createQueryClient } from "@/shared/errors";
 import { type FakeHandler, FakeApiClient } from "@/test/FakeApiClient";
+import { expectOperationCachesInvalidated } from "@/test/operationCaches";
 import { createToastSpy } from "@/test/toastSpy";
 import { useCreateTopup } from "./useCreateTopup";
-import { transactionsQueryKey } from "./useTransactions";
-import { walletBalancesQueryKey } from "./useWalletBalances";
 
 const TEST_WORKSPACE_ID = "workspace-1";
 
@@ -34,22 +33,22 @@ const VALUES = {
   wallet_id: "w1",
   category_id: "c1",
   legs: [
+    { currency_id: "cur-ws", amount: "780.00" },
     { currency_id: "cur1", amount: "10.00" },
-    { currency_id: "cur2", amount: "20.00" },
   ],
 };
 const CREATED = {
   id: "1",
   wallet_id: "w1",
   category_id: "c1",
-  legs: VALUES.legs,
+  legs: [{ currency_id: "cur1", amount: "10.00" }],
   occurred_at: "2026-01-01T00:00:00Z",
   created_at: "2026-01-01T00:00:00Z",
   updated_at: null,
 };
 
 describe("useCreateTopup", () => {
-  it("успех вызывает POST /api/transactions/topups и инвалидирует операции и балансы, legs — в переданном порядке", async () => {
+  it("успех вызывает POST и инвалидирует операции, балансы, курсы и аналитику", async () => {
     const { api, invalidateSpy, wrapper } = setup(() => CREATED);
 
     const { result } = renderHook(() => useCreateTopup(), { wrapper });
@@ -60,16 +59,10 @@ describe("useCreateTopup", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(api.requests[0]).toMatchObject({
       method: "POST",
-      path: `/api/workspaces/${TEST_WORKSPACE_ID}/transactions/topups`,
-      // `toMatchObject` уже проверяет `legs` в переданном порядке как часть `VALUES`.
+      path: `/api/workspaces/${TEST_WORKSPACE_ID}/topups`,
       body: VALUES,
     });
-    expect(invalidateSpy).toHaveBeenCalledWith({
-      queryKey: transactionsQueryKey(TEST_WORKSPACE_ID),
-    });
-    expect(invalidateSpy).toHaveBeenCalledWith({
-      queryKey: walletBalancesQueryKey(TEST_WORKSPACE_ID),
-    });
+    expectOperationCachesInvalidated(invalidateSpy, TEST_WORKSPACE_ID);
   });
 
   it("ошибка не вызывает глобальный toast сама по себе (silent)", async () => {
@@ -77,7 +70,7 @@ describe("useCreateTopup", () => {
       throw new ApiError({
         kind: "validation",
         status: 400,
-        detail: "Набор валют пополнения не совпадает с набором валют кошелька",
+        fieldErrors: { amount: ["обязательно"] },
       });
     });
 

@@ -20,6 +20,10 @@ class InMemoryWorkspaceRepository:
         workspace = self._workspaces.get(workspace_id)
         return workspace if workspace is not None and workspace.user_id == user_id else None
 
+    async def get_currency_id(self, workspace_id: UUID) -> UUID | None:
+        workspace = self._workspaces.get(workspace_id)
+        return workspace.currency_id if workspace is not None else None
+
     async def list(self, user_id: UUID, *, limit: int, offset: int) -> list[Workspace]:
         items = sorted(
             (workspace for workspace in self._workspaces.values() if workspace.user_id == user_id),
@@ -30,11 +34,13 @@ class InMemoryWorkspaceRepository:
     async def count(self, user_id: UUID) -> int:
         return sum(1 for workspace in self._workspaces.values() if workspace.user_id == user_id)
 
-    async def update(self, workspace_id: UUID, user_id: UUID, *, name: str, now: datetime) -> Workspace | None:
+    async def update(
+        self, workspace_id: UUID, user_id: UUID, *, name: str, currency_id: UUID, now: datetime
+    ) -> Workspace | None:
         workspace = self._workspaces.get(workspace_id)
         if workspace is None or workspace.user_id != user_id:
             return None
-        updated = workspace.model_copy(update={"name": name, "updated_at": now})
+        updated = workspace.model_copy(update={"name": name, "currency_id": currency_id, "updated_at": now})
         self._workspaces[workspace_id] = updated
         return updated
 

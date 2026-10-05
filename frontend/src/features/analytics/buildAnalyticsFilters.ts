@@ -27,11 +27,7 @@ export const INITIAL_ANALYTICS_STATE: AnalyticsPageState = {
 /** Единственное место, решающее «все обязательные поля заполнены» — используется и для гейтинга запроса, и для
  *  выбора между `Alert` «недостаточно данных» и списком корзин (одно вычисление, не два независимых условия). */
 export function buildAnalyticsFilters(state: AnalyticsPageState): AnalyticsFilters | null {
-  if (
-    state.displayCurrencyId === undefined ||
-    state.dateRange === null ||
-    state.groupBy === undefined
-  ) {
+  if (state.dateRange === null || state.groupBy === undefined) {
     return null;
   }
   return {

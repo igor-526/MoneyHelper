@@ -62,9 +62,7 @@ export function WalletsPage() {
               <WalletCard
                 key={wallet.id}
                 wallet={wallet}
-                currencyCodes={wallet.currency_ids
-                  .map((id) => currencyById.get(id)?.code)
-                  .filter((code): code is string => code !== undefined)}
+                currencyCode={currencyById.get(wallet.currency_id)?.code}
                 onEdit={openEdit}
               />
             ))}

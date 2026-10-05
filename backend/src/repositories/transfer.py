@@ -18,7 +18,6 @@ def _map_row(row: Row[Any]) -> Transfer:
         workspace_id=row.workspace_id,
         from_wallet_id=row.from_wallet_id,
         to_wallet_id=row.to_wallet_id,
-        currency_id=row.currency_id,
         amount=row.amount,
         occurred_at=row.occurred_at,
         created_at=row.created_at,
@@ -37,7 +36,6 @@ class TransferRepository:
                 workspace_id=transfer.workspace_id,
                 from_wallet_id=transfer.from_wallet_id,
                 to_wallet_id=transfer.to_wallet_id,
-                currency_id=transfer.currency_id,
                 amount=transfer.amount,
                 occurred_at=transfer.occurred_at,
                 created_at=transfer.created_at,
@@ -91,7 +89,6 @@ class TransferRepository:
         *,
         from_wallet_id: UUID,
         to_wallet_id: UUID,
-        currency_id: UUID,
         amount: Decimal,
         occurred_at: datetime,
         now: datetime,
@@ -102,7 +99,6 @@ class TransferRepository:
             .values(
                 from_wallet_id=from_wallet_id,
                 to_wallet_id=to_wallet_id,
-                currency_id=currency_id,
                 amount=amount,
                 occurred_at=occurred_at,
                 updated_at=now,
@@ -120,18 +116,21 @@ class TransferRepository:
         )
         return result.first() is not None
 
-    async def balance_delta(self, wallet_id: UUID, workspace_id: UUID) -> dict[UUID, Decimal]:
-        signed_amount = case((transfers.c.to_wallet_id == wallet_id, transfers.c.amount), else_=-transfers.c.amount)
+    async def references_wallet(self, wallet_id: UUID) -> bool:
         query = (
-            select(transfers.c.currency_id, func.sum(signed_amount).label("balance"))
-            .where(
-                transfers.c.workspace_id == workspace_id,
-                or_(transfers.c.to_wallet_id == wallet_id, transfers.c.from_wallet_id == wallet_id),
-            )
-            .group_by(transfers.c.currency_id)
+            select(transfers.c.id)
+            .where(or_(transfers.c.to_wallet_id == wallet_id, transfers.c.from_wallet_id == wallet_id))
+            .limit(1)
         )
-        rows = await self._session.execute(query)
-        return {row.currency_id: row.balance for row in rows}
+        return (await self._session.execute(query)).first() is not None
+
+    async def balance_delta(self, wallet_id: UUID, workspace_id: UUID, currency_id: UUID) -> Decimal:
+        signed_amount = case((transfers.c.to_wallet_id == wallet_id, transfers.c.amount), else_=-transfers.c.amount)
+        query = select(func.coalesce(func.sum(signed_amount), 0)).where(
+            transfers.c.workspace_id == workspace_id,
+            or_(transfers.c.to_wallet_id == wallet_id, transfers.c.from_wallet_id == wallet_id),
+        )
+        return (await self._session.execute(query)).scalar_one()
 
     def _filtered_query(
         self, workspace_id: UUID, *, wallet_id: UUID | None, date_from: datetime | None, date_to: datetime | None

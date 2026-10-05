@@ -19,8 +19,11 @@ const FULL_STATE: AnalyticsPageState = {
 };
 
 describe("buildAnalyticsFilters", () => {
-  it("null, если не заполнена валюта отображения", () => {
-    expect(buildAnalyticsFilters({ ...FULL_STATE, displayCurrencyId: undefined })).toBeNull();
+  it("валюта отображения необязательна: без неё фильтры строятся с displayCurrencyId: undefined", () => {
+    expect(buildAnalyticsFilters({ ...FULL_STATE, displayCurrencyId: undefined })).toMatchObject({
+      displayCurrencyId: undefined,
+      groupBy: "wallet",
+    });
   });
 
   it("null, если не заполнен диапазон дат", () => {
@@ -31,15 +34,9 @@ describe("buildAnalyticsFilters", () => {
     expect(buildAnalyticsFilters({ ...FULL_STATE, groupBy: undefined })).toBeNull();
   });
 
-  it("null, если не заполнены два из трёх обязательных полей", () => {
-    expect(
-      buildAnalyticsFilters({ ...FULL_STATE, displayCurrencyId: undefined, groupBy: undefined }),
-    ).toBeNull();
+  it("null, если не заполнены ни диапазон дат, ни срез", () => {
     expect(
       buildAnalyticsFilters({ ...FULL_STATE, dateRange: null, groupBy: undefined }),
-    ).toBeNull();
-    expect(
-      buildAnalyticsFilters({ ...FULL_STATE, displayCurrencyId: undefined, dateRange: null }),
     ).toBeNull();
   });
 

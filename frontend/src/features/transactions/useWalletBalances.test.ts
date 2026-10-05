@@ -26,10 +26,7 @@ function setup(handler: FakeHandler) {
   return { api, wrapper };
 }
 
-const BALANCES = [
-  { currency_id: "cur1", balance: "100.00" },
-  { currency_id: "cur2", balance: "0.00" },
-];
+const BALANCES = { currency_id: "cur1", balance: "100.00" };
 
 describe("useWalletBalances", () => {
   it("запрос не выполняется при walletId === undefined", async () => {

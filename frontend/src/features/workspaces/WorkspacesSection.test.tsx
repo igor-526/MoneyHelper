@@ -14,13 +14,40 @@ import { WorkspacesSection } from "./WorkspacesSection";
 
 const WORKSPACES_PAGE = {
   items: [
-    { id: "1", name: "Личное", created_at: "2026-01-01T00:00:00Z", updated_at: null },
-    { id: "2", name: "Поездка в Китай", created_at: "2026-01-02T00:00:00Z", updated_at: null },
+    {
+      id: "1",
+      name: "Личное",
+      currency_id: "c1",
+      created_at: "2026-01-01T00:00:00Z",
+      updated_at: null,
+    },
+    {
+      id: "2",
+      name: "Поездка в Китай",
+      currency_id: "c2",
+      created_at: "2026-01-02T00:00:00Z",
+      updated_at: null,
+    },
   ],
   total: 2,
   limit: 100,
   offset: 0,
 };
+
+const CURRENCIES_PAGE = {
+  items: [
+    { id: "c1", code: "RUB", name: "Российский рубль", decimal_places: 2 },
+    { id: "c2", code: "CNY", name: "Юань", decimal_places: 2 },
+  ],
+  total: 2,
+  limit: 100,
+  offset: 0,
+};
+
+const handle =
+  (workspaces: unknown): FakeHandler =>
+  (request) =>
+    request.path === "/api/currencies" ? CURRENCIES_PAGE : workspaces;
 
 function setup(handler: FakeHandler, switchWorkspace: (id: string) => void = vi.fn()) {
   const api = new FakeApiClient(handler);
@@ -41,7 +68,7 @@ function setup(handler: FakeHandler, switchWorkspace: (id: string) => void = vi.
 
 describe("WorkspacesSection", () => {
   it("текущий воркспейс помечен тегом и без кнопки «Переключить»", async () => {
-    const { wrapper } = setup(() => WORKSPACES_PAGE);
+    const { wrapper } = setup(handle(WORKSPACES_PAGE));
     render(<WorkspacesSection />, { wrapper });
 
     await screen.findByText("Личное");
@@ -52,9 +79,20 @@ describe("WorkspacesSection", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("у каждого воркспейса показан код его валюты", async () => {
+    const { wrapper } = setup(handle(WORKSPACES_PAGE));
+    render(<WorkspacesSection />, { wrapper });
+
+    await screen.findByText("Личное");
+    const first = screen.getByText("Личное").closest("div.ant-flex") as HTMLElement;
+    const second = screen.getByText("Поездка в Китай").closest("div.ant-flex") as HTMLElement;
+    expect(await within(first).findByText("RUB")).toBeInTheDocument();
+    expect(await within(second).findByText("CNY")).toBeInTheDocument();
+  });
+
   it("кнопка «Переключить» у не текущего воркспейса вызывает switchWorkspace", async () => {
     const switchWorkspace = vi.fn();
-    const { wrapper } = setup(() => WORKSPACES_PAGE, switchWorkspace);
+    const { wrapper } = setup(handle(WORKSPACES_PAGE), switchWorkspace);
     render(<WorkspacesSection />, { wrapper });
 
     await screen.findByText("Поездка в Китай");
@@ -65,7 +103,7 @@ describe("WorkspacesSection", () => {
   });
 
   it("«Создать воркспейс» открывает форму создания", async () => {
-    const { wrapper } = setup(() => WORKSPACES_PAGE);
+    const { wrapper } = setup(handle(WORKSPACES_PAGE));
     render(<WorkspacesSection />, { wrapper });
     await screen.findByText("Личное");
 
@@ -75,7 +113,7 @@ describe("WorkspacesSection", () => {
   });
 
   it("«Переименовать» открывает форму с предзаполненным названием", async () => {
-    const { wrapper } = setup(() => WORKSPACES_PAGE);
+    const { wrapper } = setup(handle(WORKSPACES_PAGE));
     render(<WorkspacesSection />, { wrapper });
     await screen.findByText("Личное");
 
@@ -86,7 +124,7 @@ describe("WorkspacesSection", () => {
   });
 
   it("подтверждение в Popconfirm вызывает DELETE /api/workspaces/{id}", async () => {
-    const { api, wrapper } = setup(() => WORKSPACES_PAGE);
+    const { api, wrapper } = setup(handle(WORKSPACES_PAGE));
     render(<WorkspacesSection />, { wrapper });
     await screen.findByText("Поездка в Китай");
 

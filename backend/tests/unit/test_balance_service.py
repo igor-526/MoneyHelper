@@ -11,91 +11,92 @@ from tests.fakes import InMemoryWalletRepository
 
 
 class StubContributor:
-    def __init__(self, deltas: dict[tuple[UUID, UUID], dict[UUID, Decimal]]) -> None:
+    def __init__(self, deltas: dict[tuple[UUID, UUID, UUID], Decimal]) -> None:
         self._deltas = deltas
 
-    async def balance_delta(self, wallet_id: UUID, workspace_id: UUID) -> dict[UUID, Decimal]:
-        return self._deltas.get((wallet_id, workspace_id), {})
+    async def balance_delta(self, wallet_id: UUID, workspace_id: UUID, currency_id: UUID) -> Decimal:
+        return self._deltas.get((wallet_id, workspace_id, currency_id), Decimal("0"))
 
 
-async def make_wallet(wallets: InMemoryWalletRepository, workspace_id: UUID, currency_ids: list[UUID]) -> Wallet:
+async def make_wallet(wallets: InMemoryWalletRepository, workspace_id: UUID, currency_id: UUID) -> Wallet:
     wallet = Wallet(
         id=uuid4(),
         workspace_id=workspace_id,
         name="Кошелёк",
         icon="wallet",
-        currency_ids=tuple(currency_ids),
+        currency_id=currency_id,
         created_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
     return await wallets.add(wallet)
 
 
-async def test_get_wallet_balances_zero_with_single_contributor_without_activity() -> None:
+async def test_get_wallet_balance_zero_with_single_contributor_without_activity() -> None:
     wallets = InMemoryWalletRepository()
     owner = uuid4()
     currency = uuid4()
-    wallet = await make_wallet(wallets, owner, [currency])
+    wallet = await make_wallet(wallets, owner, currency)
     service = BalanceService(wallets, [StubContributor({})])
 
-    balances = await service.get_wallet_balances(wallet.id, owner)
+    balance = await service.get_wallet_balance(wallet.id, owner)
 
-    assert balances == [(currency, Decimal("0"))]
+    assert balance == (currency, Decimal("0"))
 
 
-async def test_get_wallet_balances_single_contributor_computes_delta() -> None:
+async def test_get_wallet_balance_single_contributor_computes_delta() -> None:
     wallets = InMemoryWalletRepository()
     owner = uuid4()
     currency = uuid4()
-    wallet = await make_wallet(wallets, owner, [currency])
-    contributor = StubContributor({(wallet.id, owner): {currency: Decimal("70")}})
+    wallet = await make_wallet(wallets, owner, currency)
+    contributor = StubContributor({(wallet.id, owner, currency): Decimal("70")})
     service = BalanceService(wallets, [contributor])
 
-    balances = await service.get_wallet_balances(wallet.id, owner)
+    balance = await service.get_wallet_balance(wallet.id, owner)
 
-    assert balances == [(currency, Decimal("70"))]
+    assert balance == (currency, Decimal("70"))
 
 
-async def test_get_wallet_balances_sums_multiple_contributors_per_currency() -> None:
+async def test_get_wallet_balance_sums_multiple_contributors() -> None:
     wallets = InMemoryWalletRepository()
     owner = uuid4()
     currency = uuid4()
-    wallet = await make_wallet(wallets, owner, [currency])
-    contributor_a = StubContributor({(wallet.id, owner): {currency: Decimal("100")}})
-    contributor_b = StubContributor({(wallet.id, owner): {currency: Decimal("-30")}})
+    wallet = await make_wallet(wallets, owner, currency)
+    contributor_a = StubContributor({(wallet.id, owner, currency): Decimal("100")})
+    contributor_b = StubContributor({(wallet.id, owner, currency): Decimal("-30")})
     service = BalanceService(wallets, [contributor_a, contributor_b])
 
-    balances = await service.get_wallet_balances(wallet.id, owner)
+    balance = await service.get_wallet_balance(wallet.id, owner)
 
-    assert balances == [(currency, Decimal("70"))]
+    assert balance == (currency, Decimal("70"))
 
 
-async def test_get_wallet_balances_separates_currencies_across_contributors() -> None:
+async def test_get_wallet_balance_requests_deltas_in_wallet_currency_only() -> None:
     wallets = InMemoryWalletRepository()
     owner = uuid4()
-    rub, cny = uuid4(), uuid4()
-    wallet = await make_wallet(wallets, owner, [rub, cny])
-    contributor_a = StubContributor({(wallet.id, owner): {rub: Decimal("100")}})
-    contributor_b = StubContributor({(wallet.id, owner): {cny: Decimal("50")}})
-    service = BalanceService(wallets, [contributor_a, contributor_b])
+    wallet_currency, other_currency = uuid4(), uuid4()
+    wallet = await make_wallet(wallets, owner, wallet_currency)
+    contributor = StubContributor(
+        {(wallet.id, owner, wallet_currency): Decimal("100"), (wallet.id, owner, other_currency): Decimal("999")}
+    )
+    service = BalanceService(wallets, [contributor])
 
-    balances = await service.get_wallet_balances(wallet.id, owner)
+    balance = await service.get_wallet_balance(wallet.id, owner)
 
-    assert balances == [(rub, Decimal("100")), (cny, Decimal("50"))]
+    assert balance == (wallet_currency, Decimal("100"))
 
 
-async def test_get_wallet_balances_unknown_wallet_raises_not_found() -> None:
+async def test_get_wallet_balance_unknown_wallet_raises_not_found() -> None:
     wallets = InMemoryWalletRepository()
     service = BalanceService(wallets, [StubContributor({})])
 
     with pytest.raises(NotFoundError):
-        await service.get_wallet_balances(uuid4(), uuid4())
+        await service.get_wallet_balance(uuid4(), uuid4())
 
 
-async def test_get_wallet_balances_foreign_wallet_raises_not_found() -> None:
+async def test_get_wallet_balance_foreign_wallet_raises_not_found() -> None:
     wallets = InMemoryWalletRepository()
     owner = uuid4()
-    wallet = await make_wallet(wallets, owner, [uuid4()])
+    wallet = await make_wallet(wallets, owner, uuid4())
     service = BalanceService(wallets, [StubContributor({})])
 
     with pytest.raises(NotFoundError):
-        await service.get_wallet_balances(wallet.id, uuid4())
+        await service.get_wallet_balance(wallet.id, uuid4())

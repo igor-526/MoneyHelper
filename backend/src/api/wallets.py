@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query, status
 from api.schemas.wallet import WalletCreate, WalletOut, WalletUpdate
 from core.schemas import Page, PageParams
 from core.services.wallet import WalletService
-from depends.wallet import get_wallet_service
+from depends.wallet_service import get_wallet_service
 from depends.workspace import require_workspace
 
 router = APIRouter(prefix="/api/workspaces/{workspace_id}/wallets", tags=["Wallets"])
@@ -19,7 +19,7 @@ async def create_wallet(
     wallet_service: Annotated[WalletService, Depends(get_wallet_service)],
 ) -> WalletOut:
     wallet = await wallet_service.create_wallet(
-        workspace_id, name=body.name, icon=body.icon, currency_ids=body.currency_ids
+        workspace_id, name=body.name, icon=body.icon, currency_id=body.currency_id
     )
     return WalletOut.model_validate(wallet)
 
@@ -57,7 +57,7 @@ async def update_wallet(
     wallet_service: Annotated[WalletService, Depends(get_wallet_service)],
 ) -> WalletOut:
     wallet = await wallet_service.update_wallet(
-        wallet_id, workspace_id, name=body.name, icon=body.icon, currency_ids=body.currency_ids
+        wallet_id, workspace_id, name=body.name, icon=body.icon, currency_id=body.currency_id
     )
     return WalletOut.model_validate(wallet)
 

@@ -40,7 +40,15 @@ def make_client(
     workspaces = workspaces if workspaces is not None else InMemoryWorkspaceRepository()
     user_id = user_id if user_id is not None else uuid4()
     workspace_id = workspace_id if workspace_id is not None else uuid4()
-    workspaces.seed(Workspace(id=workspace_id, user_id=user_id, created_at=datetime(2026, 1, 1, tzinfo=UTC), name="Т"))
+    workspaces.seed(
+        Workspace(
+            id=workspace_id,
+            user_id=user_id,
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+            name="Т",
+            currency_id=uuid4(),
+        )
+    )
     app = create_app()
     app.dependency_overrides[get_category_repository] = lambda: categories
     app.dependency_overrides[get_wallet_repository] = lambda: wallets
@@ -249,7 +257,7 @@ async def test_delete_category_with_transactions_returns_409() -> None:
             workspace_id=workspace_id,
             name="Кошелёк",
             icon="wallet",
-            currency_ids=(currency.id,),
+            currency_id=currency.id,
             created_at=datetime(2026, 1, 1, tzinfo=UTC),
         )
     )

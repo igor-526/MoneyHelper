@@ -58,7 +58,6 @@ describe("useTransactions", () => {
       query: {
         wallet_id: undefined,
         category_id: undefined,
-        type: undefined,
         date_from: undefined,
         date_to: undefined,
         limit: DEFAULT_PAGE_SIZE,
@@ -82,13 +81,6 @@ describe("useTransactions", () => {
     );
     await waitFor(() => expect(categoryApi.requests).toHaveLength(1));
     expect(categoryApi.requests[0]).toMatchObject({ query: { category_id: "c1" } });
-
-    const { api: typeApi, wrapper: typeWrapper } = setup(() => transactionsPage());
-    renderHook(() => useTransactions({ type: "income" }, { offset: 0, limit: DEFAULT_PAGE_SIZE }), {
-      wrapper: typeWrapper,
-    });
-    await waitFor(() => expect(typeApi.requests).toHaveLength(1));
-    expect(typeApi.requests[0]).toMatchObject({ query: { type: "income" } });
 
     const { api: dateApi, wrapper: dateWrapper } = setup(() => transactionsPage());
     renderHook(
@@ -114,7 +106,6 @@ describe("useTransactions", () => {
           {
             walletId: "w1",
             categoryId: "c1",
-            type: "expense",
             dateFrom: "2026-01-01T00:00:00.000Z",
             dateTo: "2026-01-31T23:59:59.999Z",
           },
@@ -128,7 +119,6 @@ describe("useTransactions", () => {
       query: {
         wallet_id: "w1",
         category_id: "c1",
-        type: "expense",
         date_from: "2026-01-01T00:00:00.000Z",
         date_to: "2026-01-31T23:59:59.999Z",
       },

@@ -11,6 +11,7 @@ import { DESKTOP_QUERY } from "@/shared/ui/useIsMobile";
 import { type FakeHandler, FakeApiClient } from "@/test/FakeApiClient";
 import { createToastSpy } from "@/test/toastSpy";
 import { setMedia } from "@/test/matchMedia";
+import type { Transaction } from "./Transaction";
 import { TopupForm } from "./TopupForm";
 
 const TEST_WORKSPACE_ID = "workspace-1";
@@ -18,9 +19,9 @@ const TEST_WORKSPACE_ID = "workspace-1";
 const WALLETS = [
   {
     id: "w1",
-    name: "Мультивалютный",
+    name: "Основной",
     icon: "wallet",
-    currency_ids: ["cur1", "cur2"],
+    currency_id: "cur1",
     created_at: "2026-01-01T00:00:00Z",
     updated_at: null,
   },
@@ -28,7 +29,7 @@ const WALLETS = [
     id: "w2",
     name: "Карта",
     icon: "credit-card",
-    currency_ids: ["cur2"],
+    currency_id: "cur2",
     created_at: "2026-01-01T00:00:00Z",
     updated_at: null,
   },
@@ -54,8 +55,31 @@ function page(items: unknown[]) {
   return { items, total: items.length, limit: 100, offset: 0 };
 }
 
+const WORKSPACE = {
+  id: TEST_WORKSPACE_ID,
+  name: "Основной",
+  currency_id: "cur1",
+  created_at: "2026-01-01T00:00:00Z",
+  updated_at: null,
+};
+
+const TOPUP: Transaction = {
+  id: "t1",
+  wallet_id: "w2",
+  category_id: "c1",
+  legs: [
+    { currency_id: "cur1", amount: "10000.00" },
+    { currency_id: "cur2", amount: "780.00" },
+  ],
+  occurred_at: "2026-02-01T10:00:00Z",
+  comment: "Обмен",
+  created_at: "2026-02-01T10:00:00Z",
+  updated_at: null,
+};
+
 function withFixtures(handler: FakeHandler): FakeHandler {
   return (request) => {
+    if (request.path === "/api/workspaces") return page([WORKSPACE]);
     if (request.path === `/api/workspaces/${TEST_WORKSPACE_ID}/wallets`) return page(WALLETS);
     if (request.path === "/api/currencies") return page(CURRENCIES);
     if (request.path === `/api/workspaces/${TEST_WORKSPACE_ID}/categories`) {
@@ -93,11 +117,21 @@ async function selectOption(labelText: string, optionLabel: string) {
 }
 
 describe("TopupForm", () => {
-  it("выбор кошелька строит поля сумм по числу его валют", async () => {
+  it("кошелёк в валюте воркспейса строит одно поле суммы", async () => {
     const { wrapper } = setup(() => ({}));
     render(<TopupForm open onClose={vi.fn()} />, { wrapper });
 
-    await selectOption("Кошелёк", "Мультивалютный");
+    await selectOption("Кошелёк", "Основной");
+
+    expect(await screen.findByLabelText("Сумма (USD)")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Сумма (RUB)")).not.toBeInTheDocument();
+  });
+
+  it("кошелёк в другой валюте строит два поля: валюта воркспейса и валюта кошелька", async () => {
+    const { wrapper } = setup(() => ({}));
+    render(<TopupForm open onClose={vi.fn()} />, { wrapper });
+
+    await selectOption("Кошелёк", "Карта");
 
     expect(await screen.findByLabelText("Сумма (USD)")).toBeInTheDocument();
     expect(screen.getByLabelText("Сумма (RUB)")).toBeInTheDocument();
@@ -107,13 +141,13 @@ describe("TopupForm", () => {
     const { wrapper } = setup(() => ({}));
     render(<TopupForm open onClose={vi.fn()} />, { wrapper });
 
-    await selectOption("Кошелёк", "Мультивалютный");
+    await selectOption("Кошелёк", "Основной");
     await userEvent.type(await screen.findByLabelText("Сумма (USD)"), "10");
 
     await selectOption("Кошелёк", "Карта");
 
-    expect(screen.queryByLabelText("Сумма (USD)")).not.toBeInTheDocument();
-    expect(screen.getByLabelText("Сумма (RUB)")).toHaveValue("");
+    expect(await screen.findByLabelText("Сумма (RUB)")).toHaveValue("");
+    expect(screen.getByLabelText("Сумма (USD)")).toHaveValue("");
   });
 
   it("категория предлагает только доходные (запрос с type=income)", async () => {
@@ -131,15 +165,82 @@ describe("TopupForm", () => {
     ).toBe(true);
   });
 
-  it("успешное создание отправляет legs в порядке currency_ids кошелька", async () => {
+  it("успешное создание в другой валюте отправляет две ноги на /topups", async () => {
+    const { api, wrapper } = setup(() => TOPUP);
+    const onClose = vi.fn();
+    render(<TopupForm open onClose={onClose} />, { wrapper });
+
+    await selectOption("Кошелёк", "Карта");
+    await userEvent.type(await screen.findByLabelText("Сумма (USD)"), "10000");
+    await userEvent.type(screen.getByLabelText("Сумма (RUB)"), "780");
+    await selectOption("Категория", "Зарплата");
+    await userEvent.click(screen.getByRole("button", { name: "Создать" }));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    const request = api.requests.find(
+      (r) => r.method === "POST" && r.path === `/api/workspaces/${TEST_WORKSPACE_ID}/topups`,
+    );
+    expect(request?.body).toMatchObject({
+      wallet_id: "w2",
+      category_id: "c1",
+      legs: [
+        { currency_id: "cur1", amount: "10000" },
+        { currency_id: "cur2", amount: "780" },
+      ],
+    });
+  });
+
+  it("редактирование предзаполняет форму ногами и отправляет PUT /topups/{id}", async () => {
+    const { api, wrapper } = setup(() => TOPUP);
+    const onClose = vi.fn();
+    render(<TopupForm open transaction={TOPUP} onClose={onClose} />, { wrapper });
+
+    await waitFor(() => expect(screen.getByLabelText("Сумма (RUB)")).toHaveValue("780.00"));
+    expect(screen.getByLabelText("Сумма (USD)")).toHaveValue("10000.00");
+    expect(screen.getByLabelText("Комментарий")).toHaveValue("Обмен");
+
+    await userEvent.clear(screen.getByLabelText("Сумма (RUB)"));
+    await userEvent.type(screen.getByLabelText("Сумма (RUB)"), "800");
+    await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(api.requests.at(-1)).toMatchObject({
+      method: "PUT",
+      path: `/api/workspaces/${TEST_WORKSPACE_ID}/topups/t1`,
+      body: {
+        wallet_id: "w2",
+        category_id: "c1",
+        legs: [
+          { currency_id: "cur1", amount: "10000.00" },
+          { currency_id: "cur2", amount: "800" },
+        ],
+        comment: "Обмен",
+      },
+    });
+    expect(await screen.findByText("Пополнение обновлено")).toBeInTheDocument();
+  });
+
+  it("редактирование убирает лишние нули из сумм backend (8 знаков)", async () => {
+    const raw = {
+      ...TOPUP,
+      legs: [
+        { currency_id: "cur1", amount: "10000.00000000" },
+        { currency_id: "cur2", amount: "780.00000000" },
+      ],
+    };
+    const { wrapper } = setup(() => raw);
+    render(<TopupForm open transaction={raw} onClose={vi.fn()} />, { wrapper });
+
+    await waitFor(() => expect(screen.getByLabelText("Сумма (RUB)")).toHaveValue("780.00"));
+    expect(screen.getByLabelText("Сумма (USD)")).toHaveValue("10000.00");
+  });
+
+  it("успешное создание отправляет одну ногу в валюте кошелька", async () => {
     const CREATED = {
       id: "1",
       wallet_id: "w1",
       category_id: "c1",
-      legs: [
-        { currency_id: "cur1", amount: "10" },
-        { currency_id: "cur2", amount: "20" },
-      ],
+      legs: [{ currency_id: "cur1", amount: "10" }],
       occurred_at: "2026-01-01T00:00:00Z",
       created_at: "2026-01-01T00:00:00Z",
       updated_at: null,
@@ -148,25 +249,19 @@ describe("TopupForm", () => {
     const onClose = vi.fn();
     render(<TopupForm open onClose={onClose} />, { wrapper });
 
-    await selectOption("Кошелёк", "Мультивалютный");
+    await selectOption("Кошелёк", "Основной");
     await userEvent.type(await screen.findByLabelText("Сумма (USD)"), "10");
-    await userEvent.type(screen.getByLabelText("Сумма (RUB)"), "20");
     await selectOption("Категория", "Зарплата");
     await userEvent.click(screen.getByRole("button", { name: "Создать" }));
 
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     const request = api.requests.find(
-      (r) =>
-        r.method === "POST" &&
-        r.path === `/api/workspaces/${TEST_WORKSPACE_ID}/transactions/topups`,
+      (r) => r.method === "POST" && r.path === `/api/workspaces/${TEST_WORKSPACE_ID}/topups`,
     );
     expect(request?.body).toMatchObject({
       wallet_id: "w1",
       category_id: "c1",
-      legs: [
-        { currency_id: "cur1", amount: "10" },
-        { currency_id: "cur2", amount: "20" },
-      ],
+      legs: [{ currency_id: "cur1", amount: "10" }],
     });
     expect(await screen.findByText("Пополнение создано")).toBeInTheDocument();
   });
@@ -176,10 +271,7 @@ describe("TopupForm", () => {
       id: "1",
       wallet_id: "w1",
       category_id: "c1",
-      legs: [
-        { currency_id: "cur1", amount: "10" },
-        { currency_id: "cur2", amount: "20" },
-      ],
+      legs: [{ currency_id: "cur1", amount: "10" }],
       occurred_at: "2026-01-01T00:00:00Z",
       comment: "Обмен в банке",
       created_at: "2026-01-01T00:00:00Z",
@@ -189,18 +281,15 @@ describe("TopupForm", () => {
     const onClose = vi.fn();
     render(<TopupForm open onClose={onClose} />, { wrapper });
 
-    await selectOption("Кошелёк", "Мультивалютный");
+    await selectOption("Кошелёк", "Основной");
     await userEvent.type(await screen.findByLabelText("Сумма (USD)"), "10");
-    await userEvent.type(screen.getByLabelText("Сумма (RUB)"), "20");
     await selectOption("Категория", "Зарплата");
     await userEvent.type(screen.getByLabelText("Комментарий"), "Обмен в банке");
     await userEvent.click(screen.getByRole("button", { name: "Создать" }));
 
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     const request = api.requests.find(
-      (r) =>
-        r.method === "POST" &&
-        r.path === `/api/workspaces/${TEST_WORKSPACE_ID}/transactions/topups`,
+      (r) => r.method === "POST" && r.path === `/api/workspaces/${TEST_WORKSPACE_ID}/topups`,
     );
     expect(request?.body).toMatchObject({ comment: "Обмен в банке" });
   });
@@ -216,9 +305,8 @@ describe("TopupForm", () => {
     const onClose = vi.fn();
     render(<TopupForm open onClose={onClose} />, { wrapper });
 
-    await selectOption("Кошелёк", "Мультивалютный");
+    await selectOption("Кошелёк", "Основной");
     await userEvent.type(await screen.findByLabelText("Сумма (USD)"), "10");
-    await userEvent.type(screen.getByLabelText("Сумма (RUB)"), "20");
     await selectOption("Категория", "Зарплата");
     await userEvent.click(screen.getByRole("button", { name: "Создать" }));
 
@@ -241,9 +329,8 @@ describe("TopupForm", () => {
     const onClose = vi.fn();
     render(<TopupForm open onClose={onClose} />, { wrapper });
 
-    await selectOption("Кошелёк", "Мультивалютный");
+    await selectOption("Кошелёк", "Основной");
     await userEvent.type(await screen.findByLabelText("Сумма (USD)"), "10");
-    await userEvent.type(screen.getByLabelText("Сумма (RUB)"), "20");
     await selectOption("Категория", "Зарплата");
     await userEvent.click(screen.getByRole("button", { name: "Создать" }));
 

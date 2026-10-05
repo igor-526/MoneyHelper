@@ -1,4 +1,3 @@
-from collections.abc import Sequence
 from datetime import datetime
 from typing import Protocol
 from uuid import UUID
@@ -16,7 +15,7 @@ class WalletRepository(Protocol):
     async def count(self, workspace_id: UUID) -> int: ...
 
     async def update(
-        self, wallet_id: UUID, workspace_id: UUID, *, name: str, icon: str, currency_ids: Sequence[UUID], now: datetime
+        self, wallet_id: UUID, workspace_id: UUID, *, name: str, icon: str, currency_id: UUID, now: datetime
     ) -> Wallet | None: ...
 
     async def delete(self, wallet_id: UUID, workspace_id: UUID) -> bool: ...

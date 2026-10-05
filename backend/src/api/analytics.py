@@ -17,7 +17,7 @@ async def get_analytics(
     workspace_id: Annotated[UUID, Depends(require_workspace)],
     analytics_service: Annotated[AnalyticsService, Depends(get_analytics_service)],
 ) -> AnalyticsOut:
-    buckets, unconverted = await analytics_service.get_analytics(
+    display_currency_id, buckets, unconverted = await analytics_service.get_analytics(
         workspace_id,
         display_currency_id=params.display_currency,
         date_from=params.date_from,
@@ -29,7 +29,7 @@ async def get_analytics(
         type=params.type,
     )
     return AnalyticsOut(
-        display_currency_id=params.display_currency,
+        display_currency_id=display_currency_id,
         buckets=[
             AnalyticsBucketOut(group_key=key, income=income, expense=expense) for key, income, expense in buckets
         ],

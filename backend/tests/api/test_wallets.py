@@ -44,7 +44,15 @@ def make_client(
     workspaces = workspaces if workspaces is not None else InMemoryWorkspaceRepository()
     user_id = user_id if user_id is not None else uuid4()
     workspace_id = workspace_id if workspace_id is not None else uuid4()
-    workspaces.seed(Workspace(id=workspace_id, user_id=user_id, created_at=datetime(2026, 1, 1, tzinfo=UTC), name="Т"))
+    workspaces.seed(
+        Workspace(
+            id=workspace_id,
+            user_id=user_id,
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+            name="Т",
+            currency_id=uuid4(),
+        )
+    )
     app = create_app()
     app.dependency_overrides[get_wallet_repository] = lambda: wallets
     app.dependency_overrides[get_currency_repository] = lambda: currencies
@@ -69,40 +77,30 @@ async def seeded_currencies() -> tuple[InMemoryCurrencyRepository, Currency, Cur
     return repo, rub, cny
 
 
-def wallet_payload(currency_ids: list[UUID], name: str = "Наличные", icon: str = "wallet") -> dict:
-    return {"name": name, "icon": icon, "currency_ids": [str(cid) for cid in currency_ids]}
+def wallet_payload(currency_id: UUID, name: str = "Наличные", icon: str = "wallet") -> dict:
+    return {"name": name, "icon": icon, "currency_id": str(currency_id)}
 
 
-async def test_create_wallet_with_one_currency() -> None:
+async def test_create_wallet_with_currency() -> None:
     currencies, rub, _ = await seeded_currencies()
     client, workspace_id = make_client(currencies=currencies)
 
-    response = client.post(wallets_url(workspace_id), json=wallet_payload([rub.id]))
+    response = client.post(wallets_url(workspace_id), json=wallet_payload(rub.id))
 
     assert response.status_code == 201
     body = response.json()
     assert body["name"] == "Наличные"
     assert body["icon"] == "wallet"
-    assert body["currency_ids"] == [str(rub.id)]
+    assert body["currency_id"] == str(rub.id)
     assert body["created_at"] is not None
     assert body["updated_at"] is None
-
-
-async def test_create_wallet_with_multiple_currencies() -> None:
-    currencies, rub, cny = await seeded_currencies()
-    client, workspace_id = make_client(currencies=currencies)
-
-    response = client.post(wallets_url(workspace_id), json=wallet_payload([rub.id, cny.id]))
-
-    assert response.status_code == 201
-    assert set(response.json()["currency_ids"]) == {str(rub.id), str(cny.id)}
 
 
 async def test_create_wallet_rejects_empty_name() -> None:
     currencies, rub, _ = await seeded_currencies()
     client, workspace_id = make_client(currencies=currencies)
 
-    response = client.post(wallets_url(workspace_id), json=wallet_payload([rub.id], name="   "))
+    response = client.post(wallets_url(workspace_id), json=wallet_payload(rub.id, name="   "))
 
     assert response.status_code == 400
 
@@ -111,24 +109,25 @@ async def test_create_wallet_rejects_unknown_icon() -> None:
     currencies, rub, _ = await seeded_currencies()
     client, workspace_id = make_client(currencies=currencies)
 
-    response = client.post(wallets_url(workspace_id), json=wallet_payload([rub.id], icon="not-an-icon"))
+    response = client.post(wallets_url(workspace_id), json=wallet_payload(rub.id, icon="not-an-icon"))
 
     assert response.status_code == 400
 
 
-async def test_create_wallet_rejects_empty_currency_ids() -> None:
-    client, workspace_id = make_client()
-
-    response = client.post(wallets_url(workspace_id), json=wallet_payload([]))
-
-    assert response.status_code == 400
-
-
-async def test_create_wallet_rejects_duplicate_currency_ids() -> None:
+async def test_create_wallet_rejects_currency_ids_list() -> None:
     currencies, rub, _ = await seeded_currencies()
     client, workspace_id = make_client(currencies=currencies)
+    payload = {"name": "Наличные", "icon": "wallet", "currency_ids": [str(rub.id)]}
 
-    response = client.post(wallets_url(workspace_id), json=wallet_payload([rub.id, rub.id]))
+    response = client.post(wallets_url(workspace_id), json=payload)
+
+    assert response.status_code == 400
+
+
+async def test_create_wallet_rejects_missing_currency_id() -> None:
+    client, workspace_id = make_client()
+
+    response = client.post(wallets_url(workspace_id), json={"name": "Наличные", "icon": "wallet"})
 
     assert response.status_code == 400
 
@@ -137,7 +136,7 @@ async def test_create_wallet_rejects_unknown_currency() -> None:
     unknown_id = uuid4()
     client, workspace_id = make_client()
 
-    response = client.post(wallets_url(workspace_id), json=wallet_payload([unknown_id]))
+    response = client.post(wallets_url(workspace_id), json=wallet_payload(unknown_id))
 
     assert response.status_code == 400
     assert str(unknown_id) in response.json()["detail"]
@@ -146,7 +145,7 @@ async def test_create_wallet_rejects_unknown_currency() -> None:
 async def test_create_wallet_without_session_is_401() -> None:
     client, workspace_id = make_client(authenticated=False)
 
-    response = client.post(wallets_url(workspace_id), json=wallet_payload([uuid4()]))
+    response = client.post(wallets_url(workspace_id), json=wallet_payload(uuid4()))
 
     assert response.status_code == 401
 
@@ -154,7 +153,7 @@ async def test_create_wallet_without_session_is_401() -> None:
 async def test_create_wallet_with_unknown_workspace_is_404() -> None:
     client, _ = make_client()
 
-    response = client.post(wallets_url(uuid4()), json=wallet_payload([uuid4()]))
+    response = client.post(wallets_url(uuid4()), json=wallet_payload(uuid4()))
 
     assert response.status_code == 404
 
@@ -164,7 +163,7 @@ async def test_get_list_put_delete_full_cycle() -> None:
     wallets = InMemoryWalletRepository()
     client, workspace_id = make_client(wallets=wallets, currencies=currencies)
 
-    created = client.post(wallets_url(workspace_id), json=wallet_payload([rub.id])).json()
+    created = client.post(wallets_url(workspace_id), json=wallet_payload(rub.id)).json()
     wallet_id = created["id"]
 
     got = client.get(wallets_url(workspace_id, f"/{wallet_id}"))
@@ -176,10 +175,10 @@ async def test_get_list_put_delete_full_cycle() -> None:
     assert listed.json()["total"] == 1
     assert listed.json()["items"][0]["id"] == wallet_id
 
-    updated = client.put(wallets_url(workspace_id, f"/{wallet_id}"), json=wallet_payload([cny.id], name="Обновлённый"))
+    updated = client.put(wallets_url(workspace_id, f"/{wallet_id}"), json=wallet_payload(cny.id, name="Обновлённый"))
     assert updated.status_code == 200
     assert updated.json()["name"] == "Обновлённый"
-    assert updated.json()["currency_ids"] == [str(cny.id)]
+    assert updated.json()["currency_id"] == str(cny.id)
     assert updated.json()["updated_at"] is not None
 
     deleted = client.delete(wallets_url(workspace_id, f"/{wallet_id}"))
@@ -201,7 +200,7 @@ async def test_put_unknown_wallet_returns_404() -> None:
     currencies, rub, _ = await seeded_currencies()
     client, workspace_id = make_client(currencies=currencies)
 
-    response = client.put(wallets_url(workspace_id, f"/{uuid4()}"), json=wallet_payload([rub.id]))
+    response = client.put(wallets_url(workspace_id, f"/{uuid4()}"), json=wallet_payload(rub.id))
 
     assert response.status_code == 404
 
@@ -210,15 +209,15 @@ async def test_put_validates_input_like_create() -> None:
     currencies, rub, _ = await seeded_currencies()
     wallets = InMemoryWalletRepository()
     client, workspace_id = make_client(wallets=wallets, currencies=currencies)
-    wallet_id = client.post(wallets_url(workspace_id), json=wallet_payload([rub.id])).json()["id"]
+    wallet_id = client.post(wallets_url(workspace_id), json=wallet_payload(rub.id)).json()["id"]
     url = wallets_url(workspace_id, f"/{wallet_id}")
 
-    assert client.put(url, json=wallet_payload([rub.id], name=" ")).status_code == 400
-    assert client.put(url, json=wallet_payload([rub.id], icon="nope")).status_code == 400
-    assert client.put(url, json=wallet_payload([])).status_code == 400
-    assert client.put(url, json=wallet_payload([rub.id, rub.id])).status_code == 400
+    assert client.put(url, json=wallet_payload(rub.id, name=" ")).status_code == 400
+    assert client.put(url, json=wallet_payload(rub.id, icon="nope")).status_code == 400
+    assert client.put(url, json={"name": "Х", "icon": "wallet", "currency_ids": [str(rub.id)]}).status_code == 400
+    assert client.put(url, json={"name": "Х", "icon": "wallet"}).status_code == 400
     unknown_id = uuid4()
-    assert client.put(url, json=wallet_payload([unknown_id])).status_code == 400
+    assert client.put(url, json=wallet_payload(unknown_id)).status_code == 400
 
 
 async def test_delete_unknown_wallet_returns_404() -> None:
@@ -259,7 +258,7 @@ async def test_delete_wallet_with_transactions_returns_409() -> None:
     client, workspace_id = make_client(
         wallets=wallets, currencies=currencies, categories=categories, transactions=transactions
     )
-    wallet_id = client.post(wallets_url(workspace_id), json=wallet_payload([rub.id])).json()["id"]
+    wallet_id = client.post(wallets_url(workspace_id), json=wallet_payload(rub.id)).json()["id"]
     category = await categories.add(
         Category(
             id=uuid4(),
@@ -294,15 +293,14 @@ async def test_delete_wallet_with_transfer_returns_409() -> None:
     transfers = InMemoryTransferRepository()
     wallets = RestrictingWalletRepository(transfers=transfers)
     client, workspace_id = make_client(wallets=wallets, currencies=currencies, transfers=transfers)
-    wallet_id = client.post(wallets_url(workspace_id), json=wallet_payload([rub.id])).json()["id"]
-    other_wallet_id = client.post(wallets_url(workspace_id), json=wallet_payload([rub.id], name="Второй")).json()["id"]
+    wallet_id = client.post(wallets_url(workspace_id), json=wallet_payload(rub.id)).json()["id"]
+    other_wallet_id = client.post(wallets_url(workspace_id), json=wallet_payload(rub.id, name="Второй")).json()["id"]
     transfer = await transfers.add(
         Transfer(
             id=uuid4(),
             workspace_id=workspace_id,
             from_wallet_id=UUID(wallet_id),
             to_wallet_id=UUID(other_wallet_id),
-            currency_id=rub.id,
             amount=Decimal("10"),
             occurred_at=datetime(2026, 1, 1, tzinfo=UTC),
             created_at=datetime(2026, 1, 1, tzinfo=UTC),
@@ -316,6 +314,78 @@ async def test_delete_wallet_with_transfer_returns_409() -> None:
     assert await transfers.get_by_id(transfer.id, workspace_id) is not None
 
 
+async def test_put_changing_currency_of_wallet_with_transactions_returns_409() -> None:
+    currencies, rub, cny = await seeded_currencies()
+    categories = InMemoryCategoryRepository()
+    transactions = InMemoryTransactionRepository(categories)
+    client, workspace_id = make_client(currencies=currencies, categories=categories, transactions=transactions)
+    wallet_id = client.post(wallets_url(workspace_id), json=wallet_payload(rub.id)).json()["id"]
+    await transactions.add(
+        Transaction(
+            id=uuid4(),
+            workspace_id=workspace_id,
+            wallet_id=UUID(wallet_id),
+            category_id=uuid4(),
+            legs=(TransactionLeg(currency_id=rub.id, amount=Decimal("10")),),
+            occurred_at=datetime(2026, 1, 1, tzinfo=UTC),
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+    )
+
+    response = client.put(wallets_url(workspace_id, f"/{wallet_id}"), json=wallet_payload(cny.id))
+
+    assert response.status_code == 409
+    assert client.get(wallets_url(workspace_id, f"/{wallet_id}")).json()["currency_id"] == str(rub.id)
+
+
+async def test_put_changing_currency_of_wallet_with_transfer_returns_409() -> None:
+    currencies, rub, cny = await seeded_currencies()
+    transfers = InMemoryTransferRepository()
+    client, workspace_id = make_client(currencies=currencies, transfers=transfers)
+    wallet_id = client.post(wallets_url(workspace_id), json=wallet_payload(rub.id)).json()["id"]
+    other_wallet_id = client.post(wallets_url(workspace_id), json=wallet_payload(rub.id, name="Второй")).json()["id"]
+    await transfers.add(
+        Transfer(
+            id=uuid4(),
+            workspace_id=workspace_id,
+            from_wallet_id=UUID(other_wallet_id),
+            to_wallet_id=UUID(wallet_id),
+            amount=Decimal("10"),
+            occurred_at=datetime(2026, 1, 1, tzinfo=UTC),
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+    )
+
+    response = client.put(wallets_url(workspace_id, f"/{wallet_id}"), json=wallet_payload(cny.id))
+
+    assert response.status_code == 409
+
+
+async def test_put_renaming_wallet_with_transactions_and_same_currency_is_allowed() -> None:
+    currencies, rub, _ = await seeded_currencies()
+    categories = InMemoryCategoryRepository()
+    transactions = InMemoryTransactionRepository(categories)
+    client, workspace_id = make_client(currencies=currencies, categories=categories, transactions=transactions)
+    wallet_id = client.post(wallets_url(workspace_id), json=wallet_payload(rub.id)).json()["id"]
+    await transactions.add(
+        Transaction(
+            id=uuid4(),
+            workspace_id=workspace_id,
+            wallet_id=UUID(wallet_id),
+            category_id=uuid4(),
+            legs=(TransactionLeg(currency_id=rub.id, amount=Decimal("10")),),
+            occurred_at=datetime(2026, 1, 1, tzinfo=UTC),
+            created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+    )
+
+    response = client.put(wallets_url(workspace_id, f"/{wallet_id}"), json=wallet_payload(rub.id, name="Новое"))
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "Новое"
+    assert response.json()["currency_id"] == str(rub.id)
+
+
 class TestWorkspaceIsolation:
     async def test_foreign_wallet_is_not_readable(self) -> None:
         currencies, rub, _ = await seeded_currencies()
@@ -323,7 +393,7 @@ class TestWorkspaceIsolation:
         workspaces = InMemoryWorkspaceRepository()
         client_a, workspace_a = make_client(wallets=wallets, currencies=currencies, workspaces=workspaces)
         client_b, workspace_b = make_client(wallets=wallets, currencies=currencies, workspaces=workspaces)
-        wallet_id = client_a.post(wallets_url(workspace_a), json=wallet_payload([rub.id])).json()["id"]
+        wallet_id = client_a.post(wallets_url(workspace_a), json=wallet_payload(rub.id)).json()["id"]
 
         response = client_b.get(wallets_url(workspace_b, f"/{wallet_id}"))
 
@@ -335,9 +405,9 @@ class TestWorkspaceIsolation:
         workspaces = InMemoryWorkspaceRepository()
         client_a, workspace_a = make_client(wallets=wallets, currencies=currencies, workspaces=workspaces)
         client_b, workspace_b = make_client(wallets=wallets, currencies=currencies, workspaces=workspaces)
-        wallet_id = client_a.post(wallets_url(workspace_a), json=wallet_payload([rub.id])).json()["id"]
+        wallet_id = client_a.post(wallets_url(workspace_a), json=wallet_payload(rub.id)).json()["id"]
 
-        response = client_b.put(wallets_url(workspace_b, f"/{wallet_id}"), json=wallet_payload([cny.id], name="Чужое"))
+        response = client_b.put(wallets_url(workspace_b, f"/{wallet_id}"), json=wallet_payload(cny.id, name="Чужое"))
 
         assert response.status_code == 404
         assert client_a.get(wallets_url(workspace_a, f"/{wallet_id}")).json()["name"] == "Наличные"
@@ -348,7 +418,7 @@ class TestWorkspaceIsolation:
         workspaces = InMemoryWorkspaceRepository()
         client_a, workspace_a = make_client(wallets=wallets, currencies=currencies, workspaces=workspaces)
         client_b, workspace_b = make_client(wallets=wallets, currencies=currencies, workspaces=workspaces)
-        wallet_id = client_a.post(wallets_url(workspace_a), json=wallet_payload([rub.id])).json()["id"]
+        wallet_id = client_a.post(wallets_url(workspace_a), json=wallet_payload(rub.id)).json()["id"]
 
         response = client_b.delete(wallets_url(workspace_b, f"/{wallet_id}"))
 
@@ -361,7 +431,7 @@ class TestWorkspaceIsolation:
         workspaces = InMemoryWorkspaceRepository()
         client_a, workspace_a = make_client(wallets=wallets, currencies=currencies, workspaces=workspaces)
         client_b, workspace_b = make_client(wallets=wallets, currencies=currencies, workspaces=workspaces)
-        client_a.post(wallets_url(workspace_a), json=wallet_payload([rub.id], name="Кошелёк A"))
+        client_a.post(wallets_url(workspace_a), json=wallet_payload(rub.id, name="Кошелёк A"))
 
         response = client_b.get(wallets_url(workspace_b))
 

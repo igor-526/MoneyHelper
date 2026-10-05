@@ -19,7 +19,7 @@ const WALLETS = [
     id: "w1",
     name: "Наличные",
     icon: "wallet",
-    currency_ids: ["cur1"],
+    currency_id: "cur1",
     created_at: "",
     updated_at: null,
   },
@@ -27,10 +27,22 @@ const WALLETS = [
     id: "w2",
     name: "Карта",
     icon: "credit-card",
-    currency_ids: ["cur1"],
+    currency_id: "cur1",
     created_at: "",
     updated_at: null,
   },
+  {
+    id: "w3",
+    name: "Alipay",
+    icon: "wallet",
+    currency_id: "cur3",
+    created_at: "",
+    updated_at: null,
+  },
+];
+
+const WORKSPACES = [
+  { id: TEST_WORKSPACE_ID, name: "Дом", currency_id: "cur2", created_at: "", updated_at: null },
 ];
 
 const CATEGORIES = [
@@ -48,6 +60,8 @@ const CATEGORIES = [
 const CURRENCIES = [
   { id: "cur1", code: "USD", name: "Доллар США", decimal_places: 2 },
   { id: "cur2", code: "RUB", name: "Российский рубль", decimal_places: 2 },
+  { id: "cur3", code: "CNY", name: "Китайский юань", decimal_places: 2 },
+  { id: "cur4", code: "USDT", name: "Tether", decimal_places: 2 },
 ];
 
 function referencePage(items: unknown[]) {
@@ -60,6 +74,7 @@ function withFixtures(handler: FakeHandler): FakeHandler {
       return referencePage(WALLETS);
     if (request.path === `/api/workspaces/${TEST_WORKSPACE_ID}/categories`)
       return referencePage(CATEGORIES);
+    if (request.path === "/api/workspaces") return referencePage(WORKSPACES);
     if (request.path === "/api/currencies") return referencePage(CURRENCIES);
     return handler(request);
   };
@@ -70,7 +85,7 @@ function analyticsResult(
   unconvertedCurrencies: string[] = [],
 ) {
   return {
-    display_currency_id: "cur1",
+    display_currency_id: "cur2",
     buckets,
     unconverted_currencies: unconvertedCurrencies,
   };
@@ -129,14 +144,13 @@ async function chooseDateRange() {
   await userEvent.keyboard("{Enter}");
 }
 
-/** Заполняет все три обязательных поля: валюту отображения, диапазон дат и срез. */
+/** Заполняет обязательные поля: диапазон дат и срез (валюта отображения по умолчанию — валюта воркспейса). */
 async function fillRequiredFields(groupBy: "Кошелёк" | "Категория" | "Валюта" = "Кошелёк") {
-  await chooseDisplayCurrency("USD — Доллар США");
   await chooseDateRange();
   await chooseGroupBy(groupBy);
 }
 
-const INFO_MESSAGE = "Выберите валюту отображения, диапазон дат и срез, чтобы увидеть аналитику";
+const INFO_MESSAGE = "Выберите диапазон дат и срез, чтобы увидеть аналитику";
 
 describe("AnalyticsPage", () => {
   it("пустое состояние: показывает Alert «недостаточно данных», запрос не выполняется", async () => {
@@ -147,23 +161,11 @@ describe("AnalyticsPage", () => {
     expect(analyticsRequests(api)).toHaveLength(0);
   });
 
-  it("заполнена только валюта отображения: запрос не выполняется", async () => {
+  it("заполнен только диапазон дат: запрос не выполняется", async () => {
     const { api, wrapper } = setup(() => analyticsResult([]));
     render(<AnalyticsPage />, { wrapper });
     await screen.findByText(INFO_MESSAGE);
 
-    await chooseDisplayCurrency("USD — Доллар США");
-
-    expect(screen.getByText(INFO_MESSAGE)).toBeInTheDocument();
-    expect(analyticsRequests(api)).toHaveLength(0);
-  });
-
-  it("заполнены валюта отображения и диапазон дат, без среза: запрос не выполняется", async () => {
-    const { api, wrapper } = setup(() => analyticsResult([]));
-    render(<AnalyticsPage />, { wrapper });
-    await screen.findByText(INFO_MESSAGE);
-
-    await chooseDisplayCurrency("USD — Доллар США");
     await chooseDateRange();
 
     expect(screen.getByText(INFO_MESSAGE)).toBeInTheDocument();
@@ -181,7 +183,7 @@ describe("AnalyticsPage", () => {
     expect(analyticsRequests(api)).toHaveLength(0);
   });
 
-  it("заполнены все три обязательных поля: запрос выполняется автоматически, без кнопки подтверждения", async () => {
+  it("заполнены обязательные поля: запрос выполняется без display_currency, без кнопки подтверждения", async () => {
     const { api, wrapper } = setup(() =>
       analyticsResult([{ group_key: "w1", income: "100.00", expense: "0" }]),
     );
@@ -196,7 +198,7 @@ describe("AnalyticsPage", () => {
     await waitFor(() => expect(analyticsRequests(api)).toHaveLength(1));
     expect(analyticsRequests(api)[0]).toMatchObject({
       query: {
-        display_currency: "cur1",
+        display_currency: undefined,
         group_by: "wallet",
         date_from: dayjs("2026-03-01").startOf("day").toISOString(),
         date_to: dayjs("2026-03-10").endOf("day").toISOString(),
@@ -270,10 +272,10 @@ describe("AnalyticsPage", () => {
     await fillRequiredFields("Кошелёк");
     await waitFor(() => expect(analyticsRequests(api)).toHaveLength(1));
 
-    await chooseOption("Валюта операции", "RUB");
+    await chooseOption("Валюта операции", "CNY");
 
     await waitFor(() =>
-      expect(analyticsRequests(api).at(-1)).toMatchObject({ query: { currency_id: "cur2" } }),
+      expect(analyticsRequests(api).at(-1)).toMatchObject({ query: { currency_id: "cur3" } }),
     );
   });
 
@@ -371,7 +373,7 @@ describe("AnalyticsPage", () => {
 
   it("предупреждение о валютах без курса отображается с корректными кодами", async () => {
     const { wrapper } = setup(() =>
-      analyticsResult([{ group_key: "w1", income: "1", expense: "0" }], ["cur2"]),
+      analyticsResult([{ group_key: "w1", income: "1", expense: "0" }], ["cur3"]),
     );
     render(<AnalyticsPage />, { wrapper });
 
@@ -379,9 +381,83 @@ describe("AnalyticsPage", () => {
 
     expect(
       await screen.findByText(
-        "Не удалось пересчитать суммы в валютах: RUB — нет курса за выбранный период",
+        "Операции в валютах CNY не вошли в итоги: за выбранный период нет пополнений, по которым можно вычислить курс к RUB. Выберите другой период или валюту отображения.",
       ),
     ).toBeInTheDocument();
+  });
+
+  it("предупреждение показывается и когда все корзины исключены из-за отсутствия курса", async () => {
+    const { wrapper } = setup(() => analyticsResult([], ["cur3"]));
+    render(<AnalyticsPage />, { wrapper });
+
+    await fillRequiredFields("Кошелёк");
+
+    expect(await screen.findByText(/Операции в валютах CNY не вошли в итоги/)).toBeInTheDocument();
+    expect(screen.getByText("Нет данных за выбранный период")).toBeInTheDocument();
+  });
+
+  it("по умолчанию в выборе валюты отображения — валюта воркспейса", async () => {
+    const { wrapper } = setup(() => analyticsResult([]));
+    render(<AnalyticsPage />, { wrapper });
+
+    const group = screen.getByRole("group", { name: "Валюта отображения" });
+    expect(await within(group).findByText("RUB — Российский рубль")).toBeInTheDocument();
+  });
+
+  it("валюта отображения: допустимы только валюта воркспейса и валюты кошельков", async () => {
+    const { wrapper } = setup(() => analyticsResult([]));
+    render(<AnalyticsPage />, { wrapper });
+    const group = screen.getByRole("group", { name: "Валюта отображения" });
+    await within(group).findByText("RUB — Российский рубль");
+
+    await userEvent.click(within(group).getByRole("combobox"));
+
+    const dropdown = await waitFor(() => {
+      const nodes = document.querySelectorAll(".ant-select-dropdown-list");
+      if (nodes.length === 0) throw new Error("Выпадающий список ещё не отрисован");
+      return nodes[nodes.length - 1] as HTMLElement;
+    });
+    expect(within(dropdown).getByText("USD — Доллар США")).toBeInTheDocument();
+    expect(within(dropdown).getByText("CNY — Китайский юань")).toBeInTheDocument();
+    expect(within(dropdown).queryByText("USDT — Tether")).not.toBeInTheDocument();
+  });
+
+  it("смена валюты отображения передаёт display_currency и показывает суммы в ней", async () => {
+    const { api, wrapper } = setup((request) => ({
+      ...analyticsResult([{ group_key: "w1", income: "780.00000000", expense: "0" }]),
+      display_currency_id: request.query?.display_currency ?? "cur2",
+    }));
+    render(<AnalyticsPage />, { wrapper });
+    await fillRequiredFields("Кошелёк");
+    expect(await screen.findByText("Доход: 780.00 RUB")).toBeInTheDocument();
+    expect(screen.getByText("Суммы в RUB")).toBeInTheDocument();
+
+    await chooseDisplayCurrency("CNY — Китайский юань");
+
+    await waitFor(() =>
+      expect(analyticsRequests(api).at(-1)).toMatchObject({ query: { display_currency: "cur3" } }),
+    );
+    expect(await screen.findByText("Доход: 780.00 CNY")).toBeInTheDocument();
+    expect(screen.getByText("Суммы в CNY")).toBeInTheDocument();
+  });
+
+  it("фильтр «Валюта операции»: только валюты кошельков", async () => {
+    const { wrapper } = setup(() => analyticsResult([]));
+    render(<AnalyticsPage />, { wrapper });
+    await screen.findByText(INFO_MESSAGE);
+
+    await userEvent.click(screen.getByRole("combobox", { name: "Валюта операции" }));
+
+    const dropdown = await waitFor(() => {
+      const nodes = document.querySelectorAll(".ant-select-dropdown-list");
+      if (nodes.length === 0) throw new Error("Выпадающий список ещё не отрисован");
+      return nodes[nodes.length - 1] as HTMLElement;
+    });
+    expect(within(dropdown).getByText("Все валюты")).toBeInTheDocument();
+    expect(within(dropdown).getByText("USD")).toBeInTheDocument();
+    expect(within(dropdown).getByText("CNY")).toBeInTheDocument();
+    expect(within(dropdown).queryByText("RUB")).not.toBeInTheDocument();
+    expect(within(dropdown).queryByText("USDT")).not.toBeInTheDocument();
   });
 
   it("предупреждение отсутствует при пустом unconverted_currencies", async () => {
@@ -393,7 +469,7 @@ describe("AnalyticsPage", () => {
     await fillRequiredFields("Кошелёк");
     await screen.findByText("Наличные");
 
-    expect(screen.queryByText(/Не удалось пересчитать/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/не вошли в итоги/)).not.toBeInTheDocument();
   });
 
   it("ошибка «неизвестная валюта отображения» показывает toast, список корзин не отображается", async () => {

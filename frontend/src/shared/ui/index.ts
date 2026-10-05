@@ -10,5 +10,5 @@ export {
   useCurrencies,
 } from "./CurrencyPicker";
 export { IconPicker, type IconPickerProps } from "./IconPicker";
-export { MoneyInput, type MoneyInputProps } from "./MoneyInput";
+export { MoneyInput, formatAmount, type MoneyInputProps } from "./MoneyInput";
 export { EmptyState, type EmptyStateProps } from "./EmptyState";

@@ -2,42 +2,27 @@ import { useQuery } from "@tanstack/react-query";
 import { useCurrentWorkspaceId } from "@/features/workspaces/WorkspaceContext";
 import { useApiClient } from "@/shared/api";
 
-export interface CurrencyRate {
-  currency_id: string;
-  rate: string;
+/** Форма ответа backend (`WalletRateOut`, 029): `rate` — `null`, если пополнений с обеими ногами ещё нет. */
+export interface WalletRate {
+  workspace_currency_id: string;
+  wallet_currency_id: string;
+  rate: string | null;
 }
 
-/** Форма ответа backend (`WalletRatesOut`, 021). */
-export interface WalletRates {
-  target_currency_id: string;
-  rates: CurrencyRate[];
-  unrated_currency_ids: string[];
+/** Без `walletId` — префикс всех курсов воркспейса (для инвалидации). */
+export function walletRatesQueryKey(workspaceId: string, walletId?: string) {
+  return walletId === undefined
+    ? (["wallet-rates", workspaceId] as const)
+    : (["wallet-rates", workspaceId, walletId] as const);
 }
 
-export function walletRatesQueryKey(
-  workspaceId: string,
-  walletId: string,
-  targetCurrencyId: string,
-) {
-  return ["wallet-rates", workspaceId, walletId, targetCurrencyId] as const;
-}
-
-/**
- * Курс кошелька относительно `targetCurrencyId` (021) — независимый от `useWalletBalances` запрос, тот же
- * приём «сам владеет своим запросом», что и остальные карточки на `TransactionsPage`. `enabled` — тот же приём,
- * что у `useWalletBalances(walletId)`: запрос не выполняется, пока вызывающий не готов (например, кошелёк с
- * одной валютой — курсу не с чем сравниваться).
- */
-export function useWalletRates(walletId: string, targetCurrencyId: string, enabled: boolean) {
+/** Курс кошелька к валюте воркспейса (029) — независимый от `useWalletBalances` запрос. */
+export function useWalletRates(walletId: string) {
   const api = useApiClient();
   const workspaceId = useCurrentWorkspaceId();
   return useQuery({
-    queryKey: walletRatesQueryKey(workspaceId, walletId, targetCurrencyId),
+    queryKey: walletRatesQueryKey(workspaceId, walletId),
     queryFn: ({ signal }) =>
-      api.get<WalletRates>(`/api/workspaces/${workspaceId}/wallets/${walletId}/rates`, {
-        query: { target_currency_id: targetCurrencyId },
-        signal,
-      }),
-    enabled,
+      api.get<WalletRate>(`/api/workspaces/${workspaceId}/wallets/${walletId}/rates`, { signal }),
   });
 }

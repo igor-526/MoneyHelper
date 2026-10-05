@@ -1,10 +1,11 @@
-import { Button, Drawer, Form, Input, Modal } from "antd";
+import { Button, Drawer, Form, Input, Modal, Typography } from "antd";
 import { useEffect } from "react";
 import { applyFieldErrors, resolveErrorMessage, toApiError } from "@/shared/errors";
-import { useIsMobile, useToast } from "@/shared/ui";
+import { CurrencyPicker, useIsMobile, useToast } from "@/shared/ui";
 import type { Workspace, WorkspaceFormValues } from "./Workspace";
 import { useCreateWorkspace } from "./useCreateWorkspace";
 import { useRenameWorkspace } from "./useRenameWorkspace";
+import { useWorkspaceHasWallets } from "./useWorkspaceHasWallets";
 
 export interface WorkspaceFormProps {
   open: boolean;
@@ -15,7 +16,7 @@ export interface WorkspaceFormProps {
   onSuccess?: (workspace: Workspace) => void;
 }
 
-const KNOWN_FIELDS = ["name"] as const;
+const KNOWN_FIELDS = ["name", "currency_id"] as const;
 
 /** Один компонент для создания и переименования воркспейса (design.md, раздел 6). */
 export function WorkspaceForm({ open, onClose, workspace, onSuccess }: WorkspaceFormProps) {
@@ -25,11 +26,14 @@ export function WorkspaceForm({ open, onClose, workspace, onSuccess }: Workspace
   const createWorkspace = useCreateWorkspace();
   const renameWorkspace = useRenameWorkspace();
   const mutation = workspace ? renameWorkspace : createWorkspace;
+  const hasWallets = useWorkspaceHasWallets(open ? workspace?.id : undefined);
+  // Пока неизвестно, есть ли кошельки, валюту не даём менять: backend всё равно ответил бы 409
+  const currencyLocked = workspace !== undefined && hasWallets.data !== false;
 
   useEffect(() => {
     if (!open) return;
     if (workspace) {
-      form.setFieldsValue({ name: workspace.name });
+      form.setFieldsValue({ name: workspace.name, currency_id: workspace.currency_id });
     } else {
       form.resetFields();
     }
@@ -73,6 +77,21 @@ export function WorkspaceForm({ open, onClose, workspace, onSuccess }: Workspace
       >
         <Input maxLength={100} />
       </Form.Item>
+      <Form.Item
+        name="currency_id"
+        label="Основная валюта"
+        rules={[{ required: true, message: "Выберите валюту" }]}
+        extra={
+          hasWallets.data === true ? (
+            <Typography.Text type="secondary">
+              Валюту нельзя изменить: в воркспейсе есть кошельки
+            </Typography.Text>
+          ) : null
+        }
+      >
+        {/* `value`/`onChange` — заглушка для типов; Form.Item подставляет настоящие через cloneElement. */}
+        <CurrencyPicker value={undefined} onChange={() => {}} disabled={currencyLocked} />
+      </Form.Item>
       <Form.Item style={{ marginBottom: 0 }}>
         <Button type="primary" htmlType="submit" block loading={mutation.isPending}>
           {workspace ? "Сохранить" : "Создать"}
@@ -82,11 +101,11 @@ export function WorkspaceForm({ open, onClose, workspace, onSuccess }: Workspace
   );
 
   return isMobile ? (
-    <Drawer placement="bottom" height="40vh" open={open} onClose={onClose} title={title}>
+    <Drawer placement="bottom" height="60vh" open={open} onClose={onClose} title={title}>
       {content}
     </Drawer>
   ) : (
-    <Modal open={open} onCancel={onClose} footer={null} width={480} title={title} destroyOnClose>
+    <Modal open={open} onCancel={onClose} footer={null} width={480} title={title} destroyOnHidden>
       {content}
     </Modal>
   );

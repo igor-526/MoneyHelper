@@ -3,7 +3,7 @@ export interface Wallet {
   id: string;
   name: string;
   icon: string;
-  currency_ids: string[];
+  currency_id: string;
   created_at: string;
   updated_at: string | null;
 }
@@ -12,5 +12,5 @@ export interface Wallet {
 export interface WalletFormValues {
   name: string;
   icon: string;
-  currency_ids: string[];
+  currency_id: string;
 }

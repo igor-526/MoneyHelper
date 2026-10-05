@@ -11,6 +11,8 @@ import { type FakeHandler, FakeApiClient } from "@/test/FakeApiClient";
 import { createToastSpy } from "@/test/toastSpy";
 import type { Transaction } from "./Transaction";
 import { TransactionCard } from "./TransactionCard";
+import { useDeleteTopup } from "./useDeleteTopup";
+import { useDeleteTransaction } from "./useDeleteTransaction";
 
 const TEST_WORKSPACE_ID = "workspace-1";
 
@@ -18,6 +20,10 @@ const CURRENCY_CODE_BY_ID = new Map([
   ["cur1", "USD"],
   ["cur2", "RUB"],
 ]);
+
+const KIND = { useDelete: useDeleteTransaction, deleteTitle: "Удалить расход?" };
+
+const TOPUP_KIND = { useDelete: useDeleteTopup, deleteTitle: "Удалить пополнение?" };
 
 const TRANSACTION: Transaction = {
   id: "t1",
@@ -59,8 +65,9 @@ describe("TransactionCard", () => {
       <TransactionCard
         transaction={TRANSACTION}
         walletName="Наличные"
-        category={{ name: "Зарплата", icon: "banknote", type: "income" }}
+        category={{ name: "Зарплата", icon: "banknote" }}
         currencyCodeById={CURRENCY_CODE_BY_ID}
+        kind={KIND}
         onEdit={vi.fn()}
       />,
       { wrapper },
@@ -68,7 +75,7 @@ describe("TransactionCard", () => {
 
     expect(screen.getByText("Наличные")).toBeInTheDocument();
     expect(screen.getByText("Зарплата")).toBeInTheDocument();
-    expect(screen.getByText("Доход")).toBeInTheDocument();
+    expect(screen.queryByText("Доход")).not.toBeInTheDocument();
     expect(screen.getByText("150.00 USD")).toBeInTheDocument();
     // Формат зависит от локальной таймзоны окружения теста, поэтому дата сравнивается тем же способом.
     expect(
@@ -82,8 +89,9 @@ describe("TransactionCard", () => {
       <TransactionCard
         transaction={{ ...TRANSACTION, comment: "Серый рюкзак" }}
         walletName="Наличные"
-        category={{ name: "Зарплата", icon: "banknote", type: "income" }}
+        category={{ name: "Зарплата", icon: "banknote" }}
         currencyCodeById={CURRENCY_CODE_BY_ID}
+        kind={KIND}
         onEdit={vi.fn()}
       />,
       { wrapper },
@@ -98,8 +106,9 @@ describe("TransactionCard", () => {
       <TransactionCard
         transaction={TRANSACTION}
         walletName="Наличные"
-        category={{ name: "Зарплата", icon: "banknote", type: "income" }}
+        category={{ name: "Зарплата", icon: "banknote" }}
         currencyCodeById={CURRENCY_CODE_BY_ID}
+        kind={KIND}
         onEdit={vi.fn()}
       />,
       { wrapper },
@@ -116,8 +125,9 @@ describe("TransactionCard", () => {
       <TransactionCard
         transaction={MULTI_LEG_TRANSACTION}
         walletName="Наличные"
-        category={{ name: "Зарплата", icon: "banknote", type: "income" }}
+        category={{ name: "Зарплата", icon: "banknote" }}
         currencyCodeById={CURRENCY_CODE_BY_ID}
+        kind={KIND}
         onEdit={vi.fn()}
       />,
       { wrapper },
@@ -135,6 +145,7 @@ describe("TransactionCard", () => {
         walletName={undefined}
         category={undefined}
         currencyCodeById={new Map()}
+        kind={KIND}
         onEdit={vi.fn()}
       />,
       { wrapper },
@@ -150,8 +161,9 @@ describe("TransactionCard", () => {
       <TransactionCard
         transaction={TRANSACTION}
         walletName="Наличные"
-        category={{ name: "Зарплата", icon: "banknote", type: "income" }}
+        category={{ name: "Зарплата", icon: "banknote" }}
         currencyCodeById={CURRENCY_CODE_BY_ID}
+        kind={KIND}
         onEdit={onEdit}
       />,
       { wrapper },
@@ -164,31 +176,25 @@ describe("TransactionCard", () => {
     expect(onEdit).toHaveBeenCalledWith(TRANSACTION);
   });
 
-  it("кнопка «Редактировать» недоступна и показывает подсказку при нескольких ногах", async () => {
+  it("кнопка «Редактировать» доступна и при нескольких ногах (пополнение)", async () => {
     const { wrapper } = setup(() => undefined);
     const onEdit = vi.fn();
     render(
       <TransactionCard
         transaction={MULTI_LEG_TRANSACTION}
         walletName="Наличные"
-        category={{ name: "Зарплата", icon: "banknote", type: "income" }}
+        category={{ name: "Зарплата", icon: "banknote" }}
         currencyCodeById={CURRENCY_CODE_BY_ID}
+        kind={KIND}
         onEdit={onEdit}
       />,
       { wrapper },
     );
 
     const editButton = screen.getByRole("button", { name: "Редактировать" });
-    expect(editButton).toBeDisabled();
+    expect(editButton).toBeEnabled();
     await userEvent.click(editButton);
-    expect(onEdit).not.toHaveBeenCalled();
-
-    await userEvent.hover(editButton);
-    expect(
-      await screen.findByText(
-        "Пополнение с несколькими валютами нельзя редактировать — удалите и создайте заново",
-      ),
-    ).toBeInTheDocument();
+    expect(onEdit).toHaveBeenCalledWith(MULTI_LEG_TRANSACTION);
   });
 
   it("кнопка «Удалить» кликабельна при одной ноге: подтверждение вызывает DELETE /api/transactions/{id}", async () => {
@@ -197,8 +203,9 @@ describe("TransactionCard", () => {
       <TransactionCard
         transaction={TRANSACTION}
         walletName="Наличные"
-        category={{ name: "Зарплата", icon: "banknote", type: "income" }}
+        category={{ name: "Зарплата", icon: "banknote" }}
         currencyCodeById={CURRENCY_CODE_BY_ID}
+        kind={KIND}
         onEdit={vi.fn()}
       />,
       { wrapper },
@@ -219,20 +226,22 @@ describe("TransactionCard", () => {
     );
   });
 
-  it("кнопка «Удалить» кликабельна при нескольких ногах: подтверждение вызывает DELETE /api/transactions/{id}", async () => {
+  it("удаление пополнения вызывает DELETE /topups/{id} и показывает своё подтверждение", async () => {
     const { api, wrapper } = setup(() => undefined);
     render(
       <TransactionCard
         transaction={MULTI_LEG_TRANSACTION}
         walletName="Наличные"
-        category={{ name: "Зарплата", icon: "banknote", type: "income" }}
+        category={{ name: "Зарплата", icon: "banknote" }}
         currencyCodeById={CURRENCY_CODE_BY_ID}
+        kind={TOPUP_KIND}
         onEdit={vi.fn()}
       />,
       { wrapper },
     );
 
     await userEvent.click(screen.getByRole("button", { name: "Удалить" }));
+    expect(await screen.findByText("Удалить пополнение?")).toBeInTheDocument();
     const popup = await screen.findByRole("tooltip");
     await userEvent.click(within(popup).getByRole("button", { name: "Удалить" }));
 
@@ -240,8 +249,7 @@ describe("TransactionCard", () => {
       expect(
         api.requests.some(
           (r) =>
-            r.method === "DELETE" &&
-            r.path === `/api/workspaces/${TEST_WORKSPACE_ID}/transactions/t2`,
+            r.method === "DELETE" && r.path === `/api/workspaces/${TEST_WORKSPACE_ID}/topups/t2`,
         ),
       ).toBe(true),
     );
@@ -253,8 +261,9 @@ describe("TransactionCard", () => {
       <TransactionCard
         transaction={TRANSACTION}
         walletName="Наличные"
-        category={{ name: "Зарплата", icon: "banknote", type: "income" }}
+        category={{ name: "Зарплата", icon: "banknote" }}
         currencyCodeById={CURRENCY_CODE_BY_ID}
+        kind={KIND}
         onEdit={vi.fn()}
       />,
       { wrapper },

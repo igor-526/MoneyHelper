@@ -29,10 +29,13 @@ class TransactionRepository(Protocol):
     ) -> list[LegRecord]: ...
 
     async def list_topup_legs_for_rates(
-        self, workspace_id: UUID, *, date_from: datetime, date_to: datetime
+        self,
+        workspace_id: UUID,
+        *,
+        wallet_id: UUID | None,
+        date_from: datetime | None,
+        date_to: datetime | None,
     ) -> list[TopupLegRecord]: ...
-
-    async def list_topup_legs_for_wallet_rates(self, workspace_id: UUID, wallet_id: UUID) -> list[TopupLegRecord]: ...
 
     async def list(
         self,
@@ -73,4 +76,6 @@ class TransactionRepository(Protocol):
 
     async def delete(self, transaction_id: UUID, workspace_id: UUID) -> bool: ...
 
-    async def balance_delta(self, wallet_id: UUID, workspace_id: UUID) -> dict[UUID, Decimal]: ...
+    async def balance_delta(self, wallet_id: UUID, workspace_id: UUID, currency_id: UUID) -> Decimal: ...
+
+    async def references_wallet(self, wallet_id: UUID) -> bool: ...

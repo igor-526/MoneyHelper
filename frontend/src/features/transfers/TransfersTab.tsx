@@ -1,4 +1,4 @@
-import { Button, DatePicker, Flex, Pagination, Select, Spin, Typography } from "antd";
+import { Button, DatePicker, Flex, Pagination, Select, Spin } from "antd";
 import type { Dayjs } from "dayjs";
 import { useMemo, useState } from "react";
 import { useWallets } from "@/features/wallets/useWallets";
@@ -20,7 +20,8 @@ interface FormState {
   transfer?: Transfer;
 }
 
-export function TransfersPage() {
+/** Содержимое вкладки «Перевод» страницы «Операции»: фильтры, список, пагинация и форма переводов. */
+export function TransfersTab() {
   const [filters, setFilters] = useState<FiltersState>({ walletId: undefined, dateRange: null });
   const [page, setPage] = useState(1); // 1-based, antd Pagination
   const [formState, setFormState] = useState<FormState>({ open: false });
@@ -38,11 +39,10 @@ export function TransfersPage() {
     { offset, limit: DEFAULT_PAGE_SIZE },
   );
 
-  const walletNameById = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const wallet of wallets) map.set(wallet.id, wallet.name);
-    return map;
-  }, [wallets]);
+  const walletById = useMemo(
+    () => new Map(wallets.map((wallet) => [wallet.id, wallet])),
+    [wallets],
+  );
 
   const currencyCodeById = useMemo(() => {
     const map = new Map<string, string>();
@@ -72,9 +72,6 @@ export function TransfersPage() {
 
   return (
     <Flex vertical gap={16}>
-      <Typography.Title level={3} style={{ margin: 0 }}>
-        Переводы
-      </Typography.Title>
       <Flex vertical gap={12}>
         <Select
           aria-label="Кошелёк"
@@ -118,9 +115,11 @@ export function TransfersPage() {
               <TransferCard
                 key={transfer.id}
                 transfer={transfer}
-                fromWalletName={walletNameById.get(transfer.from_wallet_id)}
-                toWalletName={walletNameById.get(transfer.to_wallet_id)}
-                currencyCode={currencyCodeById.get(transfer.currency_id)}
+                fromWalletName={walletById.get(transfer.from_wallet_id)?.name}
+                toWalletName={walletById.get(transfer.to_wallet_id)?.name}
+                currencyCode={currencyCodeById.get(
+                  walletById.get(transfer.from_wallet_id)?.currency_id ?? "",
+                )}
                 onEdit={openEdit}
               />
             ))}

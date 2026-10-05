@@ -14,7 +14,7 @@ export function useWalletBalances(walletId: string | undefined) {
   return useQuery({
     queryKey: [...walletBalancesQueryKey(workspaceId), walletId],
     queryFn: ({ signal }) =>
-      api.get<WalletBalance[]>(`/api/workspaces/${workspaceId}/wallets/${walletId}/balances`, {
+      api.get<WalletBalance>(`/api/workspaces/${workspaceId}/wallets/${walletId}/balances`, {
         signal,
       }),
     enabled: walletId !== undefined,

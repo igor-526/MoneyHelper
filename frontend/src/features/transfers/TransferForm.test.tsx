@@ -21,7 +21,7 @@ const WALLETS = [
     id: "w1",
     name: "Наличные",
     icon: "wallet",
-    currency_ids: ["cur1", "cur2"],
+    currency_id: "cur1",
     created_at: "2026-01-01T00:00:00Z",
     updated_at: null,
   },
@@ -29,7 +29,7 @@ const WALLETS = [
     id: "w2",
     name: "Карта",
     icon: "credit-card",
-    currency_ids: ["cur2"],
+    currency_id: "cur1",
     created_at: "2026-01-01T00:00:00Z",
     updated_at: null,
   },
@@ -37,7 +37,7 @@ const WALLETS = [
     id: "w3",
     name: "Крипто",
     icon: "coins",
-    currency_ids: ["cur3"],
+    currency_id: "cur3",
     created_at: "2026-01-01T00:00:00Z",
     updated_at: null,
   },
@@ -53,7 +53,6 @@ const TRANSFER: Transfer = {
   id: "t1",
   from_wallet_id: "w1",
   to_wallet_id: "w2",
-  currency_id: "cur2",
   amount: "25.00",
   occurred_at: "2026-02-01T10:00:00Z",
   created_at: "2026-02-01T10:00:00Z",
@@ -133,12 +132,11 @@ function selectedLabel(labelText: string): string | null {
 async function fillMinimalForm() {
   await selectOption("Откуда", "Наличные");
   await selectOption("Куда", "Карта");
-  await selectOption("Валюта", "RUB — Российский рубль");
-  await userEvent.type(screen.getByLabelText("Сумма"), "10");
+  await userEvent.type(screen.getByLabelText("Сумма (USD)"), "10");
 }
 
 describe("TransferForm", () => {
-  it("целевой кошелёк исключает исходный из опций", async () => {
+  it("целевой кошелёк ограничен кошельками той же валюты, исходный исключён", async () => {
     const { wrapper } = setup(() => ({}));
     render(<TransferForm open onClose={vi.fn()} />, { wrapper });
 
@@ -148,7 +146,7 @@ describe("TransferForm", () => {
 
     expect(within(dropdown).queryByText("Наличные")).not.toBeInTheDocument();
     expect(within(dropdown).getByText("Карта")).toBeInTheDocument();
-    expect(within(dropdown).getByText("Крипто")).toBeInTheDocument();
+    expect(within(dropdown).queryByText("Крипто")).not.toBeInTheDocument();
   });
 
   it("смена исходного кошелька на совпадающий с целевым сбрасывает целевой", async () => {
@@ -164,58 +162,49 @@ describe("TransferForm", () => {
     expect(selectedLabel("Куда")).toBeNull();
   });
 
-  it("валюта ограничена пересечением наборов валют двух кошельков", async () => {
+  it("смена исходного кошелька на кошелёк другой валюты сбрасывает целевой", async () => {
     const { wrapper } = setup(() => ({}));
     render(<TransferForm open onClose={vi.fn()} />, { wrapper });
 
     await selectOption("Откуда", "Наличные");
     await selectOption("Куда", "Карта");
-    await userEvent.click(formControl("Валюта"));
-
-    expect(await screen.findByText("RUB — Российский рубль")).toBeInTheDocument();
-    expect(screen.queryByText("USD — Доллар США")).not.toBeInTheDocument();
-  });
-
-  it("смена целевого кошелька сбрасывает выбранную валюту", async () => {
-    const { wrapper } = setup(() => ({}));
-    render(<TransferForm open onClose={vi.fn()} />, { wrapper });
-
-    await selectOption("Откуда", "Наличные");
-    await selectOption("Куда", "Карта");
-    await selectOption("Валюта", "RUB — Российский рубль");
-    expect(selectedLabel("Валюта")).toBe("RUB — Российский рубль");
-
-    await selectOption("Куда", "Крипто");
-
-    expect(selectedLabel("Валюта")).toBeNull();
-  });
-
-  it("смена исходного кошелька сбрасывает выбранную валюту", async () => {
-    const { wrapper } = setup(() => ({}));
-    render(<TransferForm open onClose={vi.fn()} />, { wrapper });
-
-    await selectOption("Откуда", "Наличные");
-    await selectOption("Куда", "Карта");
-    await selectOption("Валюта", "RUB — Российский рубль");
-    expect(selectedLabel("Валюта")).toBe("RUB — Российский рубль");
 
     await selectOption("Откуда", "Крипто");
 
-    expect(selectedLabel("Валюта")).toBeNull();
+    expect(selectedLabel("Куда")).toBeNull();
   });
 
-  it("отсутствие общей валюты показывает предупреждающий текст вместо поля выбора", async () => {
+  it("подпись суммы содержит код валюты исходного кошелька", async () => {
     const { wrapper } = setup(() => ({}));
     render(<TransferForm open onClose={vi.fn()} />, { wrapper });
 
-    await selectOption("Откуда", "Наличные");
-    await selectOption("Куда", "Крипто");
+    expect(screen.getByText("Сумма")).toBeInTheDocument();
+    await selectOption("Откуда", "Крипто");
 
-    expect(await screen.findByText("У этих кошельков нет общей валюты")).toBeInTheDocument();
-    // Поле выбора (combobox) валюты не рендерится — только предупреждающий текст под той же подписью.
-    const label = screen.getByText("Валюта");
-    const formItem = label.closest(".ant-form-item") as HTMLElement;
-    expect(within(formItem).queryByRole("combobox")).not.toBeInTheDocument();
+    expect(await screen.findByText("Сумма (BTC)")).toBeInTheDocument();
+  });
+
+  it("если других кошельков той же валюты нет — пояснение про конвертацию, «Куда» и отправка недоступны", async () => {
+    const { wrapper } = setup(() => ({}));
+    render(<TransferForm open onClose={vi.fn()} />, { wrapper });
+
+    await selectOption("Откуда", "Крипто");
+
+    expect(await screen.findByText("Нет других кошельков в валюте BTC")).toBeInTheDocument();
+    expect(screen.getByText(/конвертация делается через пополнение/)).toBeInTheDocument();
+    const toItem = screen.getByText("Куда").closest(".ant-form-item") as HTMLElement;
+    expect(within(toItem).getByRole("combobox")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Создать" })).toBeDisabled();
+  });
+
+  it("пояснение не показывается, пока исходный кошелёк не выбран или есть получатели", async () => {
+    const { wrapper } = setup(() => ({}));
+    render(<TransferForm open onClose={vi.fn()} />, { wrapper });
+
+    expect(screen.queryByText(/Нет других кошельков/)).not.toBeInTheDocument();
+    await selectOption("Откуда", "Наличные");
+    expect(screen.queryByText(/Нет других кошельков/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Создать" })).toBeEnabled();
   });
 
   it("успешное создание", async () => {
@@ -223,7 +212,6 @@ describe("TransferForm", () => {
       id: "9",
       from_wallet_id: "w1",
       to_wallet_id: "w2",
-      currency_id: "cur2",
       amount: "10",
       occurred_at: "2026-01-01T00:00:00Z",
       created_at: "2026-01-01T00:00:00Z",
@@ -241,7 +229,7 @@ describe("TransferForm", () => {
       (r) => r.method === "POST" && r.path === `/api/workspaces/${TEST_WORKSPACE_ID}/transfers`,
     );
     expect(request).toMatchObject({
-      body: { from_wallet_id: "w1", to_wallet_id: "w2", currency_id: "cur2", amount: "10" },
+      body: { from_wallet_id: "w1", to_wallet_id: "w2", amount: "10" },
     });
     expect(await screen.findByText("Перевод создан")).toBeInTheDocument();
   });
@@ -254,18 +242,17 @@ describe("TransferForm", () => {
 
     await waitFor(() => expect(selectedLabel("Откуда")).toBe("Наличные"));
     expect(selectedLabel("Куда")).toBe("Карта");
-    expect(selectedLabel("Валюта")).toBe("RUB — Российский рубль");
-    expect(screen.getByLabelText("Сумма")).toHaveValue("25.00");
+    expect(screen.getByLabelText("Сумма (USD)")).toHaveValue("25.00");
 
-    await userEvent.clear(screen.getByLabelText("Сумма"));
-    await userEvent.type(screen.getByLabelText("Сумма"), "30.00");
+    await userEvent.clear(screen.getByLabelText("Сумма (USD)"));
+    await userEvent.type(screen.getByLabelText("Сумма (USD)"), "30.00");
     await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
 
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(api.requests.at(-1)).toMatchObject({
       method: "PUT",
       path: `/api/workspaces/${TEST_WORKSPACE_ID}/transfers/t1`,
-      body: { from_wallet_id: "w1", to_wallet_id: "w2", currency_id: "cur2", amount: "30.00" },
+      body: { from_wallet_id: "w1", to_wallet_id: "w2", amount: "30.00" },
     });
     expect(await screen.findByText("Перевод обновлён")).toBeInTheDocument();
   });

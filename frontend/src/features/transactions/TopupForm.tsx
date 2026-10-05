@@ -1,22 +1,23 @@
 import { Button, DatePicker, Drawer, Form, Input, Modal, Select } from "antd";
-import type { Dayjs } from "dayjs";
+import dayjs, { type Dayjs } from "dayjs";
 import { useEffect } from "react";
 import { useCategories } from "@/features/categories/useCategories";
 import { useWallets } from "@/features/wallets/useWallets";
+import { useCurrentWorkspace } from "@/features/workspaces/useCurrentWorkspace";
 import { applyFieldErrors, resolveErrorMessage, toApiError } from "@/shared/errors";
-import { MoneyInput, useCurrencies, useIsMobile, useToast } from "@/shared/ui";
-import type { TopupFormValues } from "./Transaction";
+import { formatAmount, MoneyInput, useCurrencies, useIsMobile, useToast } from "@/shared/ui";
+import type { TopupFormValues, Transaction } from "./Transaction";
 import { useCreateTopup } from "./useCreateTopup";
+import { useUpdateTopup } from "./useUpdateTopup";
 
 export interface TopupFormProps {
   open: boolean;
   onClose: () => void;
+  /** `undefined` — форма создания; заданное пополнение — форма редактирования. */
+  transaction?: Transaction;
 }
 
-/**
- * Только создание (design.md, Non-Goals — редактирование пополнения не делается: backend не даёт менять число
- * ног через `PUT`). `amounts` — суммы по валютам выбранного кошелька, адресуемые путём `["amounts", currencyId]`.
- */
+/** `amounts` — суммы по валютам ног, адресуемые путём `["amounts", currencyId]`. */
 interface TopupFormFields {
   wallet_id: string;
   category_id: string;
@@ -25,12 +26,14 @@ interface TopupFormFields {
   comment?: string;
 }
 
-/** Осознанно узкий список — design.md, раздел «Обработка ошибок»: ошибки по конкретным ногам и текстовые
- * бизнес-правила (неполный/избыточный набор валют, категория не дохода) единообразно попадают в toast. */
-const KNOWN_FIELDS = ["wallet_id", "category_id"] as const;
+/** Ошибки по конкретным ногам и текстовые бизнес-правила (набор валют, категория не дохода) попадают в toast. */
+const KNOWN_FIELDS = ["wallet_id", "category_id", "occurred_at", "comment"] as const;
 
-/** Форма пополнения многовалютного кошелька: динамический набор полей сумм по валютам кошелька (design.md). */
-export function TopupForm({ open, onClose }: TopupFormProps) {
+/**
+ * Форма пополнения (создание и редактирование): суммы в валюте воркспейса и в валюте выбранного кошелька; если
+ * валюты совпадают — одно поле.
+ */
+export function TopupForm({ open, onClose, transaction }: TopupFormProps) {
   const [form] = Form.useForm<TopupFormFields>();
   const isMobile = useIsMobile();
   const toast = useToast();
@@ -39,35 +42,49 @@ export function TopupForm({ open, onClose }: TopupFormProps) {
   const { data: categories = [] } = useCategories("income");
   const { data: currencies = [] } = useCurrencies();
 
+  const workspace = useCurrentWorkspace();
+
   const createTopup = useCreateTopup();
+  const updateTopup = useUpdateTopup();
+  const mutation = transaction ? updateTopup : createTopup;
 
   const walletId = Form.useWatch("wallet_id", form);
   const selectedWallet = wallets.find((wallet) => wallet.id === walletId);
+  const legCurrencyIds =
+    selectedWallet && workspace
+      ? [...new Set([workspace.currency_id, selectedWallet.currency_id])]
+      : [];
   const currencyById = new Map(currencies.map((currency) => [currency.id, currency]));
 
   useEffect(() => {
     if (!open) return;
     form.setFieldsValue({
-      wallet_id: undefined,
-      category_id: undefined,
-      amounts: {},
-      occurred_at: undefined,
-      comment: undefined,
+      wallet_id: transaction?.wallet_id,
+      category_id: transaction?.category_id,
+      occurred_at: transaction ? dayjs(transaction.occurred_at) : undefined,
+      comment: transaction?.comment ?? undefined,
     });
-  }, [open, form]);
+    form.setFieldValue(
+      "amounts",
+      Object.fromEntries(
+        (transaction?.legs ?? []).map((leg) => [leg.currency_id, formatAmount(leg.amount)]),
+      ),
+    );
+  }, [open, transaction, form]);
 
   const handleWalletChange = (value: string) => {
-    form.setFieldsValue({ wallet_id: value, amounts: {} });
+    // `setFieldsValue` сливает вложенные объекты, поэтому суммы сбрасываются отдельно, целиком.
+    form.setFieldValue("amounts", {});
+    form.setFieldValue("wallet_id", value);
   };
 
   const handleSubmit = (fields: TopupFormFields) => {
     const payload: TopupFormValues = {
       wallet_id: fields.wallet_id,
       category_id: fields.category_id,
-      legs: (selectedWallet?.currency_ids ?? []).map((currencyId) => ({
+      legs: legCurrencyIds.map((currencyId) => ({
         currency_id: currencyId,
-        // Форма требует заполнить сумму каждой валюты (`rules: required`), поэтому на отправке значение всегда
-        // есть; `?? ""` — только для типа (`noUncheckedIndexedAccess` не знает про валидацию формы).
+        // Сумма каждой валюты обязательна (`rules: required`); `?? ""` — только для типа.
         amount: fields.amounts[currencyId] ?? "",
       })),
       occurred_at: fields.occurred_at?.toISOString(),
@@ -89,15 +106,20 @@ export function TopupForm({ open, onClose }: TopupFormProps) {
     };
 
     const onSuccess = () => {
-      toast.success("Пополнение создано");
+      toast.success(transaction ? "Пополнение обновлено" : "Пополнение создано");
       onClose();
     };
 
-    createTopup.mutate(payload, { onSuccess, onError });
+    if (transaction) {
+      updateTopup.mutate({ id: transaction.id, values: payload }, { onSuccess, onError });
+    } else {
+      createTopup.mutate(payload, { onSuccess, onError });
+    }
   };
 
+  const title = transaction ? "Редактировать пополнение" : "Создать пополнение";
   const content = (
-    <Form form={form} layout="vertical" onFinish={handleSubmit} disabled={createTopup.isPending}>
+    <Form form={form} layout="vertical" onFinish={handleSubmit} disabled={mutation.isPending}>
       <Form.Item
         name="wallet_id"
         label="Кошелёк"
@@ -108,7 +130,7 @@ export function TopupForm({ open, onClose }: TopupFormProps) {
           onChange={handleWalletChange}
         />
       </Form.Item>
-      {(selectedWallet?.currency_ids ?? []).map((currencyId) => {
+      {legCurrencyIds.map((currencyId) => {
         const currency = currencyById.get(currencyId);
         return (
           <Form.Item
@@ -141,26 +163,19 @@ export function TopupForm({ open, onClose }: TopupFormProps) {
         <Input.TextArea rows={2} maxLength={1000} showCount />
       </Form.Item>
       <Form.Item style={{ marginBottom: 0 }}>
-        <Button type="primary" htmlType="submit" block loading={createTopup.isPending}>
-          Создать
+        <Button type="primary" htmlType="submit" block loading={mutation.isPending}>
+          {transaction ? "Сохранить" : "Создать"}
         </Button>
       </Form.Item>
     </Form>
   );
 
   return isMobile ? (
-    <Drawer placement="bottom" height="80vh" open={open} onClose={onClose} title="Пополнение">
+    <Drawer placement="bottom" size="80vh" open={open} onClose={onClose} title={title}>
       {content}
     </Drawer>
   ) : (
-    <Modal
-      open={open}
-      onCancel={onClose}
-      footer={null}
-      width={960}
-      title="Пополнение"
-      destroyOnClose
-    >
+    <Modal open={open} onCancel={onClose} footer={null} width={960} title={title} destroyOnHidden>
       {content}
     </Modal>
   );

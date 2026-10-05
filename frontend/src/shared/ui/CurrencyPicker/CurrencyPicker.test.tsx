@@ -146,4 +146,19 @@ describe("CurrencyPicker", () => {
     expect(await screen.findByText("RUB — Российский рубль")).toBeInTheDocument();
     expect(screen.queryByText("USD — Доллар США")).not.toBeInTheDocument();
   });
+
+  it("allowClear по умолчанию включён, allowClear={false} отключает кнопку очистки", async () => {
+    const { wrapper } = setup(() => CURRENCIES_PAGE);
+    const withClear = render(<CurrencyPicker value="1" onChange={vi.fn()} />, { wrapper });
+    expect(withClear.container.querySelector(".ant-select-clear")).toBeInTheDocument();
+    withClear.unmount();
+
+    const withoutClear = render(
+      <CurrencyPicker value="1" onChange={vi.fn()} allowClear={false} />,
+      {
+        wrapper,
+      },
+    );
+    expect(withoutClear.container.querySelector(".ant-select-clear")).not.toBeInTheDocument();
+  });
 });

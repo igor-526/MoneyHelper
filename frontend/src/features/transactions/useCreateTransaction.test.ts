@@ -6,10 +6,9 @@ import { WorkspaceContext } from "@/features/workspaces/WorkspaceContext";
 import { ApiError, ApiClientProvider } from "@/shared/api";
 import { createQueryClient } from "@/shared/errors";
 import { type FakeHandler, FakeApiClient } from "@/test/FakeApiClient";
+import { expectOperationCachesInvalidated } from "@/test/operationCaches";
 import { createToastSpy } from "@/test/toastSpy";
-import { transactionsQueryKey } from "./useTransactions";
 import { useCreateTransaction } from "./useCreateTransaction";
-import { walletBalancesQueryKey } from "./useWalletBalances";
 
 const TEST_WORKSPACE_ID = "workspace-1";
 
@@ -33,7 +32,6 @@ function setup(handler: FakeHandler) {
 const VALUES = {
   wallet_id: "w1",
   category_id: "c1",
-  currency_id: "cur1",
   amount: "10.00",
 };
 const CREATED = {
@@ -47,7 +45,7 @@ const CREATED = {
 };
 
 describe("useCreateTransaction", () => {
-  it("успех вызывает POST и инвалидирует операции и балансы кошельков", async () => {
+  it("успех вызывает POST и инвалидирует операции, балансы, курсы и аналитику", async () => {
     const { api, invalidateSpy, wrapper } = setup(() => CREATED);
 
     const { result } = renderHook(() => useCreateTransaction(), { wrapper });
@@ -61,12 +59,7 @@ describe("useCreateTransaction", () => {
       path: `/api/workspaces/${TEST_WORKSPACE_ID}/transactions`,
       body: VALUES,
     });
-    expect(invalidateSpy).toHaveBeenCalledWith({
-      queryKey: transactionsQueryKey(TEST_WORKSPACE_ID),
-    });
-    expect(invalidateSpy).toHaveBeenCalledWith({
-      queryKey: walletBalancesQueryKey(TEST_WORKSPACE_ID),
-    });
+    expectOperationCachesInvalidated(invalidateSpy, TEST_WORKSPACE_ID);
   });
 
   it("ошибка не вызывает глобальный toast сама по себе (silent)", async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isValidMoneyAmount } from "./moneyInput";
+import { formatAmount, isValidMoneyAmount } from "./moneyInput";
 
 describe("isValidMoneyAmount", () => {
   it("допускает цифры и точку", () => {
@@ -34,5 +34,19 @@ describe("isValidMoneyAmount", () => {
 
   it("без decimalPlaces ограничения на число знаков нет", () => {
     expect(isValidMoneyAmount("12.12345678901234")).toBe(true);
+  });
+});
+
+describe("formatAmount", () => {
+  it("убирает хвостовые нули, оставляя минимум знаков", () => {
+    expect(formatAmount("10000.00000000")).toBe("10000.00");
+    expect(formatAmount("12.50000000")).toBe("12.50");
+    expect(formatAmount("0.12345678")).toBe("0.12345678");
+    expect(formatAmount("5.00000000", 0)).toBe("5");
+  });
+
+  it("не дополняет нулями и не трогает целые", () => {
+    expect(formatAmount("10")).toBe("10");
+    expect(formatAmount("10.5")).toBe("10.5");
   });
 });

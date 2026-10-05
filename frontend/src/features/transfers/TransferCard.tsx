@@ -1,5 +1,6 @@
 import { Button, Card, Flex, Popconfirm, Typography } from "antd";
 import dayjs from "dayjs";
+import { formatAmount } from "@/shared/ui";
 import type { Transfer } from "./Transfer";
 import { useDeleteTransfer } from "./useDeleteTransfer";
 
@@ -32,7 +33,7 @@ export function TransferCard({
           {fromWalletName ?? "…"} → {toWalletName ?? "…"}
         </Typography.Text>
         <Typography.Text>
-          {transfer.amount} {currencyCode ?? "…"}
+          {formatAmount(transfer.amount)} {currencyCode ?? "…"}
         </Typography.Text>
         <Typography.Text type="secondary">
           {dayjs(transfer.occurred_at).format("DD.MM.YYYY HH:mm")}

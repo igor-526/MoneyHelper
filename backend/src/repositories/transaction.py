@@ -117,42 +117,26 @@ class TransactionRepository:
         ]
 
     async def list_topup_legs_for_rates(
-        self, workspace_id: UUID, *, date_from: datetime, date_to: datetime
+        self,
+        workspace_id: UUID,
+        *,
+        wallet_id: UUID | None,
+        date_from: datetime | None,
+        date_to: datetime | None,
     ) -> list[TopupLegRecord]:
-        topup_ids = (
-            select(transaction_legs.c.transaction_id)
-            .select_from(transaction_legs.join(transactions, transactions.c.id == transaction_legs.c.transaction_id))
-            .where(
-                transactions.c.workspace_id == workspace_id,
-                transactions.c.occurred_at >= date_from,
-                transactions.c.occurred_at <= date_to,
+        query = (
+            select(transaction_legs.c.transaction_id, transaction_legs.c.currency_id, transaction_legs.c.amount)
+            .select_from(
+                transaction_legs.join(transactions, transactions.c.id == transaction_legs.c.transaction_id).join(
+                    categories, categories.c.id == transactions.c.category_id
+                )
             )
-            .group_by(transaction_legs.c.transaction_id)
-            .having(func.count() > 1)
+            .where(transactions.c.workspace_id == workspace_id, categories.c.type == CategoryType.INCOME)
         )
-        rows = await self._session.execute(
-            select(transaction_legs.c.transaction_id, transaction_legs.c.currency_id, transaction_legs.c.amount).where(
-                transaction_legs.c.transaction_id.in_(topup_ids)
-            )
+        query = self._apply_filters(
+            query, wallet_id=wallet_id, category_id=None, type=None, date_from=date_from, date_to=date_to
         )
-        return [
-            TopupLegRecord(transaction_id=row.transaction_id, currency_id=row.currency_id, amount=row.amount)
-            for row in rows
-        ]
-
-    async def list_topup_legs_for_wallet_rates(self, workspace_id: UUID, wallet_id: UUID) -> list[TopupLegRecord]:
-        topup_ids = (
-            select(transaction_legs.c.transaction_id)
-            .select_from(transaction_legs.join(transactions, transactions.c.id == transaction_legs.c.transaction_id))
-            .where(transactions.c.workspace_id == workspace_id, transactions.c.wallet_id == wallet_id)
-            .group_by(transaction_legs.c.transaction_id)
-            .having(func.count() > 1)
-        )
-        rows = await self._session.execute(
-            select(transaction_legs.c.transaction_id, transaction_legs.c.currency_id, transaction_legs.c.amount).where(
-                transaction_legs.c.transaction_id.in_(topup_ids)
-            )
-        )
+        rows = await self._session.execute(query)
         return [
             TopupLegRecord(transaction_id=row.transaction_id, currency_id=row.currency_id, amount=row.amount)
             for row in rows
@@ -238,22 +222,31 @@ class TransactionRepository:
         )
         return result.first() is not None
 
-    async def balance_delta(self, wallet_id: UUID, workspace_id: UUID) -> dict[UUID, Decimal]:
+    async def references_wallet(self, wallet_id: UUID) -> bool:
+        return (
+            await self._session.execute(
+                select(transactions.c.id).where(transactions.c.wallet_id == wallet_id).limit(1)
+            )
+        ).first() is not None
+
+    async def balance_delta(self, wallet_id: UUID, workspace_id: UUID, currency_id: UUID) -> Decimal:
         signed_amount = case(
             (categories.c.type == CategoryType.INCOME, transaction_legs.c.amount), else_=-transaction_legs.c.amount
         )
         query = (
-            select(transaction_legs.c.currency_id, func.sum(signed_amount).label("balance"))
+            select(func.coalesce(func.sum(signed_amount), 0))
             .select_from(
                 transaction_legs.join(transactions, transactions.c.id == transaction_legs.c.transaction_id).join(
                     categories, categories.c.id == transactions.c.category_id
                 )
             )
-            .where(transactions.c.wallet_id == wallet_id, transactions.c.workspace_id == workspace_id)
-            .group_by(transaction_legs.c.currency_id)
+            .where(
+                transactions.c.wallet_id == wallet_id,
+                transactions.c.workspace_id == workspace_id,
+                transaction_legs.c.currency_id == currency_id,
+            )
         )
-        rows = await self._session.execute(query)
-        return {row.currency_id: row.balance for row in rows}
+        return (await self._session.execute(query)).scalar_one()
 
     async def _insert_legs(self, transaction_id: UUID, legs: Sequence[TransactionLeg]) -> None:
         if not legs:

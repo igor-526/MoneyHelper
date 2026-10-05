@@ -9,6 +9,7 @@ from core.services.money_validation import ensure_amount_precision
 
 NOT_FOUND_MESSAGE = "Перевод не найден"
 WALLET_NOT_FOUND_MESSAGE = "Кошелёк не найден"
+SAME_CURRENCY_MESSAGE = "Перевод возможен только между кошельками одной валюты"
 
 
 class TransferService:
@@ -32,7 +33,6 @@ class TransferService:
         *,
         from_wallet_id: UUID,
         to_wallet_id: UUID,
-        currency_id: UUID,
         amount: Decimal,
         occurred_at: datetime | None,
     ) -> Transfer:
@@ -40,7 +40,6 @@ class TransferService:
             workspace_id,
             from_wallet_id=from_wallet_id,
             to_wallet_id=to_wallet_id,
-            currency_id=currency_id,
             amount=amount,
         )
         now = self._clock.now()
@@ -49,7 +48,6 @@ class TransferService:
             workspace_id=workspace_id,
             from_wallet_id=from_wallet_id,
             to_wallet_id=to_wallet_id,
-            currency_id=currency_id,
             amount=amount,
             occurred_at=occurred_at if occurred_at is not None else now,
             created_at=now,
@@ -87,7 +85,6 @@ class TransferService:
         *,
         from_wallet_id: UUID,
         to_wallet_id: UUID,
-        currency_id: UUID,
         amount: Decimal,
         occurred_at: datetime | None,
     ) -> Transfer:
@@ -95,7 +92,6 @@ class TransferService:
             workspace_id,
             from_wallet_id=from_wallet_id,
             to_wallet_id=to_wallet_id,
-            currency_id=currency_id,
             amount=amount,
         )
         now = self._clock.now()
@@ -104,7 +100,6 @@ class TransferService:
             workspace_id,
             from_wallet_id=from_wallet_id,
             to_wallet_id=to_wallet_id,
-            currency_id=currency_id,
             amount=amount,
             occurred_at=occurred_at if occurred_at is not None else now,
             now=now,
@@ -124,18 +119,17 @@ class TransferService:
         *,
         from_wallet_id: UUID,
         to_wallet_id: UUID,
-        currency_id: UUID,
         amount: Decimal,
     ) -> None:
         if from_wallet_id == to_wallet_id:
             raise ClientError("Кошелёк отправителя и получателя не может совпадать")
         from_wallet = await self._get_owned_wallet(from_wallet_id, workspace_id)
         to_wallet = await self._get_owned_wallet(to_wallet_id, workspace_id)
-        if currency_id not in from_wallet.currency_ids or currency_id not in to_wallet.currency_ids:
-            raise ClientError("Валюта перевода не входит в набор валют одного из кошельков")
+        if from_wallet.currency_id != to_wallet.currency_id:
+            raise ClientError(SAME_CURRENCY_MESSAGE)
         if amount <= 0:
             raise ClientError("Сумма должна быть положительной")
-        currency = await self._currencies.get_by_id(currency_id)
+        currency = await self._currencies.get_by_id(from_wallet.currency_id)
         if currency is None:
             raise ClientError("Неизвестная валюта перевода")
         ensure_amount_precision(amount, currency)

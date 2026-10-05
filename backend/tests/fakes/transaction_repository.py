@@ -1,4 +1,3 @@
-from collections import defaultdict
 from collections.abc import Sequence
 from datetime import datetime
 from decimal import Decimal
@@ -98,29 +97,22 @@ class InMemoryTransactionRepository:
         return records
 
     async def list_topup_legs_for_rates(
-        self, workspace_id: UUID, *, date_from: datetime, date_to: datetime
+        self,
+        workspace_id: UUID,
+        *,
+        wallet_id: UUID | None,
+        date_from: datetime | None,
+        date_to: datetime | None,
     ) -> list[TopupLegRecord]:
         records = []
-        for transaction in self._transactions.values():
-            if transaction.workspace_id != workspace_id:
-                continue
-            if transaction.occurred_at < date_from or transaction.occurred_at > date_to:
-                continue
-            if len(transaction.legs) <= 1:
-                continue
-            for leg in transaction.legs:
-                records.append(
-                    TopupLegRecord(transaction_id=transaction.id, currency_id=leg.currency_id, amount=leg.amount)
-                )
-        return records
-
-    async def list_topup_legs_for_wallet_rates(self, workspace_id: UUID, wallet_id: UUID) -> list[TopupLegRecord]:
-        records = []
-        for transaction in self._transactions.values():
-            if transaction.workspace_id != workspace_id or transaction.wallet_id != wallet_id:
-                continue
-            if len(transaction.legs) <= 1:
-                continue
+        for transaction in await self._filter(
+            workspace_id,
+            wallet_id=wallet_id,
+            category_id=None,
+            type=CategoryType.INCOME,
+            date_from=date_from,
+            date_to=date_to,
+        ):
             for leg in transaction.legs:
                 records.append(
                     TopupLegRecord(transaction_id=transaction.id, currency_id=leg.currency_id, amount=leg.amount)
@@ -210,21 +202,20 @@ class InMemoryTransactionRepository:
         return True
 
     async def references_wallet(self, wallet_id: UUID) -> bool:
-        """Не часть протокола — вспомогательный метод для тестов, симулирующих `ON DELETE RESTRICT`
-        `transactions.wallet_id` на fake-репозиториях кошельков."""
         return any(transaction.wallet_id == wallet_id for transaction in self._transactions.values())
 
     async def references_category(self, category_id: UUID) -> bool:
         """Аналогично `references_wallet`, но для `ON DELETE RESTRICT` `transactions.category_id`."""
         return any(transaction.category_id == category_id for transaction in self._transactions.values())
 
-    async def balance_delta(self, wallet_id: UUID, workspace_id: UUID) -> dict[UUID, Decimal]:
-        totals: dict[UUID, Decimal] = defaultdict(lambda: Decimal("0"))
+    async def balance_delta(self, wallet_id: UUID, workspace_id: UUID, currency_id: UUID) -> Decimal:
+        total = Decimal("0")
         for transaction in self._transactions.values():
             if transaction.workspace_id != workspace_id or transaction.wallet_id != wallet_id:
                 continue
             category = await self._categories.get_by_id(transaction.category_id, workspace_id)
             sign = 1 if category is not None and category.type == CategoryType.INCOME else -1
             for leg in transaction.legs:
-                totals[leg.currency_id] += sign * leg.amount
-        return dict(totals)
+                if leg.currency_id == currency_id:
+                    total += sign * leg.amount
+        return total

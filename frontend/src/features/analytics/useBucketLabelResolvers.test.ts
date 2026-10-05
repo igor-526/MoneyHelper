@@ -20,7 +20,7 @@ const WALLETS = [
     id: "w1",
     name: "Наличные",
     icon: "wallet",
-    currency_ids: [],
+    currency_id: "cur1",
     created_at: "",
     updated_at: null,
   },

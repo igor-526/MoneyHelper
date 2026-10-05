@@ -5,11 +5,8 @@ export interface TransactionLeg {
 }
 
 /**
- * Форма ответа backend (`TransactionOut`) — без camelCase-маппинга, тот же принцип, что и `Wallet`/`Category`
- * (design.md 014/015). Ногозависимая: обычная операция (доход/расход) — `legs` из одного элемента; пополнение
- * многовалютного кошелька (`/topups`, 017) — по одной ноге на каждую валюту кошелька. `TransactionCard`
- * отображает все ноги; `TransactionForm` (создание/редактирование обычной операции) работает только с
- * `transaction.legs[0]` — операции с несколькими ногами ею не редактируются (017).
+ * Форма ответа backend (`TransactionOut`) — без camelCase-маппинга. Общая для расхода (`/transactions`, одна нога
+ * в валюте кошелька) и пополнения (`/topups`, одна или две ноги: валюта воркспейса и валюта кошелька).
  */
 export interface Transaction {
   id: string;
@@ -22,17 +19,16 @@ export interface Transaction {
   updated_at: string | null;
 }
 
-/** Тело запроса `TransactionCreate`/`TransactionUpdate`. `type` не входит — backend его не принимает. */
+/** Тело запроса расхода `TransactionCreate`/`TransactionUpdate`: валюта — валюта кошелька, не передаётся. */
 export interface TransactionFormValues {
   wallet_id: string;
   category_id: string;
-  currency_id: string;
   amount: string;
   occurred_at?: string;
   comment?: string;
 }
 
-/** Тело запроса `TopupCreate` — пополнение многовалютного кошелька, ровно по одной ноге на каждую его валюту. */
+/** Тело запроса `TopupCreate`/`TopupUpdate`: ноги — валюта воркспейса и валюта кошелька (одна, если совпадают). */
 export interface TopupFormValues {
   wallet_id: string;
   category_id: string;
@@ -41,7 +37,7 @@ export interface TopupFormValues {
   comment?: string;
 }
 
-/** Форма элемента ответа backend (`WalletBalanceOut`). */
+/** Форма ответа backend (`WalletBalanceOut`): баланс кошелька одной суммой в его валюте. */
 export interface WalletBalance {
   currency_id: string;
   balance: string;

@@ -18,7 +18,7 @@ async def create_workspace(
     user_id: Annotated[UUID, Depends(get_current_user)],
     workspace_service: Annotated[WorkspaceService, Depends(get_workspace_service)],
 ) -> WorkspaceOut:
-    workspace = await workspace_service.create_workspace(user_id, name=body.name)
+    workspace = await workspace_service.create_workspace(user_id, name=body.name, currency_id=body.currency_id)
     return WorkspaceOut.model_validate(workspace)
 
 
@@ -54,7 +54,9 @@ async def update_workspace(
     user_id: Annotated[UUID, Depends(get_current_user)],
     workspace_service: Annotated[WorkspaceService, Depends(get_workspace_service)],
 ) -> WorkspaceOut:
-    workspace = await workspace_service.update_workspace(workspace_id, user_id, name=body.name)
+    workspace = await workspace_service.update_workspace(
+        workspace_id, user_id, name=body.name, currency_id=body.currency_id
+    )
     return WorkspaceOut.model_validate(workspace)
 
 

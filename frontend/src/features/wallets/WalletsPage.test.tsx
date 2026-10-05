@@ -32,7 +32,7 @@ const WALLETS = [
     id: "1",
     name: "Наличные",
     icon: "wallet",
-    currency_ids: ["1", "2"],
+    currency_id: "1",
     created_at: "2026-01-01T00:00:00Z",
     updated_at: null,
   },
@@ -40,7 +40,7 @@ const WALLETS = [
     id: "2",
     name: "Карта",
     icon: "credit-card",
-    currency_ids: ["1"],
+    currency_id: "2",
     created_at: "2026-01-02T00:00:00Z",
     updated_at: null,
   },
@@ -66,13 +66,13 @@ function setup(handler: FakeHandler) {
 }
 
 describe("WalletsPage", () => {
-  it("загрузка и рендер списка карточек с чипами валют", async () => {
+  it("загрузка и рендер списка карточек с одним чипом валюты", async () => {
     const { wrapper } = setup(() => walletsPage(WALLETS));
     render(<WalletsPage />, { wrapper });
 
     expect(await screen.findByText("Наличные")).toBeInTheDocument();
     expect(screen.getByText("Карта")).toBeInTheDocument();
-    expect(screen.getAllByText("USD")).toHaveLength(2);
+    expect(screen.getAllByText("USD")).toHaveLength(1);
     expect(screen.getAllByText("RUB")).toHaveLength(1);
   });
 

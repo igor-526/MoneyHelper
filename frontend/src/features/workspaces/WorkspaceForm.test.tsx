@@ -16,13 +16,35 @@ import { WorkspaceForm } from "./WorkspaceForm";
 const WORKSPACE: Workspace = {
   id: "5",
   name: "Личное",
+  currency_id: "c1",
   created_at: "2026-01-01T00:00:00Z",
   updated_at: null,
 };
 
+const CURRENCIES_PAGE = {
+  items: [
+    { id: "c1", code: "RUB", name: "Российский рубль", decimal_places: 2 },
+    { id: "c2", code: "USD", name: "Доллар США", decimal_places: 2 },
+  ],
+  total: 2,
+  limit: 100,
+  offset: 0,
+};
+
+const walletsPage = (total: number) => ({ items: [], total, limit: 1, offset: 0 });
+
+/** Ответы справочника валют и проверки кошельков + заданный ответ на остальные запросы. */
+const withLookups =
+  (handler: FakeHandler, wallets = 0): FakeHandler =>
+  (request) => {
+    if (request.path === "/api/currencies") return CURRENCIES_PAGE;
+    if (request.path.endsWith("/wallets")) return walletsPage(wallets);
+    return handler(request);
+  };
+
 /** Настоящий `ToastProvider`, чтобы проверять видимые уведомления, как использует их компонент. */
-function setup(handler: FakeHandler) {
-  const api = new FakeApiClient(handler);
+function setup(handler: FakeHandler, wallets = 0) {
+  const api = new FakeApiClient(withLookups(handler, wallets));
   const client = createQueryClient(createToastSpy());
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>
@@ -39,6 +61,7 @@ describe("WorkspaceForm", () => {
     const CREATED = {
       id: "9",
       name: "Поездка",
+      currency_id: "c2",
       created_at: "2026-01-01T00:00:00Z",
       updated_at: null,
     };
@@ -48,16 +71,29 @@ describe("WorkspaceForm", () => {
     render(<WorkspaceForm open onClose={onClose} onSuccess={onSuccess} />, { wrapper });
 
     await userEvent.type(screen.getByLabelText("Название"), "Поездка");
+    await userEvent.click(screen.getByLabelText("Основная валюта"));
+    await userEvent.click(await screen.findByText("USD — Доллар США"));
     await userEvent.click(screen.getByRole("button", { name: "Создать" }));
 
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(api.requests.at(-1)).toMatchObject({
       method: "POST",
       path: "/api/workspaces",
-      body: { name: "Поездка" },
+      body: { name: "Поездка", currency_id: "c2" },
     });
     expect(onSuccess).toHaveBeenCalledWith(CREATED);
     expect(await screen.findByText("Воркспейс создан")).toBeInTheDocument();
+  });
+
+  it("создание без валюты: сообщение у поля, запрос не отправляется", async () => {
+    const { api, wrapper } = setup(() => WORKSPACE);
+    render(<WorkspaceForm open onClose={vi.fn()} />, { wrapper });
+
+    await userEvent.type(screen.getByLabelText("Название"), "Поездка");
+    await userEvent.click(screen.getByRole("button", { name: "Создать" }));
+
+    expect(await screen.findByText("Выберите валюту")).toBeInTheDocument();
+    expect(api.requests.some((r) => r.method === "POST")).toBe(false);
   });
 
   it("переименование: поле предзаполнено, успех обновляет воркспейс", async () => {
@@ -76,9 +112,26 @@ describe("WorkspaceForm", () => {
     expect(api.requests.at(-1)).toMatchObject({
       method: "PUT",
       path: "/api/workspaces/5",
-      body: { name: "Обновлённый" },
+      body: { name: "Обновлённый", currency_id: "c1" },
     });
     expect(await screen.findByText("Воркспейс переименован")).toBeInTheDocument();
+  });
+
+  it("редактирование воркспейса без кошельков: валюту можно менять", async () => {
+    const { wrapper } = setup(() => WORKSPACE, 0);
+    render(<WorkspaceForm open workspace={WORKSPACE} onClose={vi.fn()} />, { wrapper });
+
+    await waitFor(() => expect(screen.getByLabelText("Основная валюта")).toBeEnabled());
+    expect(screen.queryByText(/Валюту нельзя изменить/)).not.toBeInTheDocument();
+  });
+
+  it("редактирование воркспейса с кошельками: валюта заблокирована с пояснением", async () => {
+    const { wrapper } = setup(() => WORKSPACE, 2);
+    render(<WorkspaceForm open workspace={WORKSPACE} onClose={vi.fn()} />, { wrapper });
+
+    expect(await screen.findByText(/Валюту нельзя изменить/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Основная валюта")).toBeDisabled();
+    expect(await screen.findByText("RUB — Российский рубль")).toBeInTheDocument();
   });
 
   it("ошибка валидации по полю остаётся в форме и не закрывает её", async () => {
@@ -93,6 +146,8 @@ describe("WorkspaceForm", () => {
     render(<WorkspaceForm open onClose={onClose} />, { wrapper });
 
     await userEvent.type(screen.getByLabelText("Название"), "  ");
+    await userEvent.click(screen.getByLabelText("Основная валюта"));
+    await userEvent.click(await screen.findByText("RUB — Российский рубль"));
     await userEvent.click(screen.getByRole("button", { name: "Создать" }));
 
     expect(await screen.findByText("Название не может быть пустым")).toBeInTheDocument();

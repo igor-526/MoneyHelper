@@ -13,12 +13,11 @@ class BalanceService:
         self._wallets = wallets
         self._contributors = contributors
 
-    async def get_wallet_balances(self, wallet_id: UUID, workspace_id: UUID) -> list[tuple[UUID, Decimal]]:
+    async def get_wallet_balance(self, wallet_id: UUID, workspace_id: UUID) -> tuple[UUID, Decimal]:
         wallet = await self._wallets.get_by_id(wallet_id, workspace_id)
         if wallet is None:
             raise NotFoundError(WALLET_NOT_FOUND_MESSAGE)
-        totals: dict[UUID, Decimal] = {}
+        total = Decimal("0")
         for contributor in self._contributors:
-            for currency_id, delta in (await contributor.balance_delta(wallet_id, workspace_id)).items():
-                totals[currency_id] = totals.get(currency_id, Decimal("0")) + delta
-        return [(currency_id, totals.get(currency_id, Decimal("0"))) for currency_id in wallet.currency_ids]
+            total += await contributor.balance_delta(wallet_id, workspace_id, wallet.currency_id)
+        return wallet.currency_id, total

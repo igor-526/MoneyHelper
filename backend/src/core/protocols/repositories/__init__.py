@@ -3,7 +3,11 @@ from .currency_repository import CurrencyRepository
 from .transaction_repository import TransactionRepository
 from .transfer_repository import TransferRepository
 from .user_repository import UserRepository
+from .wallet_counter import WalletCounter
+from .wallet_currency_reader import WalletCurrencyReader
 from .wallet_repository import WalletRepository
+from .wallet_usage_checker import WalletUsageChecker
+from .workspace_currency_reader import WorkspaceCurrencyReader
 from .workspace_repository import WorkspaceRepository
 
 __all__ = [
@@ -12,6 +16,10 @@ __all__ = [
     "TransactionRepository",
     "TransferRepository",
     "UserRepository",
+    "WalletCounter",
+    "WalletCurrencyReader",
     "WalletRepository",
+    "WalletUsageChecker",
+    "WorkspaceCurrencyReader",
     "WorkspaceRepository",
 ]

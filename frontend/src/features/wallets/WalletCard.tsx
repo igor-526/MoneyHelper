@@ -5,13 +5,13 @@ import { useDeleteWallet } from "./useDeleteWallet";
 
 export interface WalletCardProps {
   wallet: Wallet;
-  /** Коды валют кошелька, в порядке `wallet.currency_ids` (backend уже отсортировал по коду). */
-  currencyCodes: string[];
+  /** Код валюты кошелька; `undefined`, пока справочник валют не загружен. */
+  currencyCode: string | undefined;
   onEdit: (wallet: Wallet) => void;
 }
 
 /** Сама владеет удалением (по образцу `LogoutButton`) — не получает мутацию от родителя. */
-export function WalletCard({ wallet, currencyCodes, onEdit }: WalletCardProps) {
+export function WalletCard({ wallet, currencyCode, onEdit }: WalletCardProps) {
   const deleteWallet = useDeleteWallet();
 
   return (
@@ -21,11 +21,9 @@ export function WalletCard({ wallet, currencyCodes, onEdit }: WalletCardProps) {
           <Icon name={wallet.icon} />
           <Typography.Text strong>{wallet.name}</Typography.Text>
         </Flex>
-        <Flex wrap gap={4}>
-          {currencyCodes.map((code) => (
-            <Tag key={code}>{code}</Tag>
-          ))}
-        </Flex>
+        {currencyCode !== undefined ? (
+          <Tag style={{ alignSelf: "flex-start" }}>{currencyCode}</Tag>
+        ) : null}
         <Flex gap={8}>
           <Button onClick={() => onEdit(wallet)}>Редактировать</Button>
           <Popconfirm

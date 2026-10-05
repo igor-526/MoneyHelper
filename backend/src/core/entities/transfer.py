@@ -9,6 +9,5 @@ class Transfer(Entity, TimestampMixin):
     workspace_id: UUID
     from_wallet_id: UUID
     to_wallet_id: UUID
-    currency_id: UUID
     amount: Decimal
     occurred_at: datetime

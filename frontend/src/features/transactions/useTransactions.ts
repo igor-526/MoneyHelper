@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import type { CategoryType } from "@/features/categories/Category";
 import { useCurrentWorkspaceId } from "@/features/workspaces/WorkspaceContext";
 import { useApiClient } from "@/shared/api";
 import type { Page } from "@/shared/api";
@@ -7,15 +6,15 @@ import type { Transaction } from "./Transaction";
 
 export const DEFAULT_PAGE_SIZE = 20;
 
-export interface TransactionFilters {
+/** Фильтры списков расходов и пополнений; тип задаётся самим списком. */
+export interface OperationFilters {
   walletId?: string;
   categoryId?: string;
-  type?: CategoryType;
   dateFrom?: string; // ISO, начало выбранного дня
   dateTo?: string; // ISO, конец выбранного дня
 }
 
-interface Pagination {
+export interface OperationPagination {
   offset: number;
   limit: number;
 }
@@ -26,17 +25,17 @@ export function transactionsQueryKey(workspaceId: string) {
 
 function transactionListKey(
   workspaceId: string,
-  filters: TransactionFilters,
-  pagination: Pagination,
+  filters: OperationFilters,
+  pagination: OperationPagination,
 ) {
   return [...transactionsQueryKey(workspaceId), { ...filters, ...pagination }] as const;
 }
 
 /**
- * В отличие от `useWallets`/`useCategories` — список операций растёт без ограничения, поэтому реальная
+ * Список расходов (`GET /transactions` возвращает только расходы). В отличие от `useWallets`/`useCategories` — список операций растёт без ограничения, поэтому реальная
  * серверная пагинация; возвращает весь `Page<Transaction>` (не только `items`) — `total` нужен для пагинации.
  */
-export function useTransactions(filters: TransactionFilters, pagination: Pagination) {
+export function useTransactions(filters: OperationFilters, pagination: OperationPagination) {
   const api = useApiClient();
   const workspaceId = useCurrentWorkspaceId();
   return useQuery({
@@ -46,7 +45,6 @@ export function useTransactions(filters: TransactionFilters, pagination: Paginat
         query: {
           wallet_id: filters.walletId,
           category_id: filters.categoryId,
-          type: filters.type,
           date_from: filters.dateFrom,
           date_to: filters.dateTo,
           limit: pagination.limit,

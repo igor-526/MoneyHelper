@@ -30,17 +30,13 @@ function setup(handler: FakeHandler) {
 }
 
 describe("WalletBalanceCard", () => {
-  it("рендерит список балансов по валютам, включая нулевой баланс", async () => {
-    const { wrapper } = setup(() => [
-      { currency_id: "cur1", balance: "150.00" },
-      { currency_id: "cur2", balance: "0.00" },
-    ]);
+  it("рендерит баланс одной суммой в валюте кошелька, включая нулевой", async () => {
+    const { wrapper } = setup(() => ({ currency_id: "cur1", balance: "0.00" }));
     render(<WalletBalanceCard walletId="w1" currencyCodeById={CURRENCY_CODE_BY_ID} />, {
       wrapper,
     });
 
-    expect(await screen.findByText("USD: 150.00")).toBeInTheDocument();
-    expect(screen.getByText("RUB: 0.00")).toBeInTheDocument();
+    expect(await screen.findByText("USD: 0.00")).toBeInTheDocument();
   });
 
   it("состояние загрузки: отображается Spin", () => {

@@ -38,7 +38,6 @@ class TransferRepository(Protocol):
         *,
         from_wallet_id: UUID,
         to_wallet_id: UUID,
-        currency_id: UUID,
         amount: Decimal,
         occurred_at: datetime,
         now: datetime,
@@ -46,4 +45,6 @@ class TransferRepository(Protocol):
 
     async def delete(self, transfer_id: UUID, workspace_id: UUID) -> bool: ...
 
-    async def balance_delta(self, wallet_id: UUID, workspace_id: UUID) -> dict[UUID, Decimal]: ...
+    async def balance_delta(self, wallet_id: UUID, workspace_id: UUID, currency_id: UUID) -> Decimal: ...
+
+    async def references_wallet(self, wallet_id: UUID) -> bool: ...

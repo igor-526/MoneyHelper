@@ -4,121 +4,150 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from core.entities import Transaction, TransactionLeg, Wallet
-from core.exceptions import ClientError, NotFoundError
+from core.entities import Category, CategoryType, Transaction, TransactionLeg, Wallet, Workspace
+from core.exceptions import NotFoundError
 from core.services.wallet_rate import WalletRateService
-from tests.fakes import InMemoryCategoryRepository, InMemoryTransactionRepository, InMemoryWalletRepository
+from tests.fakes import (
+    InMemoryCategoryRepository,
+    InMemoryTransactionRepository,
+    InMemoryWalletRepository,
+    InMemoryWorkspaceRepository,
+)
 
-OCCURRED_AT = datetime(2026, 1, 15, tzinfo=UTC)
+CREATED_AT = datetime(2026, 1, 15, tzinfo=UTC)
 
 
 class Environment:
     def __init__(self) -> None:
+        self.categories = InMemoryCategoryRepository()
         self.wallets = InMemoryWalletRepository()
-        self.transactions = InMemoryTransactionRepository(InMemoryCategoryRepository())
-        self.service = WalletRateService(self.transactions, self.wallets)
+        self.workspaces = InMemoryWorkspaceRepository()
+        self.transactions = InMemoryTransactionRepository(self.categories)
+        self.service = WalletRateService(self.wallets, self.workspaces, self.transactions)
+        self.rub = uuid4()
+        self.cny = uuid4()
+        self.workspace_id = self.make_workspace()
 
-    async def make_wallet(self, workspace_id: UUID, currency_ids: tuple[UUID, ...]) -> Wallet:
+    def make_workspace(self) -> UUID:
+        workspace = Workspace(id=uuid4(), user_id=uuid4(), name="Т", currency_id=self.rub, created_at=CREATED_AT)
+        self.workspaces.seed(workspace)
+        return workspace.id
+
+    async def make_wallet(self, currency_id: UUID, workspace_id: UUID | None = None) -> Wallet:
         wallet = Wallet(
             id=uuid4(),
-            workspace_id=workspace_id,
+            workspace_id=workspace_id or self.workspace_id,
             name="Alipay",
             icon="wallet",
-            currency_ids=currency_ids,
-            created_at=OCCURRED_AT,
+            currency_id=currency_id,
+            created_at=CREATED_AT,
         )
         return await self.wallets.add(wallet)
 
-    async def add_topup(self, workspace_id: UUID, wallet_id: UUID, legs: dict[UUID, Decimal]) -> Transaction:
-        transaction = Transaction(
-            id=uuid4(),
-            workspace_id=workspace_id,
-            wallet_id=wallet_id,
-            category_id=uuid4(),
-            legs=tuple(TransactionLeg(currency_id=cid, amount=amount) for cid, amount in legs.items()),
-            occurred_at=OCCURRED_AT,
-            created_at=OCCURRED_AT,
+    async def topup(self, wallet: Wallet, rub: str, cny: str, type: CategoryType = CategoryType.INCOME) -> None:
+        category = await self.categories.add(
+            Category(
+                id=uuid4(),
+                workspace_id=wallet.workspace_id,
+                type=type,
+                name=f"К {uuid4()}",
+                icon="wallet",
+                created_at=CREATED_AT,
+            )
         )
-        return await self.transactions.add(transaction)
+        await self.transactions.add(
+            Transaction(
+                id=uuid4(),
+                workspace_id=wallet.workspace_id,
+                wallet_id=wallet.id,
+                category_id=category.id,
+                legs=(
+                    TransactionLeg(currency_id=self.rub, amount=Decimal(rub)),
+                    TransactionLeg(currency_id=self.cny, amount=Decimal(cny)),
+                ),
+                occurred_at=CREATED_AT,
+                created_at=CREATED_AT,
+            )
+        )
 
 
-async def test_averages_rate_from_wallet_topups() -> None:
+async def test_rate_is_simple_average_over_wallet_topups() -> None:
     env = Environment()
-    workspace_id = uuid4()
-    rub_id, cny_id = uuid4(), uuid4()
-    wallet = await env.make_wallet(workspace_id, (rub_id, cny_id))
-    await env.add_topup(workspace_id, wallet.id, {rub_id: Decimal("10000"), cny_id: Decimal("780")})
-    await env.add_topup(workspace_id, wallet.id, {rub_id: Decimal("5000"), cny_id: Decimal("400")})
+    wallet = await env.make_wallet(env.cny)
+    await env.topup(wallet, "100", "10")
+    await env.topup(wallet, "300", "20")
 
-    result = await env.service.get_wallet_rates(wallet.id, workspace_id, target_currency_id=rub_id)
+    result = await env.service.get_wallet_rate(wallet.id, env.workspace_id)
 
-    expected = ((Decimal("10000") / Decimal("780")) + (Decimal("5000") / Decimal("400"))) / 2
-    assert result.target_currency_id == rub_id
-    assert result.rates[cny_id] == expected.quantize(Decimal("1.0000000000"))
-    assert result.unrated_currency_ids == []
+    assert result.workspace_currency_id == env.rub
+    assert result.wallet_currency_id == env.cny
+    assert result.rate == Decimal("12.5")
 
 
-async def test_currency_without_topups_is_unrated() -> None:
+async def test_rate_is_rounded_to_rate_precision() -> None:
     env = Environment()
-    workspace_id = uuid4()
-    rub_id, cny_id, usdt_id = uuid4(), uuid4(), uuid4()
-    wallet = await env.make_wallet(workspace_id, (rub_id, cny_id, usdt_id))
-    await env.add_topup(workspace_id, wallet.id, {rub_id: Decimal("10000"), cny_id: Decimal("780")})
+    wallet = await env.make_wallet(env.cny)
+    await env.topup(wallet, "10", "3")
 
-    result = await env.service.get_wallet_rates(wallet.id, workspace_id, target_currency_id=rub_id)
+    result = await env.service.get_wallet_rate(wallet.id, env.workspace_id)
 
-    assert cny_id in result.rates
-    assert result.unrated_currency_ids == [usdt_id]
+    assert result.rate == Decimal("3.3333333333")
 
 
-async def test_single_currency_wallet_returns_empty_result() -> None:
+async def test_rate_is_not_mixed_between_wallets() -> None:
     env = Environment()
-    workspace_id = uuid4()
-    rub_id = uuid4()
-    wallet = await env.make_wallet(workspace_id, (rub_id,))
+    first = await env.make_wallet(env.cny)
+    second = await env.make_wallet(env.cny)
+    await env.topup(second, "100", "10")
 
-    result = await env.service.get_wallet_rates(wallet.id, workspace_id, target_currency_id=rub_id)
-
-    assert result.rates == {}
-    assert result.unrated_currency_ids == []
+    assert (await env.service.get_wallet_rate(first.id, env.workspace_id)).rate is None
+    assert (await env.service.get_wallet_rate(second.id, env.workspace_id)).rate == Decimal("10")
 
 
-async def test_topups_of_other_wallet_are_ignored() -> None:
+async def test_rate_is_not_mixed_between_workspaces() -> None:
     env = Environment()
-    workspace_id = uuid4()
-    rub_id, cny_id = uuid4(), uuid4()
-    wallet = await env.make_wallet(workspace_id, (rub_id, cny_id))
-    other_wallet = await env.make_wallet(workspace_id, (rub_id, cny_id))
-    await env.add_topup(workspace_id, other_wallet.id, {rub_id: Decimal("10000"), cny_id: Decimal("780")})
+    other_workspace_id = env.make_workspace()
+    other_wallet = await env.make_wallet(env.cny, other_workspace_id)
+    await env.topup(other_wallet, "100", "10")
+    wallet = await env.make_wallet(env.cny)
 
-    result = await env.service.get_wallet_rates(wallet.id, workspace_id, target_currency_id=rub_id)
-
-    assert result.rates == {}
-    assert result.unrated_currency_ids == [cny_id]
+    assert (await env.service.get_wallet_rate(wallet.id, env.workspace_id)).rate is None
 
 
-async def test_unknown_target_currency_is_rejected() -> None:
+async def test_non_topup_operations_are_ignored() -> None:
     env = Environment()
-    workspace_id = uuid4()
-    rub_id, cny_id, usdt_id = uuid4(), uuid4(), uuid4()
-    wallet = await env.make_wallet(workspace_id, (rub_id, cny_id))
+    wallet = await env.make_wallet(env.cny)
+    await env.topup(wallet, "100", "10", CategoryType.EXPENSE)
 
-    with pytest.raises(ClientError):
-        await env.service.get_wallet_rates(wallet.id, workspace_id, target_currency_id=usdt_id)
+    assert (await env.service.get_wallet_rate(wallet.id, env.workspace_id)).rate is None
 
 
-async def test_missing_wallet_is_not_found() -> None:
+async def test_rate_is_one_when_currencies_match() -> None:
+    env = Environment()
+    wallet = await env.make_wallet(env.rub)
+
+    result = await env.service.get_wallet_rate(wallet.id, env.workspace_id)
+
+    assert result.rate == Decimal("1")
+
+
+async def test_rate_is_none_without_topups() -> None:
+    env = Environment()
+    wallet = await env.make_wallet(env.cny)
+
+    assert (await env.service.get_wallet_rate(wallet.id, env.workspace_id)).rate is None
+
+
+async def test_unknown_wallet_raises_not_found() -> None:
     env = Environment()
 
     with pytest.raises(NotFoundError):
-        await env.service.get_wallet_rates(uuid4(), uuid4(), target_currency_id=uuid4())
+        await env.service.get_wallet_rate(uuid4(), env.workspace_id)
 
 
-async def test_wallet_of_another_workspace_is_not_found() -> None:
+async def test_foreign_wallet_raises_not_found() -> None:
     env = Environment()
-    workspace_id = uuid4()
-    rub_id = uuid4()
-    wallet = await env.make_wallet(workspace_id, (rub_id,))
+    wallet = await env.make_wallet(env.cny)
 
     with pytest.raises(NotFoundError):
-        await env.service.get_wallet_rates(wallet.id, uuid4(), target_currency_id=rub_id)
+        await env.service.get_wallet_rate(wallet.id, env.make_workspace())

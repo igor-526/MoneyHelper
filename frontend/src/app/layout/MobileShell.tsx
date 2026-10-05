@@ -1,6 +1,7 @@
 import { theme } from "antd";
 import type { CSSProperties, ReactNode } from "react";
 import { NavLink } from "react-router-dom";
+import { WorkspaceBadge } from "@/features/workspaces/WorkspaceBadge";
 import { PwaBanners } from "@/shared/pwa/PwaBanners";
 import { Icon } from "@/shared/ui/Icon";
 import { navItems } from "../navItems";
@@ -19,7 +20,12 @@ export function MobileShell({ children }: { children: ReactNode }) {
 
   return (
     <div className={styles.shell} style={vars} data-testid="mobile-shell">
-      <main className={styles.main}>{children}</main>
+      <main className={styles.main}>
+        <div className={styles.workspace}>
+          <WorkspaceBadge />
+        </div>
+        {children}
+      </main>
       <nav className={styles.tabBar} aria-label="Основная навигация">
         {navItems.map((item) => (
           <NavLink

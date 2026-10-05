@@ -4,8 +4,10 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.pool import NullPool
 
+from core.entities import Currency
 from settings import settings
 from tests.infrastructure.database import TestDatabaseError, prepare_test_database
+from tests.infrastructure.factories import make_workspace_currency
 
 
 @pytest.fixture(scope="session")
@@ -39,3 +41,8 @@ async def db_session(engine: AsyncEngine) -> AsyncIterator[AsyncSession]:
         finally:
             await session.close()
             await transaction.rollback()
+
+
+@pytest.fixture
+async def workspace_currency(db_session: AsyncSession) -> Currency:
+    return await make_workspace_currency(db_session)

@@ -7,4 +7,4 @@ class Wallet(Entity, TimestampMixin):
     workspace_id: UUID
     name: str
     icon: str
-    currency_ids: tuple[UUID, ...]
+    currency_id: UUID

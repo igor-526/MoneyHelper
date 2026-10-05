@@ -21,7 +21,7 @@ const WALLETS = [
     id: "w1",
     name: "Наличные",
     icon: "wallet",
-    currency_ids: ["cur1", "cur2"],
+    currency_id: "cur1",
     created_at: "2026-01-01T00:00:00Z",
     updated_at: null,
   },
@@ -29,7 +29,7 @@ const WALLETS = [
     id: "w2",
     name: "Карта",
     icon: "credit-card",
-    currency_ids: ["cur2"],
+    currency_id: "cur2",
     created_at: "2026-01-01T00:00:00Z",
     updated_at: null,
   },
@@ -61,7 +61,7 @@ const CATEGORIES = [
 
 const TRANSACTION: Transaction = {
   id: "t1",
-  wallet_id: "w1",
+  wallet_id: "w2",
   category_id: "c2",
   legs: [{ currency_id: "cur2", amount: "25.00" }],
   occurred_at: "2026-02-01T10:00:00Z",
@@ -119,32 +119,27 @@ async function selectOption(labelText: string, optionLabel: string) {
   await userEvent.click(await screen.findByText(optionLabel));
 }
 
-/** Текст выбранного значения `Select`/`CurrencyPicker` по подписи поля, `null` — если ничего не выбрано. */
+/** Текст выбранного значения `Select` по подписи поля, `null` — если ничего не выбрано. */
 function selectedLabel(labelText: string): string | null {
   const content = formControl(labelText).closest(".ant-select-content");
   return content?.getAttribute("title") ?? null;
 }
 
-/** Радио-инпут `Segmented` скрыт (`pointer-events: none`), клик идёт по видимой подписи. */
-async function selectType(label: "Доход" | "Расход") {
-  await userEvent.click(screen.getByText(label));
-}
-
-async function fillMinimalIncomeForm() {
+async function fillMinimalForm() {
   await selectOption("Кошелёк", "Наличные");
-  await selectOption("Категория", "Зарплата");
-  await selectOption("Валюта", "USD — Доллар США");
-  await userEvent.type(screen.getByLabelText("Сумма"), "10");
+  await selectOption("Категория", "Продукты");
+  await userEvent.type(screen.getByLabelText("Сумма (USD)"), "10");
 }
 
 describe("TransactionForm", () => {
-  it("создание дохода: успех добавляет операцию, тело запроса не содержит поле типа", async () => {
+  it("создание: тело запроса без валюты и типа", async () => {
     const CREATED = {
       id: "9",
       wallet_id: "w1",
-      category_id: "c1",
+      category_id: "c2",
       legs: [{ currency_id: "cur1", amount: "10" }],
       occurred_at: "2026-01-01T00:00:00Z",
+      comment: null,
       created_at: "2026-01-01T00:00:00Z",
       updated_at: null,
     };
@@ -152,7 +147,7 @@ describe("TransactionForm", () => {
     const onClose = vi.fn();
     render(<TransactionForm open onClose={onClose} />, { wrapper });
 
-    await fillMinimalIncomeForm();
+    await fillMinimalForm();
     await userEvent.click(screen.getByRole("button", { name: "Создать" }));
 
     await waitFor(() => expect(onClose).toHaveBeenCalled());
@@ -160,79 +155,66 @@ describe("TransactionForm", () => {
       (r) => r.method === "POST" && r.path === `/api/workspaces/${TEST_WORKSPACE_ID}/transactions`,
     );
     expect(request).toMatchObject({
-      body: { wallet_id: "w1", category_id: "c1", currency_id: "cur1", amount: "10" },
+      body: { wallet_id: "w1", category_id: "c2", amount: "10" },
     });
+    expect(request?.body).not.toHaveProperty("currency_id");
     expect(request?.body).not.toHaveProperty("type");
-    expect(await screen.findByText("Операция создана")).toBeInTheDocument();
+    expect(await screen.findByText("Расход создан")).toBeInTheDocument();
   });
 
   it("создание с комментарием: тело запроса содержит comment", async () => {
-    const CREATED = {
-      id: "9",
-      wallet_id: "w1",
-      category_id: "c1",
-      legs: [{ currency_id: "cur1", amount: "10" }],
-      occurred_at: "2026-01-01T00:00:00Z",
-      comment: "Серый рюкзак",
-      created_at: "2026-01-01T00:00:00Z",
-      updated_at: null,
-    };
-    const { api, wrapper } = setup(() => CREATED);
+    const { api, wrapper } = setup(() => ({}));
     const onClose = vi.fn();
     render(<TransactionForm open onClose={onClose} />, { wrapper });
 
-    await fillMinimalIncomeForm();
+    await fillMinimalForm();
     await userEvent.type(screen.getByLabelText("Комментарий"), "Серый рюкзак");
     await userEvent.click(screen.getByRole("button", { name: "Создать" }));
 
     await waitFor(() => expect(onClose).toHaveBeenCalled());
-    const request = api.requests.find(
-      (r) => r.method === "POST" && r.path === `/api/workspaces/${TEST_WORKSPACE_ID}/transactions`,
-    );
-    expect(request).toMatchObject({ body: { comment: "Серый рюкзак" } });
+    const request = api.requests.find((r) => r.method === "POST");
+    expect(request?.body).toMatchObject({ comment: "Серый рюкзак" });
   });
 
-  it("создание расхода: успех добавляет операцию, тело запроса не содержит поле типа", async () => {
-    const CREATED = {
-      id: "10",
-      wallet_id: "w1",
-      category_id: "c2",
-      legs: [{ currency_id: "cur2", amount: "5" }],
-      occurred_at: "2026-01-01T00:00:00Z",
-      created_at: "2026-01-01T00:00:00Z",
-      updated_at: null,
-    };
-    const { api, wrapper } = setup(() => CREATED);
-    const onClose = vi.fn();
-    render(<TransactionForm open onClose={onClose} />, { wrapper });
+  it("валюта не выбирается: подпись суммы показывает код валюты кошелька", async () => {
+    const { wrapper } = setup(() => ({}));
+    render(<TransactionForm open onClose={vi.fn()} />, { wrapper });
 
-    await selectType("Расход");
+    expect(screen.queryByText("Валюта")).not.toBeInTheDocument();
+    expect(screen.getByText("Сумма")).toBeInTheDocument();
+
+    await selectOption("Кошелёк", "Карта");
+    expect(await screen.findByLabelText("Сумма (RUB)")).toBeInTheDocument();
+
     await selectOption("Кошелёк", "Наличные");
-    await selectOption("Категория", "Продукты");
-    await selectOption("Валюта", "RUB — Российский рубль");
-    await userEvent.type(screen.getByLabelText("Сумма"), "5");
-    await userEvent.click(screen.getByRole("button", { name: "Создать" }));
-
-    await waitFor(() => expect(onClose).toHaveBeenCalled());
-    const request = api.requests.find(
-      (r) => r.method === "POST" && r.path === `/api/workspaces/${TEST_WORKSPACE_ID}/transactions`,
-    );
-    expect(request).toMatchObject({
-      body: { wallet_id: "w1", category_id: "c2", currency_id: "cur2", amount: "5" },
-    });
-    expect(request?.body).not.toHaveProperty("type");
-    expect(await screen.findByText("Операция создана")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Сумма (USD)")).toBeInTheDocument();
   });
 
-  it("редактирование: поля и переключатель типа предзаполнены по данным операции", async () => {
-    const { wrapper } = setup(() => TRANSACTION);
+  it("категория предлагает только расходные", async () => {
+    const { api, wrapper } = setup(() => ({}));
+    render(<TransactionForm open onClose={vi.fn()} />, { wrapper });
+
+    await userEvent.click(formControl("Категория"));
+
+    expect(await screen.findByText("Продукты")).toBeInTheDocument();
+    expect(screen.queryByText("Зарплата")).not.toBeInTheDocument();
+    expect(screen.queryByText("Тип")).not.toBeInTheDocument();
+    expect(
+      api.requests.some(
+        (r) =>
+          r.path === `/api/workspaces/${TEST_WORKSPACE_ID}/categories` &&
+          r.query?.type === "expense",
+      ),
+    ).toBe(true);
+  });
+
+  it("редактирование: поля предзаполнены по данным расхода", async () => {
+    const { wrapper } = setup(() => ({}));
     render(<TransactionForm open transaction={TRANSACTION} onClose={vi.fn()} />, { wrapper });
 
-    await screen.findByText("Продукты");
-    expect(screen.getByRole("radio", { name: "Расход" })).toBeChecked();
-    expect(screen.getByText("Наличные")).toBeInTheDocument();
-    expect(screen.getByText("RUB — Российский рубль")).toBeInTheDocument();
-    expect(screen.getByLabelText("Сумма")).toHaveValue("25.00");
+    await waitFor(() => expect(selectedLabel("Кошелёк")).toBe("Карта"));
+    expect(await screen.findByText("Продукты")).toBeInTheDocument();
+    expect(screen.getByLabelText("Сумма (RUB)")).toHaveValue("25.00");
   });
 
   it("редактирование: комментарий предзаполнен, пустой комментарий при сохранении очищает его", async () => {
@@ -242,8 +224,9 @@ describe("TransactionForm", () => {
     const onClose = vi.fn();
     render(<TransactionForm open transaction={WITH_COMMENT} onClose={onClose} />, { wrapper });
 
-    await screen.findByText("Продукты");
-    expect(screen.getByLabelText("Комментарий")).toHaveValue("Исходный комментарий");
+    await waitFor(() =>
+      expect(screen.getByLabelText("Комментарий")).toHaveValue("Исходный комментарий"),
+    );
 
     await userEvent.clear(screen.getByLabelText("Комментарий"));
     await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
@@ -262,54 +245,18 @@ describe("TransactionForm", () => {
     const onClose = vi.fn();
     render(<TransactionForm open transaction={TRANSACTION} onClose={onClose} />, { wrapper });
 
-    await screen.findByText("Продукты");
-    await userEvent.clear(screen.getByLabelText("Сумма"));
-    await userEvent.type(screen.getByLabelText("Сумма"), "30.00");
+    await waitFor(() => expect(screen.getByLabelText("Сумма (RUB)")).toHaveValue("25.00"));
+    await userEvent.clear(screen.getByLabelText("Сумма (RUB)"));
+    await userEvent.type(screen.getByLabelText("Сумма (RUB)"), "30.00");
     await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
 
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(api.requests.at(-1)).toMatchObject({
       method: "PUT",
       path: `/api/workspaces/${TEST_WORKSPACE_ID}/transactions/t1`,
-      body: { wallet_id: "w1", category_id: "c2", currency_id: "cur2", amount: "30.00" },
+      body: { wallet_id: "w2", category_id: "c2", amount: "30.00" },
     });
-    expect(await screen.findByText("Операция обновлена")).toBeInTheDocument();
-  });
-
-  it("смена типа сбрасывает выбранную категорию", async () => {
-    const { wrapper } = setup(() => ({}));
-    render(<TransactionForm open onClose={vi.fn()} />, { wrapper });
-
-    await selectOption("Категория", "Зарплата");
-    expect(selectedLabel("Категория")).toBe("Зарплата");
-
-    await selectType("Расход");
-
-    expect(selectedLabel("Категория")).toBeNull();
-  });
-
-  it("смена кошелька сбрасывает выбранную валюту", async () => {
-    const { wrapper } = setup(() => ({}));
-    render(<TransactionForm open onClose={vi.fn()} />, { wrapper });
-
-    await selectOption("Кошелёк", "Наличные");
-    await selectOption("Валюта", "USD — Доллар США");
-    expect(selectedLabel("Валюта")).toBe("USD — Доллар США");
-
-    await selectOption("Кошелёк", "Карта");
-
-    expect(selectedLabel("Валюта")).toBeNull();
-  });
-
-  it("список валют в CurrencyPicker ограничен набором выбранного кошелька", async () => {
-    const { wrapper } = setup(() => ({}));
-    render(<TransactionForm open onClose={vi.fn()} />, { wrapper });
-
-    await selectOption("Кошелёк", "Карта");
-    await userEvent.click(formControl("Валюта"));
-
-    expect(await screen.findByText("RUB — Российский рубль")).toBeInTheDocument();
-    expect(screen.queryByText("USD — Доллар США")).not.toBeInTheDocument();
+    expect(await screen.findByText("Расход обновлён")).toBeInTheDocument();
   });
 
   it("ошибка валидации по полю остаётся в форме и не закрывает её", async () => {
@@ -323,7 +270,7 @@ describe("TransactionForm", () => {
     const onClose = vi.fn();
     render(<TransactionForm open onClose={onClose} />, { wrapper });
 
-    await fillMinimalIncomeForm();
+    await fillMinimalForm();
     await userEvent.click(screen.getByRole("button", { name: "Создать" }));
 
     expect(await screen.findByText("Сумма должна быть положительной")).toBeInTheDocument();
@@ -335,18 +282,18 @@ describe("TransactionForm", () => {
       throw new ApiError({
         kind: "validation",
         status: 400,
-        detail: "Валюта операции не входит в набор валют кошелька",
+        detail: "Сумма превышает допустимое число знаков для валюты RUB",
       });
     });
     const onClose = vi.fn();
     render(<TransactionForm open onClose={onClose} />, { wrapper });
 
-    await fillMinimalIncomeForm();
+    await fillMinimalForm();
     await userEvent.click(screen.getByRole("button", { name: "Создать" }));
 
     expect(
       await screen.findByText(
-        "Проверьте заполнение формы: Валюта операции не входит в набор валют кошелька",
+        "Проверьте заполнение формы: Сумма превышает допустимое число знаков для валюты RUB",
       ),
     ).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();

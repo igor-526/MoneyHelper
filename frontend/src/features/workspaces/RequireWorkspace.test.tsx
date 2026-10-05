@@ -17,9 +17,28 @@ function workspacesPage(items: unknown[]) {
 }
 
 const WORKSPACES = [
-  { id: "1", name: "Личное", created_at: "2026-01-01T00:00:00Z", updated_at: null },
-  { id: "2", name: "Поездка в Китай", created_at: "2026-01-02T00:00:00Z", updated_at: null },
+  {
+    id: "1",
+    name: "Личное",
+    currency_id: "c1",
+    created_at: "2026-01-01T00:00:00Z",
+    updated_at: null,
+  },
+  {
+    id: "2",
+    name: "Поездка в Китай",
+    currency_id: "c1",
+    created_at: "2026-01-02T00:00:00Z",
+    updated_at: null,
+  },
 ];
+
+const CURRENCIES_PAGE = {
+  items: [{ id: "c1", code: "RUB", name: "Российский рубль", decimal_places: 2 }],
+  total: 1,
+  limit: 100,
+  offset: 0,
+};
 
 /** Пробный потребитель контекста — печатает текущий `workspace_id`. */
 function Probe() {
@@ -45,11 +64,13 @@ describe("RequireWorkspace", () => {
     const created = {
       id: "new",
       name: "Первый воркспейс",
+      currency_id: "c1",
       created_at: "2026-01-01T00:00:00Z",
       updated_at: null,
     };
     let workspaces: unknown[] = [];
     const { api, wrapper } = setup((request) => {
+      if (request.path === "/api/currencies") return CURRENCIES_PAGE;
       if (request.method === "GET") return workspacesPage(workspaces);
       if (request.method === "POST") {
         workspaces = [created];
@@ -69,12 +90,15 @@ describe("RequireWorkspace", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Создать воркспейс" }));
     await userEvent.type(screen.getByLabelText("Название"), "Первый воркспейс");
+    await userEvent.click(screen.getByLabelText("Основная валюта"));
+    await userEvent.click(await screen.findByText("RUB — Российский рубль"));
     await userEvent.click(screen.getByRole("button", { name: "Создать" }));
 
     expect(await screen.findByText("workspace: new")).toBeInTheDocument();
-    expect(api.requests.some((r) => r.method === "POST" && r.path === "/api/workspaces")).toBe(
-      true,
-    );
+    expect(api.requests.find((r) => r.method === "POST")).toMatchObject({
+      path: "/api/workspaces",
+      body: { name: "Первый воркспейс", currency_id: "c1" },
+    });
   });
 
   it("сохранённый id отсутствует среди воркспейсов — список выбора; клик переключает", async () => {

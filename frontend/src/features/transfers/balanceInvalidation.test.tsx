@@ -28,7 +28,7 @@ const WALLETS = [
     id: "w1",
     name: "Наличные",
     icon: "wallet",
-    currency_ids: ["cur1"],
+    currency_id: "cur1",
     created_at: "2026-01-01T00:00:00Z",
     updated_at: null,
   },
@@ -36,7 +36,7 @@ const WALLETS = [
     id: "w2",
     name: "Карта",
     icon: "credit-card",
-    currency_ids: ["cur1"],
+    currency_id: "cur1",
     created_at: "2026-01-01T00:00:00Z",
     updated_at: null,
   },
@@ -105,7 +105,6 @@ describe("инвалидация баланса кошелька мутация�
       id: "1",
       from_wallet_id: "w1",
       to_wallet_id: "w2",
-      currency_id: "cur1",
       amount: "10",
       occurred_at: "2026-01-01T00:00:00Z",
       created_at: "2026-01-01T00:00:00Z",
@@ -113,7 +112,7 @@ describe("инвалидация баланса кошелька мутация�
     };
     const { api, wrapper } = setup((request) => {
       if (request.path === `/api/workspaces/${TEST_WORKSPACE_ID}/transfers`) return CREATED;
-      if (request.path.endsWith("/balances")) return [{ currency_id: "cur1", balance: "0.00" }];
+      if (request.path.endsWith("/balances")) return { currency_id: "cur1", balance: "0.00" };
       return undefined;
     });
 
@@ -132,8 +131,7 @@ describe("инвалидация баланса кошелька мутация�
 
     await selectOption("Откуда", "Наличные");
     await selectOption("Куда", "Карта");
-    await selectOption("Валюта", "USD — Доллар США");
-    await userEvent.type(screen.getByLabelText("Сумма"), "10");
+    await userEvent.type(screen.getByLabelText("Сумма (USD)"), "10");
     await userEvent.click(screen.getByRole("button", { name: "Создать" }));
 
     await waitFor(() =>
