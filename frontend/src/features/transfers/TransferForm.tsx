@@ -3,10 +3,19 @@ import dayjs, { type Dayjs } from "dayjs";
 import { useEffect } from "react";
 import { useWallets } from "@/features/wallets/useWallets";
 import { applyFieldErrors, resolveErrorMessage, toApiError } from "@/shared/errors";
-import { formatAmount, MoneyInput, useCurrencies, useIsMobile, useToast } from "@/shared/ui";
+import {
+  AddAnotherCheckbox,
+  ConfirmDeleteButton,
+  formatAmount,
+  MoneyInput,
+  useCurrencies,
+  useIsMobile,
+  useToast,
+} from "@/shared/ui";
 import type { Transfer, TransferFormValues } from "./Transfer";
 import { useCreateTransfer } from "./useCreateTransfer";
 import { useUpdateTransfer } from "./useUpdateTransfer";
+import { useDeleteTransfer } from "./useDeleteTransfer";
 
 export interface TransferFormProps {
   open: boolean;
@@ -16,6 +25,7 @@ export interface TransferFormProps {
 }
 
 interface TransferFormFields {
+  add_another?: boolean;
   from_wallet_id: string;
   to_wallet_id: string;
   amount: string;
@@ -35,6 +45,7 @@ export function TransferForm({ open, onClose, transfer }: TransferFormProps) {
 
   const createTransfer = useCreateTransfer();
   const updateTransfer = useUpdateTransfer();
+  const deleteMutation = useDeleteTransfer();
   const mutation = transfer ? updateTransfer : createTransfer;
 
   const fromWalletId = Form.useWatch("from_wallet_id", form);
@@ -48,6 +59,7 @@ export function TransferForm({ open, onClose, transfer }: TransferFormProps) {
 
   useEffect(() => {
     if (!open) return;
+    form.setFieldValue("add_another", false);
     if (transfer) {
       form.setFieldsValue({
         from_wallet_id: transfer.from_wallet_id,
@@ -105,6 +117,10 @@ export function TransferForm({ open, onClose, transfer }: TransferFormProps) {
 
     const onSuccess = () => {
       toast.success(transfer ? "Перевод обновлён" : "Перевод создан");
+      if (!transfer && fields.add_another) {
+        form.setFieldsValue({ amount: "", occurred_at: undefined });
+        return;
+      }
       onClose();
     };
 
@@ -116,6 +132,10 @@ export function TransferForm({ open, onClose, transfer }: TransferFormProps) {
   };
 
   const noTargetWallets = Boolean(fromWallet) && targetWallets.length === 0;
+
+  const handleDelete = (id: string) => {
+    deleteMutation.mutate(id, { onSuccess: onClose });
+  };
 
   const title = transfer ? "Редактировать перевод" : "Создать перевод";
   const content = (
@@ -159,6 +179,7 @@ export function TransferForm({ open, onClose, transfer }: TransferFormProps) {
       <Form.Item name="occurred_at" label="Дата">
         <DatePicker showTime style={{ width: "100%" }} />
       </Form.Item>
+      {transfer ? null : <AddAnotherCheckbox />}
       <Form.Item style={{ marginBottom: 0 }}>
         <Button
           type="primary"
@@ -170,6 +191,15 @@ export function TransferForm({ open, onClose, transfer }: TransferFormProps) {
           {transfer ? "Сохранить" : "Создать"}
         </Button>
       </Form.Item>
+      {transfer ? (
+        <Form.Item style={{ marginTop: 12, marginBottom: 0 }}>
+          <ConfirmDeleteButton
+            title="Удалить перевод?"
+            loading={deleteMutation.isPending}
+            onConfirm={() => handleDelete(transfer.id)}
+          />
+        </Form.Item>
+      ) : null}
     </Form>
   );
 

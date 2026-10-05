@@ -8,10 +8,10 @@ import {
 } from "./operationKinds";
 
 describe("OPERATION_KINDS", () => {
-  it("содержит вкладки «Пополнение», «Расход» и «Перевод» с уникальными ключами", () => {
+  it("содержит вкладки «Расход», «Пополнение» и «Перевод» с уникальными ключами", () => {
     expect(OPERATION_KINDS.map((kind) => [kind.key, kind.label])).toEqual([
-      ["topup", "Пополнение"],
       ["expense", "Расход"],
+      ["topup", "Пополнение"],
       ["transfer", "Перевод"],
     ]);
   });
@@ -21,7 +21,8 @@ describe("OPERATION_KINDS", () => {
   });
 
   it("findOperationKind возвращает вид по ключу, иначе вид по умолчанию", () => {
-    expect(findOperationKind("expense").key).toBe("expense");
+    expect(findOperationKind("topup").key).toBe("topup");
+    expect(DEFAULT_OPERATION_KIND.key).toBe("expense");
     expect(findOperationKind("transfer").key).toBe("transfer");
     expect(findOperationKind("unknown")).toBe(DEFAULT_OPERATION_KIND);
     expect(findOperationKind(null)).toBe(DEFAULT_OPERATION_KIND);

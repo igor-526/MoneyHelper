@@ -162,6 +162,30 @@ describe("TransactionForm", () => {
     expect(await screen.findByText("Расход создан")).toBeInTheDocument();
   });
 
+  it("«Добавить ещё»: после создания форма остаётся открытой, сумма очищена, кошелёк и категория сохранены", async () => {
+    const { wrapper } = setup(() => ({}));
+    const onClose = vi.fn();
+    render(<TransactionForm open onClose={onClose} />, { wrapper });
+
+    await fillMinimalForm();
+    await userEvent.click(screen.getByRole("checkbox", { name: "Добавить ещё" }));
+    await userEvent.click(screen.getByRole("button", { name: "Создать" }));
+
+    expect(await screen.findByText("Расход создан")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText("Сумма (USD)")).toHaveValue(""));
+    expect(onClose).not.toHaveBeenCalled();
+    expect(selectedLabel("Кошелёк")).toBe("Наличные");
+    expect(selectedLabel("Категория")).toBe("Продукты");
+    expect(screen.getByRole("checkbox", { name: "Добавить ещё" })).toBeChecked();
+  });
+
+  it("«Добавить ещё»: флажок в форме редактирования отсутствует", () => {
+    const { wrapper } = setup(() => ({}));
+    render(<TransactionForm open transaction={TRANSACTION} onClose={vi.fn()} />, { wrapper });
+
+    expect(screen.queryByRole("checkbox", { name: "Добавить ещё" })).not.toBeInTheDocument();
+  });
+
   it("создание с комментарием: тело запроса содержит comment", async () => {
     const { api, wrapper } = setup(() => ({}));
     const onClose = vi.fn();
@@ -257,6 +281,45 @@ describe("TransactionForm", () => {
       body: { wallet_id: "w2", category_id: "c2", amount: "30.00" },
     });
     expect(await screen.findByText("Расход обновлён")).toBeInTheDocument();
+  });
+
+  it("редактирование: «Удалить» с подтверждением вызывает DELETE и закрывает форму", async () => {
+    const { api, wrapper } = setup(() => undefined);
+    const onClose = vi.fn();
+    render(<TransactionForm open transaction={TRANSACTION} onClose={onClose} />, { wrapper });
+
+    await userEvent.click(screen.getByRole("button", { name: "Удалить" }));
+    expect(await screen.findByText("Удалить расход?")).toBeInTheDocument();
+    const popup = await screen.findByRole("tooltip");
+    await userEvent.click(within(popup).getByRole("button", { name: "Удалить" }));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(api.requests).toContainEqual(
+      expect.objectContaining({
+        method: "DELETE",
+        path: `/api/workspaces/${TEST_WORKSPACE_ID}/transactions/t1`,
+      }),
+    );
+  });
+
+  it("редактирование: отмена подтверждения не удаляет и не закрывает форму", async () => {
+    const { api, wrapper } = setup(() => undefined);
+    const onClose = vi.fn();
+    render(<TransactionForm open transaction={TRANSACTION} onClose={onClose} />, { wrapper });
+
+    await userEvent.click(screen.getByRole("button", { name: "Удалить" }));
+    const popup = await screen.findByRole("tooltip");
+    await userEvent.click(within(popup).getByRole("button", { name: "Отмена" }));
+
+    expect(api.requests.some((r) => r.method === "DELETE")).toBe(false);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("создание: кнопки «Удалить» нет", () => {
+    const { wrapper } = setup(() => undefined);
+    render(<TransactionForm open onClose={vi.fn()} />, { wrapper });
+
+    expect(screen.queryByRole("button", { name: "Удалить" })).not.toBeInTheDocument();
   });
 
   it("ошибка валидации по полю остаётся в форме и не закрывает её", async () => {

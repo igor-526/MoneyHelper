@@ -1,4 +1,4 @@
-import type { UseMutationResult, UseQueryResult } from "@tanstack/react-query";
+import type { UseQueryResult } from "@tanstack/react-query";
 import { type ComponentType, createElement } from "react";
 import type { CategoryType } from "@/features/categories/Category";
 import type { Page } from "@/shared/api";
@@ -7,8 +7,6 @@ import { OperationsTab } from "./OperationsTab";
 import { TopupForm } from "./TopupForm";
 import { TransactionForm } from "./TransactionForm";
 import type { Transaction } from "./Transaction";
-import { useDeleteTopup } from "./useDeleteTopup";
-import { useDeleteTransaction } from "./useDeleteTransaction";
 import { useTopups } from "./useTopups";
 import {
   type OperationFilters,
@@ -28,12 +26,10 @@ export interface TransactionKind {
   categoryType: CategoryType;
   createLabel: string;
   emptyTitle: string;
-  deleteTitle: string;
   useList: (
     filters: OperationFilters,
     pagination: OperationPagination,
   ) => UseQueryResult<Page<Transaction>>;
-  useDelete: () => UseMutationResult<undefined, Error, string>;
   Form: ComponentType<OperationFormProps>;
 }
 
@@ -41,9 +37,7 @@ export const TOPUP_KIND: TransactionKind = {
   categoryType: "income",
   createLabel: "Создать пополнение",
   emptyTitle: "Пополнений пока нет",
-  deleteTitle: "Удалить пополнение?",
   useList: useTopups,
-  useDelete: useDeleteTopup,
   Form: TopupForm,
 };
 
@@ -51,9 +45,7 @@ export const EXPENSE_KIND: TransactionKind = {
   categoryType: "expense",
   createLabel: "Создать расход",
   emptyTitle: "Расходов пока нет",
-  deleteTitle: "Удалить расход?",
   useList: useTransactions,
-  useDelete: useDeleteTransaction,
   Form: TransactionForm,
 };
 
@@ -71,8 +63,8 @@ function transactionPanel(kind: TransactionKind): ComponentType {
 }
 
 export const OPERATION_KINDS: readonly OperationKind[] = [
-  { key: "topup", label: "Пополнение", Panel: transactionPanel(TOPUP_KIND) },
   { key: "expense", label: "Расход", Panel: transactionPanel(EXPENSE_KIND) },
+  { key: "topup", label: "Пополнение", Panel: transactionPanel(TOPUP_KIND) },
   { key: "transfer", label: "Перевод", Panel: TransfersTab },
 ];
 

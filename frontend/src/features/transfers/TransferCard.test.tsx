@@ -1,18 +1,9 @@
-import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import dayjs from "dayjs";
-import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { WorkspaceContext } from "@/features/workspaces/WorkspaceContext";
-import { ApiClientProvider } from "@/shared/api";
-import { createQueryClient } from "@/shared/errors";
-import { type FakeHandler, FakeApiClient } from "@/test/FakeApiClient";
-import { createToastSpy } from "@/test/toastSpy";
 import type { Transfer } from "./Transfer";
 import { TransferCard } from "./TransferCard";
-
-const TEST_WORKSPACE_ID = "workspace-1";
 
 const TRANSFER: Transfer = {
   id: "t1",
@@ -24,22 +15,8 @@ const TRANSFER: Transfer = {
   updated_at: null,
 };
 
-function setup(handler: FakeHandler) {
-  const api = new FakeApiClient(handler);
-  const client = createQueryClient(createToastSpy());
-  const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={client}>
-      <ApiClientProvider client={api}>
-        <WorkspaceContext.Provider value={TEST_WORKSPACE_ID}>{children}</WorkspaceContext.Provider>
-      </ApiClientProvider>
-    </QueryClientProvider>
-  );
-  return { api, wrapper };
-}
-
 describe("TransferCard", () => {
   it("отображает все резолвленные поля карточки", () => {
-    const { wrapper } = setup(() => undefined);
     render(
       <TransferCard
         transfer={TRANSFER}
@@ -48,7 +25,6 @@ describe("TransferCard", () => {
         currencyCode="USD"
         onEdit={vi.fn()}
       />,
-      { wrapper },
     );
 
     expect(screen.getByText("Наличные → Карта")).toBeInTheDocument();
@@ -59,7 +35,6 @@ describe("TransferCard", () => {
   });
 
   it("рендерится без падения при нерезолвленных fromWalletName/toWalletName/currencyCode", () => {
-    const { wrapper } = setup(() => undefined);
     render(
       <TransferCard
         transfer={TRANSFER}
@@ -68,15 +43,13 @@ describe("TransferCard", () => {
         currencyCode={undefined}
         onEdit={vi.fn()}
       />,
-      { wrapper },
     );
 
     expect(screen.getByText("… → …")).toBeInTheDocument();
     expect(screen.getByText("150.00 …")).toBeInTheDocument();
   });
 
-  it("нажатие «Редактировать» вызывает onEdit с этим переводом", async () => {
-    const { wrapper } = setup(() => undefined);
+  it("нажатие на карточку вызывает onEdit с этим переводом", async () => {
     const onEdit = vi.fn();
     render(
       <TransferCard
@@ -86,43 +59,33 @@ describe("TransferCard", () => {
         currencyCode="USD"
         onEdit={onEdit}
       />,
-      { wrapper },
     );
 
-    await userEvent.click(screen.getByRole("button", { name: "Редактировать" }));
+    await userEvent.click(screen.getByText("Наличные → Карта"));
 
     expect(onEdit).toHaveBeenCalledWith(TRANSFER);
   });
 
-  it("подтверждение в Popconfirm вызывает DELETE /api/transfers/{id}", async () => {
-    const { api, wrapper } = setup(() => undefined);
+  it("Enter и пробел на карточке вызывают onEdit", async () => {
+    const onEdit = vi.fn();
     render(
       <TransferCard
         transfer={TRANSFER}
         fromWalletName="Наличные"
         toWalletName="Карта"
         currencyCode="USD"
-        onEdit={vi.fn()}
+        onEdit={onEdit}
       />,
-      { wrapper },
     );
 
-    await userEvent.click(screen.getByRole("button", { name: "Удалить" }));
-    const popup = await screen.findByRole("tooltip");
-    await userEvent.click(within(popup).getByRole("button", { name: "Удалить" }));
+    screen.getByRole("button").focus();
+    await userEvent.keyboard("{Enter}");
+    await userEvent.keyboard(" ");
 
-    await waitFor(() =>
-      expect(
-        api.requests.some(
-          (r) =>
-            r.method === "DELETE" && r.path === `/api/workspaces/${TEST_WORKSPACE_ID}/transfers/t1`,
-        ),
-      ).toBe(true),
-    );
+    expect(onEdit).toHaveBeenCalledTimes(2);
   });
 
-  it("отмена подтверждения не вызывает запрос", async () => {
-    const { api, wrapper } = setup(() => undefined);
+  it("не содержит кнопок «Редактировать» и «Удалить»", () => {
     render(
       <TransferCard
         transfer={TRANSFER}
@@ -131,13 +94,9 @@ describe("TransferCard", () => {
         currencyCode="USD"
         onEdit={vi.fn()}
       />,
-      { wrapper },
     );
 
-    await userEvent.click(screen.getByRole("button", { name: "Удалить" }));
-    const popup = await screen.findByRole("tooltip");
-    await userEvent.click(within(popup).getByRole("button", { name: "Отмена" }));
-
-    expect(api.requests).toHaveLength(0);
+    expect(screen.queryByRole("button", { name: "Редактировать" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Удалить" })).not.toBeInTheDocument();
   });
 });

@@ -234,6 +234,68 @@ describe("TransferForm", () => {
     expect(await screen.findByText("Перевод создан")).toBeInTheDocument();
   });
 
+  it("редактирование: «Удалить» с подтверждением вызывает DELETE и закрывает форму", async () => {
+    const { api, wrapper } = setup(() => undefined);
+    const onClose = vi.fn();
+    render(<TransferForm open transfer={TRANSFER} onClose={onClose} />, { wrapper });
+
+    await userEvent.click(screen.getByRole("button", { name: "Удалить" }));
+    expect(await screen.findByText("Удалить перевод?")).toBeInTheDocument();
+    const popup = await screen.findByRole("tooltip");
+    await userEvent.click(within(popup).getByRole("button", { name: "Удалить" }));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(api.requests).toContainEqual(
+      expect.objectContaining({
+        method: "DELETE",
+        path: `/api/workspaces/${TEST_WORKSPACE_ID}/transfers/t1`,
+      }),
+    );
+  });
+
+  it("редактирование: отмена подтверждения не удаляет и не закрывает форму", async () => {
+    const { api, wrapper } = setup(() => undefined);
+    const onClose = vi.fn();
+    render(<TransferForm open transfer={TRANSFER} onClose={onClose} />, { wrapper });
+
+    await userEvent.click(screen.getByRole("button", { name: "Удалить" }));
+    const popup = await screen.findByRole("tooltip");
+    await userEvent.click(within(popup).getByRole("button", { name: "Отмена" }));
+
+    expect(api.requests.some((r) => r.method === "DELETE")).toBe(false);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("создание: кнопки «Удалить» нет", () => {
+    const { wrapper } = setup(() => undefined);
+    render(<TransferForm open onClose={vi.fn()} />, { wrapper });
+
+    expect(screen.queryByRole("button", { name: "Удалить" })).not.toBeInTheDocument();
+  });
+
+  it("«Добавить ещё»: после создания форма остаётся открытой, сумма очищена, кошельки сохранены", async () => {
+    const { wrapper } = setup(() => ({}));
+    const onClose = vi.fn();
+    render(<TransferForm open onClose={onClose} />, { wrapper });
+
+    await fillMinimalForm();
+    await userEvent.click(screen.getByRole("checkbox", { name: "Добавить ещё" }));
+    await userEvent.click(screen.getByRole("button", { name: "Создать" }));
+
+    expect(await screen.findByText("Перевод создан")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText("Сумма (USD)")).toHaveValue(""));
+    expect(onClose).not.toHaveBeenCalled();
+    expect(selectedLabel("Откуда")).toBe("Наличные");
+    expect(selectedLabel("Куда")).toBe("Карта");
+  });
+
+  it("«Добавить ещё»: флажок в форме редактирования отсутствует", () => {
+    const { wrapper } = setup(() => ({}));
+    render(<TransferForm open transfer={TRANSFER} onClose={vi.fn()} />, { wrapper });
+
+    expect(screen.queryByRole("checkbox", { name: "Добавить ещё" })).not.toBeInTheDocument();
+  });
+
   it("успешное редактирование с предзаполнением полей", async () => {
     const UPDATED = { ...TRANSFER, amount: "30.00" };
     const { api, wrapper } = setup(() => UPDATED);

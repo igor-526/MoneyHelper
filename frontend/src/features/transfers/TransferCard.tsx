@@ -1,8 +1,8 @@
-import { Button, Card, Flex, Popconfirm, Typography } from "antd";
+import { Card, Flex, Typography } from "antd";
 import dayjs from "dayjs";
+import type { KeyboardEvent } from "react";
 import { formatAmount } from "@/shared/ui";
 import type { Transfer } from "./Transfer";
-import { useDeleteTransfer } from "./useDeleteTransfer";
 
 export interface TransferCardProps {
   transfer: Transfer;
@@ -12,11 +12,7 @@ export interface TransferCardProps {
   onEdit: (transfer: Transfer) => void;
 }
 
-/**
- * Сама владеет удалением (по образцу `TransactionCard`/`WalletCard`) — не получает мутацию от родителя. Без
- * блокировки редактирования — у перевода всегда ровно одна валюта, задел 016/017 про многоногие операции
- * переводов не касается (design.md).
- */
+/** Компактная карточка перевода; нажатие на неё открывает форму редактирования. */
 export function TransferCard({
   transfer,
   fromWalletName,
@@ -24,34 +20,34 @@ export function TransferCard({
   currencyCode,
   onEdit,
 }: TransferCardProps) {
-  const deleteTransfer = useDeleteTransfer();
+  const handleKeyDown = (event: KeyboardEvent) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      onEdit(transfer);
+    }
+  };
 
   return (
-    <Card>
-      <Flex vertical gap={12}>
-        <Typography.Text strong>
-          {fromWalletName ?? "…"} → {toWalletName ?? "…"}
-        </Typography.Text>
-        <Typography.Text>
-          {formatAmount(transfer.amount)} {currencyCode ?? "…"}
-        </Typography.Text>
+    <Card
+      size="small"
+      hoverable
+      role="button"
+      tabIndex={0}
+      onClick={() => onEdit(transfer)}
+      onKeyDown={handleKeyDown}
+    >
+      <Flex vertical gap={4}>
+        <Flex align="center" justify="space-between" gap={8}>
+          <Typography.Text strong ellipsis>
+            {fromWalletName ?? "…"} → {toWalletName ?? "…"}
+          </Typography.Text>
+          <Typography.Text strong>
+            {formatAmount(transfer.amount)} {currencyCode ?? "…"}
+          </Typography.Text>
+        </Flex>
         <Typography.Text type="secondary">
           {dayjs(transfer.occurred_at).format("DD.MM.YYYY HH:mm")}
         </Typography.Text>
-        <Flex gap={8}>
-          <Button onClick={() => onEdit(transfer)}>Редактировать</Button>
-          <Popconfirm
-            title="Удалить перевод?"
-            okText="Удалить"
-            okType="danger"
-            cancelText="Отмена"
-            onConfirm={() => deleteTransfer.mutate(transfer.id)}
-          >
-            <Button danger loading={deleteTransfer.isPending}>
-              Удалить
-            </Button>
-          </Popconfirm>
-        </Flex>
       </Flex>
     </Card>
   );

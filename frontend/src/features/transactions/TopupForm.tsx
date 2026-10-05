@@ -5,10 +5,19 @@ import { useCategories } from "@/features/categories/useCategories";
 import { useWallets } from "@/features/wallets/useWallets";
 import { useCurrentWorkspace } from "@/features/workspaces/useCurrentWorkspace";
 import { applyFieldErrors, resolveErrorMessage, toApiError } from "@/shared/errors";
-import { formatAmount, MoneyInput, useCurrencies, useIsMobile, useToast } from "@/shared/ui";
+import {
+  AddAnotherCheckbox,
+  ConfirmDeleteButton,
+  formatAmount,
+  MoneyInput,
+  useCurrencies,
+  useIsMobile,
+  useToast,
+} from "@/shared/ui";
 import type { TopupFormValues, Transaction } from "./Transaction";
 import { useCreateTopup } from "./useCreateTopup";
 import { useUpdateTopup } from "./useUpdateTopup";
+import { useDeleteTopup } from "./useDeleteTopup";
 
 export interface TopupFormProps {
   open: boolean;
@@ -19,6 +28,7 @@ export interface TopupFormProps {
 
 /** `amounts` — суммы по валютам ног, адресуемые путём `["amounts", currencyId]`. */
 interface TopupFormFields {
+  add_another?: boolean;
   wallet_id: string;
   category_id: string;
   amounts: Record<string, string>;
@@ -46,6 +56,7 @@ export function TopupForm({ open, onClose, transaction }: TopupFormProps) {
 
   const createTopup = useCreateTopup();
   const updateTopup = useUpdateTopup();
+  const deleteMutation = useDeleteTopup();
   const mutation = transaction ? updateTopup : createTopup;
 
   const walletId = Form.useWatch("wallet_id", form);
@@ -58,6 +69,7 @@ export function TopupForm({ open, onClose, transaction }: TopupFormProps) {
 
   useEffect(() => {
     if (!open) return;
+    form.setFieldValue("add_another", false);
     form.setFieldsValue({
       wallet_id: transaction?.wallet_id,
       category_id: transaction?.category_id,
@@ -107,6 +119,11 @@ export function TopupForm({ open, onClose, transaction }: TopupFormProps) {
 
     const onSuccess = () => {
       toast.success(transaction ? "Пополнение обновлено" : "Пополнение создано");
+      if (!transaction && fields.add_another) {
+        form.setFieldsValue({ occurred_at: undefined, comment: undefined });
+        form.setFieldValue("amounts", {});
+        return;
+      }
       onClose();
     };
 
@@ -115,6 +132,10 @@ export function TopupForm({ open, onClose, transaction }: TopupFormProps) {
     } else {
       createTopup.mutate(payload, { onSuccess, onError });
     }
+  };
+
+  const handleDelete = (id: string) => {
+    deleteMutation.mutate(id, { onSuccess: onClose });
   };
 
   const title = transaction ? "Редактировать пополнение" : "Создать пополнение";
@@ -162,11 +183,21 @@ export function TopupForm({ open, onClose, transaction }: TopupFormProps) {
       >
         <Input.TextArea rows={2} maxLength={1000} showCount />
       </Form.Item>
+      {transaction ? null : <AddAnotherCheckbox />}
       <Form.Item style={{ marginBottom: 0 }}>
         <Button type="primary" htmlType="submit" block loading={mutation.isPending}>
           {transaction ? "Сохранить" : "Создать"}
         </Button>
       </Form.Item>
+      {transaction ? (
+        <Form.Item style={{ marginTop: 12, marginBottom: 0 }}>
+          <ConfirmDeleteButton
+            title="Удалить пополнение?"
+            loading={deleteMutation.isPending}
+            onConfirm={() => handleDelete(transaction.id)}
+          />
+        </Form.Item>
+      ) : null}
     </Form>
   );
 

@@ -135,7 +135,7 @@ function withFixtures(handler: FakeHandler): FakeHandler {
   };
 }
 
-function setup(handler: FakeHandler, path = "/transactions") {
+function setup(handler: FakeHandler, path = "/transactions?tab=topup") {
   const api = new FakeApiClient(withFixtures(handler));
   const toast = createToastSpy();
   const client = createQueryClient(toast);
@@ -201,28 +201,32 @@ async function goToPage(pageNumber: number) {
   await userEvent.click(within(activePanel()).getByTitle(String(pageNumber)));
 }
 
-async function confirmDelete() {
-  await userEvent.click(within(activePanel()).getByRole("button", { name: "Удалить" }));
+async function confirmDeleteInForm() {
+  const dialog = await screen.findByRole("dialog");
+  await userEvent.click(within(dialog).getByRole("button", { name: "Удалить" }));
   const popup = await screen.findByRole("tooltip");
   await userEvent.click(within(popup).getByRole("button", { name: "Удалить" }));
 }
 
 describe("TransactionsPage", () => {
-  it("по умолчанию открыта вкладка «Пополнение» со списком пополнений", async () => {
-    const { api, wrapper } = setup(defaultHandler());
+  it("по умолчанию открыта вкладка «Расход» со списком расходов", async () => {
+    const { api, wrapper } = setup(defaultHandler(), "/transactions");
     render(<TransactionsPage />, { wrapper });
 
-    expect(await screen.findByText("Зарплата")).toBeInTheDocument();
-    expect(screen.getByText("Наличные")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Пополнение" })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
-    expect(requestsTo(api, EXPENSES_PATH)).toHaveLength(0);
+    expect(await screen.findByText("Продукты")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Расход" })).toHaveAttribute("aria-selected", "true");
+    expect(requestsTo(api, TOPUPS_PATH)).toHaveLength(0);
   });
 
   it("неизвестное значение ?tab= открывает вкладку по умолчанию", async () => {
     const { wrapper } = setup(defaultHandler(), "/transactions?tab=unknown");
+    render(<TransactionsPage />, { wrapper });
+
+    expect(await screen.findByText("Продукты")).toBeInTheDocument();
+  });
+
+  it("вкладка из ?tab=topup открывается сразу", async () => {
+    const { wrapper } = setup(defaultHandler(), "/transactions?tab=topup");
     render(<TransactionsPage />, { wrapper });
 
     expect(await screen.findByText("Зарплата")).toBeInTheDocument();
@@ -284,8 +288,8 @@ describe("TransactionsPage", () => {
 
     expect(screen.queryByText("Переводы")).not.toBeInTheDocument();
     expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
-      "Пополнение",
       "Расход",
+      "Пополнение",
       "Перевод",
     ]);
   });
@@ -422,21 +426,19 @@ describe("TransactionsPage", () => {
     expect(await screen.findByText("USD: 100.00")).toBeInTheDocument();
   });
 
-  it("«Редактировать» открывает форму пополнения или расхода по вкладке", async () => {
+  it("нажатие на карточку пополнения открывает форму редактирования пополнения", async () => {
     const { wrapper } = setup(defaultHandler());
     render(<TransactionsPage />, { wrapper });
-    await screen.findByText("Зарплата");
 
-    await userEvent.click(screen.getByRole("button", { name: "Редактировать" }));
+    await userEvent.click(await screen.findByText("Зарплата"));
     expect(await screen.findByText("Редактировать пополнение")).toBeInTheDocument();
   });
 
-  it("«Редактировать» на вкладке расходов открывает форму расхода", async () => {
+  it("нажатие на карточку расхода открывает форму редактирования расхода", async () => {
     const { wrapper } = setup(defaultHandler(), "/transactions?tab=expense");
     render(<TransactionsPage />, { wrapper });
-    await screen.findByText("Продукты");
 
-    await userEvent.click(screen.getByRole("button", { name: "Редактировать" }));
+    await userEvent.click(await screen.findByText("Продукты"));
     expect(await screen.findByText("Редактировать расход")).toBeInTheDocument();
   });
 
@@ -492,7 +494,7 @@ describe("TransactionsPage", () => {
     expect(await screen.findByText("10000 USD")).toBeInTheDocument();
     expect(screen.getByText("780 RUB")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "Редактировать" }));
+    await userEvent.click(screen.getByText("10000 USD"));
     dialog = await screen.findByRole("dialog");
     await waitFor(() => expect(within(dialog).getByLabelText("Сумма (RUB)")).toHaveValue("780"));
     await userEvent.clear(within(dialog).getByLabelText("Сумма (RUB)"));
@@ -501,7 +503,8 @@ describe("TransactionsPage", () => {
 
     expect(await screen.findByText("800 RUB")).toBeInTheDocument();
 
-    await confirmDelete();
+    await userEvent.click(screen.getByText("800 RUB"));
+    await confirmDeleteInForm();
     expect(await screen.findByText("Пополнений пока нет")).toBeInTheDocument();
   });
 
@@ -542,7 +545,7 @@ describe("TransactionsPage", () => {
 
     expect(await screen.findByText("10 USD")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "Редактировать" }));
+    await userEvent.click(screen.getByText("10 USD"));
     dialog = await screen.findByRole("dialog");
     await waitFor(() => expect(within(dialog).getByLabelText("Сумма (USD)")).toHaveValue("10"));
     await userEvent.clear(within(dialog).getByLabelText("Сумма (USD)"));
@@ -551,7 +554,8 @@ describe("TransactionsPage", () => {
 
     expect(await screen.findByText("20 USD")).toBeInTheDocument();
 
-    await confirmDelete();
+    await userEvent.click(screen.getByText("20 USD"));
+    await confirmDeleteInForm();
     expect(await screen.findByText("Расходов пока нет")).toBeInTheDocument();
   });
 

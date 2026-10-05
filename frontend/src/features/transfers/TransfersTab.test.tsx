@@ -193,12 +193,12 @@ describe("TransfersTab", () => {
     );
   });
 
-  it("кнопка «Редактировать» карточки открывает форму с ожидаемыми пропами", async () => {
+  it("нажатие на карточку открывает форму с ожидаемыми пропами", async () => {
     const { wrapper } = setup(defaultTransfersHandler());
     render(<TransfersTab />, { wrapper });
     await screen.findByText("Наличные → Карта");
 
-    await userEvent.click(screen.getByRole("button", { name: "Редактировать" }));
+    await userEvent.click(screen.getByText("Наличные → Карта"));
 
     expect(await screen.findByText("Редактировать перевод")).toBeInTheDocument();
     await waitFor(() => expect(screen.getByLabelText("Сумма (USD)")).toHaveValue("10.00"));
@@ -275,7 +275,7 @@ describe("TransfersTab", () => {
     expect(screen.queryByText("Переводов пока нет")).not.toBeInTheDocument();
 
     // редактирование
-    await userEvent.click(screen.getByRole("button", { name: "Редактировать" }));
+    await userEvent.click(screen.getByText("10 USD"));
     dialog = await screen.findByRole("dialog");
     await userEvent.clear(within(dialog).getByLabelText("Сумма (USD)"));
     await userEvent.type(within(dialog).getByLabelText("Сумма (USD)"), "20");
@@ -284,7 +284,9 @@ describe("TransfersTab", () => {
     expect(await screen.findByText("20 USD")).toBeInTheDocument();
 
     // удаление
-    await userEvent.click(screen.getByRole("button", { name: "Удалить" }));
+    await userEvent.click(screen.getByText("20 USD"));
+    dialog = await screen.findByRole("dialog");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Удалить" }));
     const popup = await screen.findByRole("tooltip");
     await userEvent.click(within(popup).getByRole("button", { name: "Удалить" }));
 

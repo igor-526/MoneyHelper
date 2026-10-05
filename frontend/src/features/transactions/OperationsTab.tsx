@@ -139,7 +139,7 @@ export function OperationsTab({ kind }: OperationsTabProps) {
           >
             Добавить
           </Button>
-          <Flex vertical gap={12}>
+          <Flex vertical gap={8}>
             {items.map((transaction) => {
               const category = categoryById.get(transaction.category_id);
               return (
@@ -149,7 +149,6 @@ export function OperationsTab({ kind }: OperationsTabProps) {
                   walletName={walletNameById.get(transaction.wallet_id)}
                   category={category && { name: category.name, icon: category.icon }}
                   currencyCodeById={currencyCodeById}
-                  kind={kind}
                   onEdit={openEdit}
                 />
               );

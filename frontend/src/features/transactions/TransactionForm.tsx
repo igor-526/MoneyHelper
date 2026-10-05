@@ -4,10 +4,19 @@ import { useEffect } from "react";
 import { useCategories } from "@/features/categories/useCategories";
 import { useWallets } from "@/features/wallets/useWallets";
 import { applyFieldErrors, resolveErrorMessage, toApiError } from "@/shared/errors";
-import { formatAmount, MoneyInput, useCurrencies, useIsMobile, useToast } from "@/shared/ui";
+import {
+  AddAnotherCheckbox,
+  ConfirmDeleteButton,
+  formatAmount,
+  MoneyInput,
+  useCurrencies,
+  useIsMobile,
+  useToast,
+} from "@/shared/ui";
 import type { Transaction, TransactionFormValues } from "./Transaction";
 import { useCreateTransaction } from "./useCreateTransaction";
 import { useUpdateTransaction } from "./useUpdateTransaction";
+import { useDeleteTransaction } from "./useDeleteTransaction";
 
 export interface TransactionFormProps {
   open: boolean;
@@ -18,6 +27,7 @@ export interface TransactionFormProps {
 
 /** Внутренние поля antd Form: `occurred_at` — Dayjs (не строка). */
 interface TransactionFormFields {
+  add_another?: boolean;
   wallet_id: string;
   category_id: string;
   amount: string;
@@ -39,6 +49,7 @@ export function TransactionForm({ open, onClose, transaction }: TransactionFormP
 
   const createTransaction = useCreateTransaction();
   const updateTransaction = useUpdateTransaction();
+  const deleteMutation = useDeleteTransaction();
   const mutation = transaction ? updateTransaction : createTransaction;
 
   const walletId = Form.useWatch("wallet_id", form);
@@ -48,6 +59,7 @@ export function TransactionForm({ open, onClose, transaction }: TransactionFormP
 
   useEffect(() => {
     if (!open) return;
+    form.setFieldValue("add_another", false);
     form.setFieldsValue({
       wallet_id: transaction?.wallet_id,
       category_id: transaction?.category_id,
@@ -82,6 +94,10 @@ export function TransactionForm({ open, onClose, transaction }: TransactionFormP
 
     const onSuccess = () => {
       toast.success(transaction ? "Расход обновлён" : "Расход создан");
+      if (!transaction && fields.add_another) {
+        form.setFieldsValue({ amount: "", occurred_at: undefined, comment: undefined });
+        return;
+      }
       onClose();
     };
 
@@ -90,6 +106,10 @@ export function TransactionForm({ open, onClose, transaction }: TransactionFormP
     } else {
       createTransaction.mutate(payload, { onSuccess, onError });
     }
+  };
+
+  const handleDelete = (id: string) => {
+    deleteMutation.mutate(id, { onSuccess: onClose });
   };
 
   const title = transaction ? "Редактировать расход" : "Создать расход";
@@ -128,11 +148,21 @@ export function TransactionForm({ open, onClose, transaction }: TransactionFormP
       >
         <Input.TextArea rows={2} maxLength={1000} showCount />
       </Form.Item>
+      {transaction ? null : <AddAnotherCheckbox />}
       <Form.Item style={{ marginBottom: 0 }}>
         <Button type="primary" htmlType="submit" block loading={mutation.isPending}>
           {transaction ? "Сохранить" : "Создать"}
         </Button>
       </Form.Item>
+      {transaction ? (
+        <Form.Item style={{ marginTop: 12, marginBottom: 0 }}>
+          <ConfirmDeleteButton
+            title="Удалить расход?"
+            loading={deleteMutation.isPending}
+            onConfirm={() => handleDelete(transaction.id)}
+          />
+        </Form.Item>
+      ) : null}
     </Form>
   );
 

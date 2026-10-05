@@ -190,6 +190,31 @@ describe("TopupForm", () => {
     });
   });
 
+  it("«Добавить ещё»: после создания форма остаётся открытой, суммы очищены, кошелёк сохранён", async () => {
+    const { wrapper } = setup(() => TOPUP);
+    const onClose = vi.fn();
+    render(<TopupForm open onClose={onClose} />, { wrapper });
+
+    await selectOption("Кошелёк", "Карта");
+    await userEvent.type(await screen.findByLabelText("Сумма (USD)"), "10000");
+    await userEvent.type(screen.getByLabelText("Сумма (RUB)"), "780");
+    await selectOption("Категория", "Зарплата");
+    await userEvent.click(screen.getByRole("checkbox", { name: "Добавить ещё" }));
+    await userEvent.click(screen.getByRole("button", { name: "Создать" }));
+
+    expect(await screen.findByText("Пополнение создано")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText("Сумма (USD)")).toHaveValue(""));
+    expect(screen.getByLabelText("Сумма (RUB)")).toHaveValue("");
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("«Добавить ещё»: флажок в форме редактирования отсутствует", () => {
+    const { wrapper } = setup(() => TOPUP);
+    render(<TopupForm open transaction={TOPUP} onClose={vi.fn()} />, { wrapper });
+
+    expect(screen.queryByRole("checkbox", { name: "Добавить ещё" })).not.toBeInTheDocument();
+  });
+
   it("редактирование предзаполняет форму ногами и отправляет PUT /topups/{id}", async () => {
     const { api, wrapper } = setup(() => TOPUP);
     const onClose = vi.fn();
@@ -218,6 +243,45 @@ describe("TopupForm", () => {
       },
     });
     expect(await screen.findByText("Пополнение обновлено")).toBeInTheDocument();
+  });
+
+  it("редактирование: «Удалить» с подтверждением вызывает DELETE и закрывает форму", async () => {
+    const { api, wrapper } = setup(() => undefined);
+    const onClose = vi.fn();
+    render(<TopupForm open transaction={TOPUP} onClose={onClose} />, { wrapper });
+
+    await userEvent.click(screen.getByRole("button", { name: "Удалить" }));
+    expect(await screen.findByText("Удалить пополнение?")).toBeInTheDocument();
+    const popup = await screen.findByRole("tooltip");
+    await userEvent.click(within(popup).getByRole("button", { name: "Удалить" }));
+
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    expect(api.requests).toContainEqual(
+      expect.objectContaining({
+        method: "DELETE",
+        path: `/api/workspaces/${TEST_WORKSPACE_ID}/topups/t1`,
+      }),
+    );
+  });
+
+  it("редактирование: отмена подтверждения не удаляет и не закрывает форму", async () => {
+    const { api, wrapper } = setup(() => undefined);
+    const onClose = vi.fn();
+    render(<TopupForm open transaction={TOPUP} onClose={onClose} />, { wrapper });
+
+    await userEvent.click(screen.getByRole("button", { name: "Удалить" }));
+    const popup = await screen.findByRole("tooltip");
+    await userEvent.click(within(popup).getByRole("button", { name: "Отмена" }));
+
+    expect(api.requests.some((r) => r.method === "DELETE")).toBe(false);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("создание: кнопки «Удалить» нет", () => {
+    const { wrapper } = setup(() => undefined);
+    render(<TopupForm open onClose={vi.fn()} />, { wrapper });
+
+    expect(screen.queryByRole("button", { name: "Удалить" })).not.toBeInTheDocument();
   });
 
   it("редактирование убирает лишние нули из сумм backend (8 знаков)", async () => {

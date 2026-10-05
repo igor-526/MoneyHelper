@@ -110,7 +110,7 @@ export function TransfersTab() {
           >
             Создать перевод
           </Button>
-          <Flex vertical gap={12}>
+          <Flex vertical gap={8}>
             {items.map((transfer) => (
               <TransferCard
                 key={transfer.id}
