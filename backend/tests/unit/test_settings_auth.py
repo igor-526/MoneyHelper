@@ -14,7 +14,7 @@ def _settings(monkeypatch: pytest.MonkeyPatch, **env: str | None) -> Settings:
 
 
 def test_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
-    settings = _settings(monkeypatch, ENVIRONMENT="development")
+    settings = _settings(monkeypatch, ENVIRONMENT="development", REGISTRATION_ENABLED=None)
 
     assert settings.jwt_secret == DEV_DEFAULT_JWT_SECRET
     assert settings.access_token_ttl_minutes == 15

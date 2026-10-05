@@ -7,6 +7,7 @@ from tests.testing_settings import DatabaseTestSettings, apply_test_database_env
 
 os.environ["SENTRY_ENABLED"] = "false"
 os.environ["SEEDING_ENABLED"] = "false"
+os.environ["REGISTRATION_ENABLED"] = "true"
 os.environ["CORS_ORIGINS"] = "https://app.example.com"
 apply_test_database_env(os.environ, DatabaseTestSettings())
 
