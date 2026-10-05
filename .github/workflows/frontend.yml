@@ -29,6 +29,9 @@ jobs:
 
   build_deploy:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
     needs: test
     permissions:
       contents: read
@@ -47,7 +50,6 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
-          context: frontend
           push: true
           tags: |
             ${{ env.IMAGE }}:latest
