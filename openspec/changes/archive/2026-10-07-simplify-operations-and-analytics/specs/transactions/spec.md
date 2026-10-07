@@ -43,7 +43,7 @@ production-сервера или PostgreSQL-сессии. Миграция SHALL
 
 ## REMOVED Requirements
 
-### Requirement: Баланс кошелька в одной валюте
+### Requirement: Баланс по кошельку и валюте
 **Reason**: Приложение больше не оперирует балансом или остатком средств.
 **Migration**: Endpoint `/api/workspaces/{workspace_id}/wallets/{wallet_id}/balances`, сервис, протоколы и клиенты
 удаляются без замены.
