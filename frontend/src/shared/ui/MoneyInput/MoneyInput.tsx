@@ -1,6 +1,6 @@
 import { Input } from "antd";
 import type { ChangeEvent } from "react";
-import { isValidMoneyAmount } from "./moneyInput";
+import { isValidMoneyAmount, normalizeMoneyAmount } from "./moneyInput";
 
 export interface MoneyInputProps {
   value: string;
@@ -26,7 +26,7 @@ export function MoneyInput({
   const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
     const next = event.target.value;
     if (isValidMoneyAmount(next, decimalPlaces)) {
-      onChange(next);
+      onChange(normalizeMoneyAmount(next) ?? next);
     }
   };
 

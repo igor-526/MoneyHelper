@@ -21,7 +21,6 @@ export function useAnalytics(filters: AnalyticsFilters) {
           type: filters.type,
           wallet_id: filters.walletId,
           category_id: filters.categoryId,
-          timezone: filters.timezone,
         },
         signal,
       }),

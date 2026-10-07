@@ -9,6 +9,7 @@ from core.protocols import (
     Clock,
     CurrencyRepository,
     IdGenerator,
+    OperationClock,
     TopupLegsRule,
     TransactionRepository,
     WalletRepository,
@@ -33,6 +34,7 @@ class TopupService:
         workspaces: WorkspaceCurrencyReader,
         legs_rules: Sequence[TopupLegsRule],
         clock: Clock,
+        operation_clock: OperationClock,
         ids: IdGenerator,
     ) -> None:
         self._transactions = transactions
@@ -42,6 +44,7 @@ class TopupService:
         self._workspaces = workspaces
         self._legs_rules = legs_rules
         self._clock = clock
+        self._operation_clock = operation_clock
         self._ids = ids
 
     async def create_topup(
@@ -62,7 +65,7 @@ class TopupService:
             wallet_id=wallet_id,
             category_id=category_id,
             legs=tuple(legs),
-            occurred_at=occurred_at if occurred_at is not None else now,
+            occurred_at=occurred_at if occurred_at is not None else self._operation_clock.now(),
             comment=comment,
             created_at=now,
         )
@@ -127,7 +130,7 @@ class TopupService:
             wallet_id=wallet_id,
             category_id=category_id,
             legs=tuple(legs),
-            occurred_at=occurred_at if occurred_at is not None else now,
+            occurred_at=occurred_at if occurred_at is not None else self._operation_clock.now(),
             comment=comment,
             now=now,
         )

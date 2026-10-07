@@ -1,2 +1,2 @@
 export { DayPicker, type DayPickerProps } from "./DayPicker";
-export { toOccurredAt } from "./occurredAt";
+export { toLocalDateTime, toOccurredAt } from "./occurredAt";

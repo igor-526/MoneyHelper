@@ -6,7 +6,7 @@ from core.exceptions import ClientError, ConflictError, NotFoundError
 from core.protocols import Clock, CurrencyRepository, IdGenerator, WalletRepository, WalletUsageChecker
 
 NOT_FOUND_MESSAGE = "Кошелёк не найден"
-CURRENCY_CHANGE_CONFLICT_MESSAGE = "Валюту кошелька нельзя изменить: есть операции или переводы"
+CURRENCY_CHANGE_CONFLICT_MESSAGE = "Валюту кошелька нельзя изменить: есть операции"
 
 
 class WalletService:

@@ -9,6 +9,7 @@ from core.exceptions import ClientError, NotFoundError
 from core.services.transaction import TransactionService
 from tests.fakes import (
     FixedClock,
+    FixedOperationClock,
     InMemoryCategoryRepository,
     InMemoryCurrencyRepository,
     InMemoryTransactionRepository,
@@ -30,7 +31,9 @@ def make_service() -> tuple[
     wallets = InMemoryWalletRepository()
     currencies = InMemoryCurrencyRepository()
     clock = FixedClock()
-    service = TransactionService(transactions, wallets, categories, currencies, clock, SequentialIdGenerator())
+    service = TransactionService(
+        transactions, wallets, categories, currencies, clock, FixedOperationClock(), SequentialIdGenerator()
+    )
     return service, transactions, wallets, categories, currencies, clock
 
 
@@ -108,7 +111,7 @@ async def test_create_transaction_without_date_uses_clock_now() -> None:
         occurred_at=None,
     )
 
-    assert transaction.occurred_at == clock.now()
+    assert transaction.occurred_at == datetime(2026, 1, 1)
 
 
 async def test_create_transaction_uses_wallet_currency() -> None:

@@ -187,8 +187,8 @@ describe("AnalyticsPage", () => {
 
     await waitFor(() => expect(analyticsRequests(api).at(-1)?.query).toHaveProperty("date_from"));
     const query = analyticsRequests(api).at(-1)?.query as Record<string, string>;
-    expect(query.date_from).toBe(dayjs().startOf("month").toISOString());
-    expect(query.date_to).toBe(dayjs().endOf("month").toISOString());
+    expect(query.date_from).toBe(dayjs().startOf("month").format("YYYY-MM-DDTHH:mm:ss"));
+    expect(query.date_to).toBe(dayjs().endOf("month").format("YYYY-MM-DDTHH:mm:ss"));
     expect(screen.getByText("Выбранный период")).toBeInTheDocument();
   });
 
@@ -243,7 +243,7 @@ describe("AnalyticsPage", () => {
       await userEvent.click(within(dialog).getByRole("button", { name: "Применить" }));
     }
 
-    it("запрашивает расходы по дням в поясе браузера и показывает итог и график", async () => {
+    it("запрашивает локальные расходы по дням без timezone и показывает итог, график и статистику", async () => {
       const api = setup(() => analyticsResult(DAY_BUCKETS));
       await openSpending(api);
 
@@ -251,11 +251,12 @@ describe("AnalyticsPage", () => {
       expect(query).toMatchObject({
         group_by: "day",
         type: "expense",
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       });
+      expect(query?.timezone).toBeUndefined();
       expect(query?.wallet_id).toBeUndefined();
       expect(query?.category_id).toBeUndefined();
       expect(screen.getByText("Всего: 150.00 RUB")).toBeInTheDocument();
+      expect(screen.getByRole("table", { name: "Статистика дневных трат" })).toBeInTheDocument();
     });
 
     it("без трат показывает пустое состояние", async () => {

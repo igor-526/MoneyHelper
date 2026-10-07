@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import pytest
 
-from core.entities import Currency, Transaction, TransactionLeg, Transfer
+from core.entities import Currency, Transaction, TransactionLeg
 from core.exceptions import ClientError, ConflictError, NotFoundError
 from core.services.wallet import WalletService
 from tests.fakes import (
@@ -12,7 +12,6 @@ from tests.fakes import (
     InMemoryCategoryRepository,
     InMemoryCurrencyRepository,
     InMemoryTransactionRepository,
-    InMemoryTransferRepository,
     InMemoryWalletRepository,
     SequentialIdGenerator,
 )
@@ -24,14 +23,13 @@ ServiceWithUsage = tuple[
     InMemoryWalletRepository,
     InMemoryCurrencyRepository,
     InMemoryTransactionRepository,
-    InMemoryTransferRepository,
 ]
 
 
 async def make_service(
     known_currencies: list[Currency] | None = None,
 ) -> tuple[WalletService, InMemoryWalletRepository, InMemoryCurrencyRepository]:
-    service, wallets, currencies, _, _ = await make_service_with_usage(known_currencies)
+    service, wallets, currencies, _ = await make_service_with_usage(known_currencies)
     return service, wallets, currencies
 
 
@@ -41,11 +39,10 @@ async def make_service_with_usage(
     wallets = InMemoryWalletRepository()
     currencies = InMemoryCurrencyRepository()
     transactions = InMemoryTransactionRepository(InMemoryCategoryRepository())
-    transfers = InMemoryTransferRepository()
     if known_currencies:
         await currencies.upsert_many(known_currencies)
-    service = WalletService(wallets, currencies, [transactions, transfers], FixedClock(), SequentialIdGenerator())
-    return service, wallets, currencies, transactions, transfers
+    service = WalletService(wallets, currencies, [transactions], FixedClock(), SequentialIdGenerator())
+    return service, wallets, currencies, transactions
 
 
 def make_currency(code: str = "RUB") -> Currency:
@@ -122,7 +119,7 @@ async def test_update_wallet_rejects_unknown_currency() -> None:
 
 async def test_update_wallet_rejects_currency_change_with_transactions() -> None:
     rub, cny = make_currency("RUB"), make_currency("CNY")
-    service, _, _, transactions, _ = await make_service_with_usage([rub, cny])
+    service, _, _, transactions = await make_service_with_usage([rub, cny])
     owner = uuid4()
     wallet = await service.create_wallet(owner, name="Кошелёк", icon="wallet", currency_id=rub.id)
     await transactions.add(
@@ -141,30 +138,9 @@ async def test_update_wallet_rejects_currency_change_with_transactions() -> None
         await service.update_wallet(wallet.id, owner, name="Кошелёк", icon="wallet", currency_id=cny.id)
 
 
-async def test_update_wallet_rejects_currency_change_with_transfers() -> None:
-    rub, cny = make_currency("RUB"), make_currency("CNY")
-    service, _, _, _, transfers = await make_service_with_usage([rub, cny])
-    owner = uuid4()
-    wallet = await service.create_wallet(owner, name="Кошелёк", icon="wallet", currency_id=rub.id)
-    await transfers.add(
-        Transfer(
-            id=uuid4(),
-            workspace_id=owner,
-            from_wallet_id=uuid4(),
-            to_wallet_id=wallet.id,
-            amount=Decimal("1"),
-            occurred_at=NOW,
-            created_at=NOW,
-        )
-    )
-
-    with pytest.raises(ConflictError):
-        await service.update_wallet(wallet.id, owner, name="Кошелёк", icon="wallet", currency_id=cny.id)
-
-
 async def test_update_wallet_with_same_currency_is_allowed_despite_transactions() -> None:
     rub = make_currency("RUB")
-    service, _, _, transactions, _ = await make_service_with_usage([rub])
+    service, _, _, transactions = await make_service_with_usage([rub])
     owner = uuid4()
     wallet = await service.create_wallet(owner, name="Кошелёк", icon="wallet", currency_id=rub.id)
     await transactions.add(

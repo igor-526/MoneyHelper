@@ -4,13 +4,12 @@ from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
 
-from core.entities import Category, CategoryType, Currency, Transaction, TransactionLeg, Transfer, Workspace
+from core.entities import Category, CategoryType, Currency, Transaction, TransactionLeg, Workspace
 from core.exceptions import ConflictError
 from depends.auth import get_current_user
 from depends.category import get_category_repository
 from depends.currency import get_currency_repository
 from depends.transaction import get_transaction_repository
-from depends.transfer import get_transfer_repository
 from depends.wallet import get_wallet_repository
 from depends.workspace import get_workspace_repository
 from main import create_app
@@ -18,7 +17,6 @@ from tests.fakes import (
     InMemoryCategoryRepository,
     InMemoryCurrencyRepository,
     InMemoryTransactionRepository,
-    InMemoryTransferRepository,
     InMemoryWalletRepository,
     InMemoryWorkspaceRepository,
 )
@@ -30,7 +28,6 @@ def make_client(
     currencies: InMemoryCurrencyRepository | None = None,
     categories: InMemoryCategoryRepository | None = None,
     transactions: InMemoryTransactionRepository | None = None,
-    transfers: InMemoryTransferRepository | None = None,
     workspaces: InMemoryWorkspaceRepository | None = None,
     user_id: UUID | None = None,
     workspace_id: UUID | None = None,
@@ -40,7 +37,6 @@ def make_client(
     currencies = currencies if currencies is not None else InMemoryCurrencyRepository()
     categories = categories if categories is not None else InMemoryCategoryRepository()
     transactions = transactions if transactions is not None else InMemoryTransactionRepository(categories)
-    transfers = transfers if transfers is not None else InMemoryTransferRepository()
     workspaces = workspaces if workspaces is not None else InMemoryWorkspaceRepository()
     user_id = user_id if user_id is not None else uuid4()
     workspace_id = workspace_id if workspace_id is not None else uuid4()
@@ -58,7 +54,6 @@ def make_client(
     app.dependency_overrides[get_currency_repository] = lambda: currencies
     app.dependency_overrides[get_category_repository] = lambda: categories
     app.dependency_overrides[get_transaction_repository] = lambda: transactions
-    app.dependency_overrides[get_transfer_repository] = lambda: transfers
     app.dependency_overrides[get_workspace_repository] = lambda: workspaces
     if authenticated:
         app.dependency_overrides[get_current_user] = lambda: user_id
@@ -229,24 +224,18 @@ async def test_delete_unknown_wallet_returns_404() -> None:
 
 
 class RestrictingWalletRepository(InMemoryWalletRepository):
-    """Симулирует `ON DELETE RESTRICT` `transactions.wallet_id`/`transfers.from_wallet_id`/`to_wallet_id`
-    (реальный `WalletRepository` перехватывает `IntegrityError` и поднимает `ConflictError` — см. design.md
-    `transactions`/`transfers`)."""
+    """Симулирует `ON DELETE RESTRICT` для `transactions.wallet_id`."""
 
     def __init__(
         self,
         transactions: InMemoryTransactionRepository | None = None,
-        transfers: InMemoryTransferRepository | None = None,
     ) -> None:
         super().__init__()
         self._transaction_repo = transactions
-        self._transfer_repo = transfers
 
     async def delete(self, wallet_id: UUID, workspace_id: UUID) -> bool:
         if self._transaction_repo is not None and await self._transaction_repo.references_wallet(wallet_id):
             raise ConflictError("Кошелёк нельзя удалить: есть операции")
-        if self._transfer_repo is not None and await self._transfer_repo.references_wallet(wallet_id):
-            raise ConflictError("Кошелёк нельзя удалить: есть переводы")
         return await super().delete(wallet_id, workspace_id)
 
 
@@ -288,32 +277,6 @@ async def test_delete_wallet_with_transactions_returns_409() -> None:
     assert await transactions.get_by_id(transaction.id, workspace_id) is not None
 
 
-async def test_delete_wallet_with_transfer_returns_409() -> None:
-    currencies, rub, _ = await seeded_currencies()
-    transfers = InMemoryTransferRepository()
-    wallets = RestrictingWalletRepository(transfers=transfers)
-    client, workspace_id = make_client(wallets=wallets, currencies=currencies, transfers=transfers)
-    wallet_id = client.post(wallets_url(workspace_id), json=wallet_payload(rub.id)).json()["id"]
-    other_wallet_id = client.post(wallets_url(workspace_id), json=wallet_payload(rub.id, name="Второй")).json()["id"]
-    transfer = await transfers.add(
-        Transfer(
-            id=uuid4(),
-            workspace_id=workspace_id,
-            from_wallet_id=UUID(wallet_id),
-            to_wallet_id=UUID(other_wallet_id),
-            amount=Decimal("10"),
-            occurred_at=datetime(2026, 1, 1, tzinfo=UTC),
-            created_at=datetime(2026, 1, 1, tzinfo=UTC),
-        )
-    )
-
-    response = client.delete(wallets_url(workspace_id, f"/{wallet_id}"))
-
-    assert response.status_code == 409
-    assert client.get(wallets_url(workspace_id, f"/{wallet_id}")).status_code == 200
-    assert await transfers.get_by_id(transfer.id, workspace_id) is not None
-
-
 async def test_put_changing_currency_of_wallet_with_transactions_returns_409() -> None:
     currencies, rub, cny = await seeded_currencies()
     categories = InMemoryCategoryRepository()
@@ -336,29 +299,6 @@ async def test_put_changing_currency_of_wallet_with_transactions_returns_409() -
 
     assert response.status_code == 409
     assert client.get(wallets_url(workspace_id, f"/{wallet_id}")).json()["currency_id"] == str(rub.id)
-
-
-async def test_put_changing_currency_of_wallet_with_transfer_returns_409() -> None:
-    currencies, rub, cny = await seeded_currencies()
-    transfers = InMemoryTransferRepository()
-    client, workspace_id = make_client(currencies=currencies, transfers=transfers)
-    wallet_id = client.post(wallets_url(workspace_id), json=wallet_payload(rub.id)).json()["id"]
-    other_wallet_id = client.post(wallets_url(workspace_id), json=wallet_payload(rub.id, name="Второй")).json()["id"]
-    await transfers.add(
-        Transfer(
-            id=uuid4(),
-            workspace_id=workspace_id,
-            from_wallet_id=UUID(other_wallet_id),
-            to_wallet_id=UUID(wallet_id),
-            amount=Decimal("10"),
-            occurred_at=datetime(2026, 1, 1, tzinfo=UTC),
-            created_at=datetime(2026, 1, 1, tzinfo=UTC),
-        )
-    )
-
-    response = client.put(wallets_url(workspace_id, f"/{wallet_id}"), json=wallet_payload(cny.id))
-
-    assert response.status_code == 409
 
 
 async def test_put_renaming_wallet_with_transactions_and_same_currency_is_allowed() -> None:

@@ -10,3 +10,8 @@ class FixedClock:
 
     def advance(self, delta: timedelta) -> None:
         self._moment += delta
+
+
+class FixedOperationClock(FixedClock):
+    def __init__(self, moment: datetime | None = None) -> None:
+        super().__init__(moment or datetime(2026, 1, 1))

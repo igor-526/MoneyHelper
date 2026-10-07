@@ -3,6 +3,7 @@ import { useState } from "react";
 import { ANALYTICS_MODES, DEFAULT_ANALYTICS_MODE } from "./analyticsModes";
 import { type DateRange } from "./dateRangePresets";
 import { DateRangeFilter } from "./DateRangeFilter";
+import { toLocalDateTime } from "@/shared/ui";
 
 export function AnalyticsPage() {
   const [modeKey, setModeKey] = useState(DEFAULT_ANALYTICS_MODE.key);
@@ -27,8 +28,8 @@ export function AnalyticsPage() {
       </Typography.Text>
       <mode.Panel
         range={{
-          dateFrom: dateRange?.[0].startOf("day").toISOString(),
-          dateTo: dateRange?.[1].endOf("day").toISOString(),
+          dateFrom: dateRange ? toLocalDateTime(dateRange[0].startOf("day")) : undefined,
+          dateTo: dateRange ? toLocalDateTime(dateRange[1].endOf("day")) : undefined,
         }}
       />
     </Flex>

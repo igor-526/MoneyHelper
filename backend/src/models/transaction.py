@@ -11,7 +11,7 @@ transactions = Table(
     Column("workspace_id", UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False),
     Column("wallet_id", UUID(as_uuid=True), ForeignKey("wallets.id", ondelete="RESTRICT"), nullable=False),
     Column("category_id", UUID(as_uuid=True), ForeignKey("categories.id", ondelete="RESTRICT"), nullable=False),
-    Column("occurred_at", DateTime(timezone=True), nullable=False),
+    Column("occurred_at", DateTime(timezone=False), nullable=False),
     Column("comment", String(1000), nullable=True),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("updated_at", DateTime(timezone=True), nullable=True),

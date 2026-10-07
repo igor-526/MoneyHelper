@@ -1,8 +1,15 @@
-/** Разрешены цифры и не более одной десятичной точки; допускаются промежуточные состояния ввода вроде "12.". */
+export function normalizeMoneyAmount(value: string): string | undefined {
+  if (value.includes(".") && value.includes(",")) return undefined;
+  return value.replace(",", ".");
+}
+
+/** Разрешены цифры и один десятичный разделитель; допускаются промежуточные состояния вроде "12,". */
 export function isValidMoneyAmount(value: string, decimalPlaces?: number): boolean {
+  const normalized = normalizeMoneyAmount(value);
+  if (normalized === undefined) return false;
   const pattern =
     decimalPlaces == null ? /^\d*\.?\d*$/ : new RegExp(`^\\d*(\\.\\d{0,${decimalPlaces}})?$`);
-  return pattern.test(value);
+  return pattern.test(normalized);
 }
 
 /**

@@ -1,4 +1,4 @@
-import { Alert, Badge, Button, Flex, Spin, Typography } from "antd";
+import { Alert, Badge, Button, Flex, Spin, Table, Typography } from "antd";
 import { useMemo, useState } from "react";
 import { useCurrentWorkspace } from "@/features/workspaces/useCurrentWorkspace";
 import { EmptyState, formatAmount, Icon, useCurrencies } from "@/shared/ui";
@@ -9,8 +9,7 @@ import { countSpendingFilters, EMPTY_SPENDING_FILTERS } from "./spendingFilters"
 import { SpendingFiltersPopup } from "./SpendingFiltersPopup";
 import { unconvertedMessage } from "./unconvertedMessage";
 import { useAnalytics } from "./useAnalytics";
-
-const BROWSER_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
+import { spendingStats } from "./spendingStats";
 
 /** Режим «Трата»: график расходов по дням в валюте воркспейса; фильтры по кошельку и категории — в окне. */
 export function SpendingMode({ range }: { range: AnalyticsRange }) {
@@ -23,7 +22,6 @@ export function SpendingMode({ range }: { range: AnalyticsRange }) {
     type: "expense",
     walletId: filters.walletId,
     categoryId: filters.categoryId,
-    timezone: BROWSER_TIMEZONE,
   });
   const { data: currencies = [] } = useCurrencies();
   const workspace = useCurrentWorkspace();
@@ -38,6 +36,7 @@ export function SpendingMode({ range }: { range: AnalyticsRange }) {
     (id) => currencies.find((currency) => currency.id === id)?.code ?? "…",
   );
   const hasSpending = (query.data?.buckets ?? []).length > 0;
+  const stats = useMemo(() => spendingStats(series), [series]);
 
   return (
     <Flex vertical gap={16}>
@@ -61,7 +60,23 @@ export function SpendingMode({ range }: { range: AnalyticsRange }) {
       {query.isPending ? (
         <Spin />
       ) : hasSpending ? (
-        <SpendingChart series={series} currencyCode={currencyCode} />
+        <Flex vertical gap={16}>
+          <SpendingChart series={series} currencyCode={currencyCode} />
+          <Table
+            aria-label="Статистика дневных трат"
+            rowKey="label"
+            pagination={false}
+            size="small"
+            dataSource={stats.map((item) => ({
+              ...item,
+              value: `${formatAmount(item.value)} ${currencyCode}`,
+            }))}
+            columns={[
+              { title: "Показатель", dataIndex: "label" },
+              { title: "Значение", dataIndex: "value", align: "right" },
+            ]}
+          />
+        </Flex>
       ) : (
         <EmptyState icon="trending-up" title="Нет расходов за выбранный период" />
       )}

@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime, timedelta, timezone, tzinfo
+from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
 
@@ -15,10 +15,10 @@ from tests.fakes import (
     InMemoryWorkspaceRepository,
 )
 
-DATE_FROM = datetime(2026, 1, 1, tzinfo=UTC)
-DATE_TO = datetime(2026, 1, 31, tzinfo=UTC)
-IN_RANGE = datetime(2026, 1, 15, tzinfo=UTC)
-OUT_OF_RANGE = datetime(2026, 3, 15, tzinfo=UTC)
+DATE_FROM = datetime(2026, 1, 1)
+DATE_TO = datetime(2026, 1, 31)
+IN_RANGE = datetime(2026, 1, 15)
+OUT_OF_RANGE = datetime(2026, 3, 15)
 
 Buckets = dict[UUID | date, tuple[Decimal, Decimal]]
 
@@ -89,7 +89,6 @@ class Environment:
         category_id: UUID | None = None,
         currency_id: UUID | None = None,
         type: CategoryType | None = None,
-        tz: tzinfo = UTC,
     ) -> tuple[UUID, Buckets, list[UUID]]:
         display_currency_id, buckets, unconverted = await self.service.get_analytics(
             workspace_id,
@@ -101,7 +100,6 @@ class Environment:
             category_id=category_id,
             currency_id=currency_id,
             type=type,
-            tz=tz,
         )
         return display_currency_id, {key: (income, expense) for key, income, expense in buckets}, unconverted
 
@@ -193,15 +191,15 @@ async def test_rate_is_simple_average_not_weighted() -> None:
     assert buckets[s.cny_wallet][1] == Decimal("550.00")
 
 
-async def test_topup_outside_range_does_not_affect_rate() -> None:
+async def test_topup_outside_range_provides_rate() -> None:
     s = await Scenario.create()
     await s.topup_cny("1000", "100", OUT_OF_RANGE)
     await s.spend_cny("30")
 
     _, buckets, unconverted = await s.env.analytics(s.workspace_id)
 
-    assert buckets == {}
-    assert unconverted == [s.cny.id]
+    assert buckets == {s.cny_wallet: (Decimal("0.00"), Decimal("300.00"))}
+    assert unconverted == []
 
 
 async def test_currency_without_topups_is_unconverted_and_does_not_fail_request() -> None:
@@ -250,7 +248,6 @@ async def test_display_currency_unknown_to_directory_is_rejected() -> None:
             category_id=None,
             currency_id=None,
             type=None,
-            tz=UTC,
         )
 
 
@@ -275,7 +272,6 @@ async def test_date_from_after_date_to_raises_client_error() -> None:
             category_id=None,
             currency_id=None,
             type=None,
-            tz=UTC,
         )
 
 
@@ -294,7 +290,6 @@ async def test_without_date_range_counts_all_time() -> None:
         category_id=None,
         currency_id=None,
         type=None,
-        tz=UTC,
     )
 
     assert [(key, expense) for key, _, expense in buckets] == [(s.rub_wallet, Decimal("100"))]
@@ -367,19 +362,15 @@ async def test_other_workspace_data_does_not_participate() -> None:
     assert unconverted == [s.cny.id]
 
 
-async def test_groups_by_day_in_requested_timezone() -> None:
+async def test_groups_by_local_day() -> None:
     s = await Scenario.create()
-    late_evening_utc = datetime(2026, 1, 15, 22, 0, tzinfo=UTC)
+    next_day = datetime(2026, 1, 16, 0, 30)
     await s.env.add_operation(s.workspace_id, s.rub_wallet, s.expense, {s.rub.id: "10"}, IN_RANGE)
-    await s.env.add_operation(s.workspace_id, s.rub_wallet, s.expense, {s.rub.id: "20"}, late_evening_utc)
+    await s.env.add_operation(s.workspace_id, s.rub_wallet, s.expense, {s.rub.id: "20"}, next_day)
 
-    _, utc_buckets, _ = await s.env.analytics(s.workspace_id, group_by="day", type=CategoryType.EXPENSE)
-    _, moscow_buckets, _ = await s.env.analytics(
-        s.workspace_id, group_by="day", type=CategoryType.EXPENSE, tz=timezone(timedelta(hours=3))
-    )
+    _, buckets, _ = await s.env.analytics(s.workspace_id, group_by="day", type=CategoryType.EXPENSE)
 
-    assert utc_buckets == {date(2026, 1, 15): (Decimal("0"), Decimal("30"))}
-    assert moscow_buckets == {
+    assert buckets == {
         date(2026, 1, 15): (Decimal("0"), Decimal("10")),
         date(2026, 1, 16): (Decimal("0"), Decimal("20")),
     }

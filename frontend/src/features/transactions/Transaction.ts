@@ -36,9 +36,3 @@ export interface TopupFormValues {
   occurred_at?: string;
   comment?: string;
 }
-
-/** Форма ответа backend (`WalletBalanceOut`): баланс кошелька одной суммой в его валюте. */
-export interface WalletBalance {
-  currency_id: string;
-  balance: string;
-}

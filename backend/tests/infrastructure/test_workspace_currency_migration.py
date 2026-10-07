@@ -66,7 +66,7 @@ def test_migration_sets_rub_and_resets_wallets_transactions_and_transfers(at_pre
         )
     )
 
-    command.upgrade(alembic_config(), "head")
+    command.upgrade(alembic_config(), "20261002_0010")
 
     try:
         (workspace_rows, wallet_rows, transfer_rows, category_rows, currency_rows) = asyncio.run(

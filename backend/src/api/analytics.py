@@ -1,6 +1,5 @@
 from typing import Annotated
 from uuid import UUID
-from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Query
 
@@ -28,7 +27,6 @@ async def get_analytics(
         category_id=params.category_id,
         currency_id=params.currency_id,
         type=params.type,
-        tz=ZoneInfo(params.timezone),
     )
     return AnalyticsOut(
         display_currency_id=display_currency_id,

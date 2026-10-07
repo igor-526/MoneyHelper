@@ -118,7 +118,7 @@ class TestCreate:
 
         response = env.client().post(
             env.url(),
-            json=payload(env.cny_wallet, env.income, [leg(env.cny, "100.00")], occurred_at="2026-03-01T12:00:00Z"),
+            json=payload(env.cny_wallet, env.income, [leg(env.cny, "100.00")], occurred_at="2026-03-01T12:00:00"),
         )
 
         assert response.status_code == 201
@@ -126,7 +126,7 @@ class TestCreate:
         assert body["wallet_id"] == str(env.cny_wallet.id)
         assert body["category_id"] == str(env.income.id)
         assert body["legs"] == [leg(env.cny, "100.00")]
-        assert body["occurred_at"] == "2026-03-01T12:00:00Z"
+        assert body["occurred_at"] == "2026-03-01T12:00:00"
         assert body["comment"] is None
         assert body["updated_at"] is None
 
@@ -280,12 +280,12 @@ class TestReadAndList:
         client = env.client()
         old_id = client.post(
             env.url(),
-            json=payload(env.cny_wallet, env.income, [leg(env.cny, "1")], occurred_at="2026-01-01T00:00:00Z"),
+            json=payload(env.cny_wallet, env.income, [leg(env.cny, "1")], occurred_at="2026-01-01T00:00:00"),
         ).json()["id"]
         new_id = client.post(
             env.url(),
             json=payload(
-                env.rub_wallet, env.income, [leg(env.cny, "7"), leg(env.rub, "90")], occurred_at="2026-02-01T00:00:00Z"
+                env.rub_wallet, env.income, [leg(env.cny, "7"), leg(env.rub, "90")], occurred_at="2026-02-01T00:00:00"
             ),
         ).json()["id"]
         client.post(
@@ -300,7 +300,7 @@ class TestReadAndList:
 
         everything = client.get(env.url()).json()
         by_wallet = client.get(env.url(), params={"wallet_id": str(env.rub_wallet.id)}).json()
-        by_date = client.get(env.url(), params={"date_to": "2026-01-15T00:00:00Z"}).json()
+        by_date = client.get(env.url(), params={"date_to": "2026-01-15T00:00:00"}).json()
 
         assert [item["id"] for item in everything["items"]] == [new_id, old_id]
         assert everything["total"] == 2
@@ -311,9 +311,7 @@ class TestReadAndList:
         env = await make_env()
         client = env.client()
 
-        inverted = client.get(
-            env.url(), params={"date_from": "2026-02-01T00:00:00Z", "date_to": "2026-01-01T00:00:00Z"}
-        )
+        inverted = client.get(env.url(), params={"date_from": "2026-02-01T00:00:00", "date_to": "2026-01-01T00:00:00"})
         bad_limit = client.get(env.url(), params={"limit": 0})
         default = client.get(env.url()).json()
 

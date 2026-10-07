@@ -143,7 +143,7 @@ async def test_create_transaction_with_explicit_date() -> None:
 
     response = client.post(
         transactions_url(workspace_id),
-        json=transaction_payload(wallet_id=wallet.id, category_id=category.id, occurred_at="2026-03-01T12:00:00Z"),
+        json=transaction_payload(wallet_id=wallet.id, category_id=category.id, occurred_at="2026-03-01T12:00:00"),
     )
 
     assert response.status_code == 201
@@ -151,7 +151,7 @@ async def test_create_transaction_with_explicit_date() -> None:
     assert body["wallet_id"] == str(wallet.id)
     assert body["category_id"] == str(category.id)
     assert body["legs"] == [{"currency_id": str(currency.id), "amount": "100.00"}]
-    assert body["occurred_at"] == "2026-03-01T12:00:00Z"
+    assert body["occurred_at"] == "2026-03-01T12:00:00"
     assert body["created_at"] is not None
     assert body["updated_at"] is None
 
@@ -477,7 +477,7 @@ class TestFiltersAndSorting:
             json=transaction_payload(
                 wallet_id=wallet.id,
                 category_id=category.id,
-                occurred_at="2026-01-01T00:00:00Z",
+                occurred_at="2026-01-01T00:00:00",
             ),
         )
         client.post(
@@ -485,13 +485,13 @@ class TestFiltersAndSorting:
             json=transaction_payload(
                 wallet_id=wallet.id,
                 category_id=category.id,
-                occurred_at="2026-06-01T00:00:00Z",
+                occurred_at="2026-06-01T00:00:00",
             ),
         )
 
         response = client.get(
             transactions_url(workspace_id),
-            params={"date_from": "2025-12-01T00:00:00Z", "date_to": "2026-02-01T00:00:00Z"},
+            params={"date_from": "2025-12-01T00:00:00", "date_to": "2026-02-01T00:00:00"},
         )
 
         assert response.status_code == 200
@@ -502,7 +502,7 @@ class TestFiltersAndSorting:
 
         response = client.get(
             transactions_url(workspace_id),
-            params={"date_from": "2026-02-01T00:00:00Z", "date_to": "2026-01-01T00:00:00Z"},
+            params={"date_from": "2026-02-01T00:00:00", "date_to": "2026-01-01T00:00:00"},
         )
 
         assert response.status_code == 400
@@ -518,7 +518,7 @@ class TestFiltersAndSorting:
             json=transaction_payload(
                 wallet_id=wallet.id,
                 category_id=category.id,
-                occurred_at="2026-01-01T00:00:00Z",
+                occurred_at="2026-01-01T00:00:00",
             ),
         ).json()
         late = client.post(
@@ -526,7 +526,7 @@ class TestFiltersAndSorting:
             json=transaction_payload(
                 wallet_id=wallet.id,
                 category_id=category.id,
-                occurred_at="2026-06-01T00:00:00Z",
+                occurred_at="2026-06-01T00:00:00",
             ),
         ).json()
 
@@ -796,7 +796,7 @@ class TestTopupsAreSeparate:
                 wallet_id=wallet.id,
                 category_id=income.id,
                 legs=(TransactionLeg(currency_id=currency.id, amount=Decimal("5")),),
-                occurred_at=datetime(2026, 1, 1, tzinfo=UTC),
+                occurred_at=datetime(2026, 1, 1),
                 created_at=datetime(2026, 1, 1, tzinfo=UTC),
             )
         )

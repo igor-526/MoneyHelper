@@ -2,7 +2,6 @@ import type { UseQueryResult } from "@tanstack/react-query";
 import { type ComponentType, createElement } from "react";
 import type { CategoryType } from "@/features/categories/Category";
 import type { Page } from "@/shared/api";
-import { TransfersTab } from "@/features/transfers/TransfersTab";
 import { OperationsTab } from "./OperationsTab";
 import type { OperationFiltersState } from "./operationFilters";
 import { TopupForm } from "./TopupForm";
@@ -54,8 +53,7 @@ export const EXPENSE_KIND: TransactionKind = {
 export interface OperationKind {
   key: string;
   label: string;
-  /** `undefined` — у вкладки нет категорий, фильтр категории в окне фильтров не показывается. */
-  categoryType: CategoryType | undefined;
+  categoryType: CategoryType;
   Panel: ComponentType<{ filters: OperationFiltersState }>;
 }
 
@@ -78,7 +76,6 @@ export const OPERATION_KINDS: readonly OperationKind[] = [
     categoryType: TOPUP_KIND.categoryType,
     Panel: transactionPanel(TOPUP_KIND),
   },
-  { key: "transfer", label: "Перевод", categoryType: undefined, Panel: TransfersTab },
 ];
 
 export const DEFAULT_OPERATION_KIND = OPERATION_KINDS[0]!;

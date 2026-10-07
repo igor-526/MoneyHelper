@@ -4,14 +4,12 @@ from fastapi import FastAPI
 
 from api.analytics import router as analytics_router
 from api.auth import router as auth_router
-from api.balances import wallet_balances_router
 from api.categories import router as categories_router
 from api.currencies import router as currencies_router
 from api.errors import register_error_handlers
 from api.icons import router as icons_router
 from api.topups import router as topups_router
 from api.transactions import router as transactions_router
-from api.transfers import router as transfers_router
 from api.wallet_rates import wallet_rates_router
 from api.wallets import router as wallets_router
 from api.workspaces import router as workspaces_router
@@ -49,8 +47,6 @@ def create_app() -> FastAPI:
     application.include_router(icons_router)
     application.include_router(topups_router)
     application.include_router(transactions_router)
-    application.include_router(transfers_router)
-    application.include_router(wallet_balances_router)
     application.include_router(wallet_rates_router)
     application.include_router(wallets_router)
     application.include_router(workspaces_router)

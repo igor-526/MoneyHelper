@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 from datetime import datetime
-from decimal import Decimal
 from typing import Protocol
 from uuid import UUID
 
@@ -33,8 +32,6 @@ class TransactionRepository(Protocol):
         workspace_id: UUID,
         *,
         wallet_id: UUID | None,
-        date_from: datetime | None,
-        date_to: datetime | None,
     ) -> list[TopupLegRecord]: ...
 
     async def list(
@@ -75,7 +72,5 @@ class TransactionRepository(Protocol):
     ) -> Transaction | None: ...
 
     async def delete(self, transaction_id: UUID, workspace_id: UUID) -> bool: ...
-
-    async def balance_delta(self, wallet_id: UUID, workspace_id: UUID, currency_id: UUID) -> Decimal: ...
 
     async def references_wallet(self, wallet_id: UUID) -> bool: ...

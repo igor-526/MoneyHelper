@@ -91,7 +91,6 @@ const WORKSPACE = {
 
 const TOPUPS_PATH = `/api/workspaces/${TEST_WORKSPACE_ID}/topups`;
 const EXPENSES_PATH = `/api/workspaces/${TEST_WORKSPACE_ID}/transactions`;
-const TRANSFERS_PATH = `/api/workspaces/${TEST_WORKSPACE_ID}/transfers`;
 
 function page(
   items: unknown[],
@@ -105,12 +104,11 @@ function page(
   };
 }
 
-/** Обработчик по умолчанию: списки пополнений и расходов + нейтральные баланс и курс. */
+/** Обработчик по умолчанию: списки пополнений и расходов + нейтральный курс. */
 function defaultHandler(
   overrides: Partial<{ topups: unknown[]; expenses: unknown[]; total: number }> = {},
 ): FakeHandler {
   return (request) => {
-    if (request.path.endsWith("/balances")) return { currency_id: "cur1", balance: "100.00" };
     if (request.path === TOPUPS_PATH) return page(overrides.topups ?? TOPUPS, overrides);
     if (request.path === EXPENSES_PATH) return page(overrides.expenses ?? EXPENSES, overrides);
     return page([]);
@@ -199,7 +197,7 @@ async function fillFormOption(labelText: string, optionLabel: string) {
   await chooseFromDropdown(within(formItem).getByRole("combobox"), optionLabel);
 }
 
-async function openTab(name: "Пополнение" | "Расход" | "Перевод") {
+async function openTab(name: "Пополнение" | "Расход") {
   await userEvent.click(screen.getByRole("tab", { name }));
 }
 
@@ -361,18 +359,7 @@ describe("TransactionsPage", () => {
     expect(await within(badge).findByText("1")).toBeInTheDocument();
   });
 
-  it("у вкладки «Перевод» в окне фильтров нет категории", async () => {
-    const { wrapper } = setup(defaultHandler(), "/transactions?tab=transfer");
-    render(<TransactionsPage />, { wrapper });
-    await screen.findByText("Переводов пока нет");
-
-    const dialog = await openFilters();
-
-    expect(within(dialog).getByRole("combobox", { name: "Кошелёк" })).toBeInTheDocument();
-    expect(within(dialog).queryByRole("combobox", { name: "Категория" })).not.toBeInTheDocument();
-  });
-
-  it("ссылки «Переводы» нет, переводы — третья вкладка «Перевод»", async () => {
+  it("ссылки и вкладки переводов нет", async () => {
     const { wrapper } = setup(defaultHandler());
     render(<TransactionsPage />, { wrapper });
     await screen.findByText("Зарплата");
@@ -381,40 +368,15 @@ describe("TransactionsPage", () => {
     expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
       "Расход",
       "Пополнение",
-      "Перевод",
     ]);
   });
 
-  it("вкладка «Перевод» загружает переводы и записывает tab=transfer", async () => {
-    const { api, wrapper } = setup((request) =>
-      request.path === TRANSFERS_PATH
-        ? page([
-            {
-              id: "t1",
-              from_wallet_id: "w1",
-              to_wallet_id: "w2",
-              amount: "7.00",
-              occurred_at: "2026-03-01T12:00:00Z",
-              created_at: "2026-03-01T12:00:00Z",
-              updated_at: null,
-            },
-          ])
-        : defaultHandler()(request),
-    );
-    render(<TransactionsPage />, { wrapper });
-    await screen.findByText("Зарплата");
-
-    await openTab("Перевод");
-
-    expect(await screen.findByText("Наличные → Карта")).toBeInTheDocument();
-    expect(requestsTo(api, TRANSFERS_PATH)).toHaveLength(1);
-  });
-
-  it("вкладка из ?tab=transfer открывается сразу", async () => {
+  it("устаревший tab=transfer открывает расход", async () => {
     const { wrapper } = setup(defaultHandler(), "/transactions?tab=transfer");
     render(<TransactionsPage />, { wrapper });
 
-    expect(await screen.findByText("Переводов пока нет")).toBeInTheDocument();
+    expect(await screen.findByText("Продукты")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Расход" })).toHaveAttribute("aria-selected", "true");
   });
 
   it("пустая вкладка «Пополнение» показывает EmptyState, действие открывает форму пополнения", async () => {
@@ -502,23 +464,20 @@ describe("TransactionsPage", () => {
       expect(requestsTo(api, EXPENSES_PATH).at(-1)).toMatchObject({
         query: {
           category_id: "c2",
-          date_from: dayjs("2026-03-01").startOf("day").toISOString(),
-          date_to: dayjs("2026-03-10").endOf("day").toISOString(),
+          date_from: dayjs("2026-03-01").startOf("day").format("YYYY-MM-DDTHH:mm:ss"),
+          date_to: dayjs("2026-03-10").endOf("day").format("YYYY-MM-DDTHH:mm:ss"),
         },
       }),
     );
   });
 
-  it("карточка баланса показывается только при конкретном фильтре «Кошелёк»", async () => {
+  it("баланс не запрашивается при конкретном фильтре «Кошелёк»", async () => {
     const { api, wrapper } = setup(defaultHandler());
     render(<TransactionsPage />, { wrapper });
     await screen.findByText("Зарплата");
 
-    expect(api.requests.some((r) => r.path.endsWith("/balances"))).toBe(false);
-
     await chooseOption("Кошелёк", "Наличные");
-
-    expect(await screen.findByText("USD: 100.00")).toBeInTheDocument();
+    await waitFor(() => expect(api.requests.some((r) => r.path.endsWith("/balances"))).toBe(false));
   });
 
   it("нажатие на карточку пополнения открывает форму редактирования пополнения", async () => {
@@ -654,7 +613,7 @@ describe("TransactionsPage", () => {
     expect(await screen.findByText("Расходов пока нет")).toBeInTheDocument();
   });
 
-  it("создание операции перезапрашивает баланс и курс выбранного кошелька", async () => {
+  it("создание операции перезапрашивает курс выбранного кошелька без запроса баланса", async () => {
     let items: unknown[] = [];
     const handler: FakeHandler = (request) => {
       if (request.path === TOPUPS_PATH && request.method === "POST") {
@@ -662,7 +621,9 @@ describe("TransactionsPage", () => {
         items = [operation("new1", body.category_id, body.legs as never)];
         return items[0];
       }
-      if (request.path.endsWith("/balances")) return { currency_id: "cur1", balance: "0.00" };
+      if (request.path.endsWith("/rates")) {
+        return { workspace_currency_id: "cur1", wallet_currency_id: "cur1", rate: "1" };
+      }
       return page(items);
     };
     const { api, wrapper } = setup(handler);
@@ -670,10 +631,10 @@ describe("TransactionsPage", () => {
     await screen.findByText("Пополнений пока нет");
 
     await chooseOption("Кошелёк", "Наличные");
-    await screen.findByText("USD: 0.00");
     const balanceCount = () => api.requests.filter((r) => r.path.endsWith("/balances")).length;
     const rateCount = () => api.requests.filter((r) => r.path.endsWith("/rates")).length;
-    await waitFor(() => expect(balanceCount()).toBe(1));
+    await waitFor(() => expect(rateCount()).toBe(1));
+    expect(balanceCount()).toBe(0);
     const ratesBefore = rateCount();
 
     await userEvent.click(screen.getByRole("button", { name: "Создать пополнение" }));
@@ -683,7 +644,7 @@ describe("TransactionsPage", () => {
     await userEvent.type(within(dialog).getByLabelText("Сумма (USD)"), "10");
     await userEvent.click(within(dialog).getByRole("button", { name: "Создать" }));
 
-    await waitFor(() => expect(balanceCount()).toBeGreaterThan(1));
     await waitFor(() => expect(rateCount()).toBeGreaterThan(ratesBefore));
+    expect(balanceCount()).toBe(0);
   });
 });

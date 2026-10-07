@@ -122,7 +122,7 @@ export function TopupForm({ open, onClose, transaction }: TopupFormProps) {
     const onSuccess = () => {
       toast.success(transaction ? "Пополнение обновлено" : "Пополнение создано");
       if (!transaction && fields.add_another) {
-        form.setFieldsValue({ occurred_at: dayjs(), comment: undefined });
+        form.setFieldsValue({ comment: undefined });
         form.setFieldValue("amounts", {});
         return;
       }

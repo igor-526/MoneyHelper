@@ -15,4 +15,4 @@ export { EmptyState, type EmptyStateProps } from "./EmptyState";
 export { ConfirmDeleteButton, type ConfirmDeleteButtonProps } from "./ConfirmDeleteButton";
 export { AddAnotherCheckbox } from "./AddAnotherCheckbox";
 export { FiltersDialog, type FiltersDialogProps } from "./FiltersDialog";
-export { DayPicker, toOccurredAt } from "./DayPicker";
+export { DayPicker, toLocalDateTime, toOccurredAt } from "./DayPicker";

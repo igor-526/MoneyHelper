@@ -1,13 +1,12 @@
 from .analytics_dimension import AnalyticsDimension
-from .balance_contributor import BalanceContributor
 from .clock import Clock
 from .id_generator import IdGenerator
+from .operation_clock import OperationClock
 from .password_hasher import PasswordHasher
 from .repositories import (
     CategoryRepository,
     CurrencyRepository,
     TransactionRepository,
-    TransferRepository,
     UserRepository,
     WalletCounter,
     WalletCurrencyReader,
@@ -21,17 +20,16 @@ from .topup_legs_rule import TopupLegsRule
 
 __all__ = [
     "AnalyticsDimension",
-    "BalanceContributor",
     "CategoryRepository",
     "Clock",
     "CurrencyRepository",
     "IdGenerator",
+    "OperationClock",
     "PasswordHasher",
     "TokenIssuer",
     "TokenVerifier",
     "TopupLegsRule",
     "TransactionRepository",
-    "TransferRepository",
     "UserRepository",
     "WalletCounter",
     "WalletCurrencyReader",

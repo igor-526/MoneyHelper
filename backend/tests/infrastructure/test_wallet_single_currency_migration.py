@@ -53,7 +53,7 @@ def test_upgrade_resets_wallets_and_replaces_wallet_currencies_with_currency_id(
         )
     )
 
-    command.upgrade(alembic_config(), "head")
+    command.upgrade(alembic_config(), "20261002_0011")
 
     try:
         wallet_rows, table_rows, column_rows, foreign_key_rows = asyncio.run(

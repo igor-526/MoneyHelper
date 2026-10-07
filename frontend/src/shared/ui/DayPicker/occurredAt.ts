@@ -7,5 +7,9 @@ import dayjs, { type Dayjs } from "dayjs";
 export function toOccurredAt(day: Dayjs, original?: string): string {
   if (original !== undefined && dayjs(original).isSame(day, "day")) return original;
   const now = dayjs();
-  return day.hour(now.hour()).minute(now.minute()).second(now.second()).toISOString();
+  return toLocalDateTime(day.hour(now.hour()).minute(now.minute()).second(now.second()));
+}
+
+export function toLocalDateTime(value: Dayjs): string {
+  return value.format("YYYY-MM-DDTHH:mm:ss");
 }

@@ -1,32 +1,30 @@
 from datetime import date, datetime
-from typing import Annotated, Literal
+from typing import Literal
 from uuid import UUID
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import AfterValidator, BaseModel
+from pydantic import BaseModel, ConfigDict, field_validator
 
+from api.schemas.local_datetime import validate_local_datetime
 from core.entities import CategoryType
 from core.schemas import Money
 
 
-def _check_timezone(value: str) -> str:
-    try:
-        ZoneInfo(value)
-    except (ZoneInfoNotFoundError, ValueError) as error:
-        raise ValueError("Неизвестный часовой пояс") from error
-    return value
-
-
 class AnalyticsQueryParams(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     display_currency: UUID | None = None
     date_from: datetime | None = None
     date_to: datetime | None = None
     group_by: Literal["wallet", "category", "currency", "day"]
-    timezone: Annotated[str, AfterValidator(_check_timezone)] = "UTC"
     wallet_id: UUID | None = None
     category_id: UUID | None = None
     currency_id: UUID | None = None
     type: CategoryType | None = None
+
+    @field_validator("date_from", "date_to")
+    @classmethod
+    def ensure_local_range(cls, value: datetime | None) -> datetime | None:
+        return validate_local_datetime(value)
 
 
 class AnalyticsBucketOut(BaseModel):

@@ -68,7 +68,7 @@ def test_upgrade_resets_transfers_and_drops_currency_id(at_previous_revision: No
         )
     )
 
-    command.upgrade(alembic_config(), "head")
+    command.upgrade(alembic_config(), "20261002_0012")
 
     try:
         transfer_rows, column_rows = asyncio.run(
@@ -89,6 +89,7 @@ def test_upgrade_resets_transfers_and_drops_currency_id(at_previous_revision: No
 
 def test_downgrade_restores_currency_id_from_wallet(prepared_database: None) -> None:
     user_id, workspace_id, currency_id, from_wallet_id, to_wallet_id, transfer_id = (uuid4() for _ in range(6))
+    command.downgrade(alembic_config(), "20261002_0012")
     asyncio.run(
         run_sql(
             *_seed_wallets(user_id, workspace_id, currency_id, (from_wallet_id, to_wallet_id)),

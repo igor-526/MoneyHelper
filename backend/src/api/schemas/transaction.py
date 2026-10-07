@@ -29,6 +29,13 @@ class TransactionCreate(BaseModel):
     def normalize_comment(cls, value: str | None) -> str | None:
         return normalize_comment_text(value)
 
+    @field_validator("occurred_at")
+    @classmethod
+    def ensure_local_occurred_at(cls, value: datetime | None) -> datetime | None:
+        from api.schemas.local_datetime import validate_local_datetime
+
+        return validate_local_datetime(value)
+
 
 TransactionUpdate = TransactionCreate
 
@@ -64,3 +71,10 @@ class TransactionListParams(PageParams):
     category_id: UUID | None = None
     date_from: datetime | None = None
     date_to: datetime | None = None
+
+    @field_validator("date_from", "date_to")
+    @classmethod
+    def ensure_local_range(cls, value: datetime | None) -> datetime | None:
+        from api.schemas.local_datetime import validate_local_datetime
+
+        return validate_local_datetime(value)

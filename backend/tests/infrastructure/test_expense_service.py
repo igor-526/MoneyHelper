@@ -8,17 +8,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.entities import Category, CategoryType, Currency, Transaction, TransactionLeg, User, Wallet, Workspace
 from core.exceptions import ClientError, NotFoundError
-from core.services.balance import BalanceService
 from core.services.transaction import TransactionService
 from models import transaction_legs as transaction_legs_table
 from repositories.category import CategoryRepository
 from repositories.currency import CurrencyRepository
 from repositories.transaction import TransactionRepository
-from repositories.transfer import TransferRepository
 from repositories.user import UserRepository
 from repositories.wallet import WalletRepository
 from repositories.workspace import WorkspaceRepository
-from tests.fakes import FixedClock, SequentialIdGenerator
+from tests.fakes import FixedClock, FixedOperationClock, SequentialIdGenerator
 
 pytestmark = pytest.mark.infrastructure
 
@@ -40,6 +38,7 @@ class Environment:
             self.categories,
             CurrencyRepository(session),
             FixedClock(),
+            FixedOperationClock(),
             SequentialIdGenerator(),
         )
 
@@ -178,11 +177,9 @@ async def test_update_moves_expense_to_other_wallet_currency(db_session: AsyncSe
 async def test_list_filters_wallet_category_dates_and_paginates(db_session: AsyncSession) -> None:
     env = await make_env(db_session)
     other_category = await env.category(env.workspace, CategoryType.EXPENSE)
-    await create_expense(env, env.rub_wallet, "1", occurred_at=datetime(2026, 3, 1, tzinfo=UTC))
-    await create_expense(env, env.cny_wallet, "2", occurred_at=datetime(2026, 4, 1, tzinfo=UTC))
-    await create_expense(
-        env, env.cny_wallet, "3", category_id=other_category.id, occurred_at=datetime(2026, 5, 1, tzinfo=UTC)
-    )
+    await create_expense(env, env.rub_wallet, "1", occurred_at=datetime(2026, 3, 1))
+    await create_expense(env, env.cny_wallet, "2", occurred_at=datetime(2026, 4, 1))
+    await create_expense(env, env.cny_wallet, "3", category_id=other_category.id, occurred_at=datetime(2026, 5, 1))
 
     async def listing(**filters):  # type: ignore[no-untyped-def]
         params = {
@@ -198,7 +195,7 @@ async def test_list_filters_wallet_category_dates_and_paginates(db_session: Asyn
     _, total_all = await listing()
     by_wallet, total_wallet = await listing(wallet_id=env.cny_wallet.id)
     by_category, _ = await listing(category_id=other_category.id)
-    by_dates, _ = await listing(date_from=datetime(2026, 3, 15, tzinfo=UTC), date_to=datetime(2026, 4, 15, tzinfo=UTC))
+    by_dates, _ = await listing(date_from=datetime(2026, 3, 15), date_to=datetime(2026, 4, 15))
     page, total_page = await listing(limit=1, offset=1)
 
     assert total_all == 3
@@ -256,26 +253,3 @@ async def test_delete_removes_expense_and_legs(db_session: AsyncSession) -> None
         )
     ).scalar_one()
     assert leg_count == 0
-
-
-async def test_expense_decreases_wallet_balance(db_session: AsyncSession) -> None:
-    env = await make_env(db_session)
-    await env.transactions.add(
-        Transaction(
-            id=uuid4(),
-            workspace_id=env.workspace.id,
-            wallet_id=env.cny_wallet.id,
-            category_id=env.income.id,
-            legs=(leg(env.cny, "100"),),
-            occurred_at=CREATED_AT,
-            comment=None,
-            created_at=CREATED_AT,
-        )
-    )
-    await create_expense(env, env.cny_wallet, "30")
-    balances = BalanceService(env.wallets, [env.transactions, TransferRepository(db_session)])
-
-    currency_id, balance = await balances.get_wallet_balance(env.cny_wallet.id, env.workspace.id)
-
-    assert currency_id == env.cny.id
-    assert balance == Decimal("70")

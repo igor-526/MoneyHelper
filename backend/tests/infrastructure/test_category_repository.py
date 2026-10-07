@@ -22,6 +22,7 @@ from tests.infrastructure.factories import make_workspace_currency
 pytestmark = pytest.mark.infrastructure
 
 DEFAULT_CREATED_AT = datetime(2026, 1, 1, tzinfo=UTC)
+DEFAULT_OCCURRED_AT = datetime(2026, 1, 1)
 
 
 async def make_user(db_session: AsyncSession) -> User:
@@ -336,7 +337,7 @@ async def test_delete_category_with_transactions_raises_conflict_error(db_sessio
             wallet_id=wallet.id,
             category_id=category.id,
             legs=(TransactionLeg(currency_id=currency.id, amount=Decimal("10.00")),),
-            occurred_at=DEFAULT_CREATED_AT,
+            occurred_at=DEFAULT_OCCURRED_AT,
             created_at=DEFAULT_CREATED_AT,
         )
     )

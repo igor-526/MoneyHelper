@@ -76,10 +76,9 @@ describe("адаптивный layout", () => {
     expect(navItems.some((item) => item.path === "/transfers")).toBe(false);
   });
 
-  it("переход на /transfers открывает вкладку «Перевод» страницы «Операции»", async () => {
+  it("переход на /transfers показывает страницу 404", async () => {
     renderApp({ apiClient: api(), path: "/transfers" });
-    expect(await screen.findByRole("heading", { name: "Операции" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Перевод" })).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByText("Страница не найдена")).toBeInTheDocument();
   });
 
   it("пункт «Аналитика» расположен между «Кошельки» и «Настройки», «Настройки» остаётся последним", async () => {

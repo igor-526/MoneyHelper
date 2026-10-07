@@ -23,7 +23,7 @@ def test_invalid_database_name_is_rejected(name: str) -> None:
 async def test_migrations_are_applied(db_session: AsyncSession) -> None:
     version = await db_session.scalar(text("SELECT version_num FROM alembic_version"))
 
-    assert version == "20261002_0012"
+    assert version == "20261007_0013"
 
 
 async def test_commit_inside_test_is_rolled_back(db_session: AsyncSession, engine: AsyncEngine) -> None:

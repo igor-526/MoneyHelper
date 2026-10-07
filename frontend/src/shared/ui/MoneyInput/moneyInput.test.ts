@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatAmount, isValidMoneyAmount } from "./moneyInput";
+import { formatAmount, isValidMoneyAmount, normalizeMoneyAmount } from "./moneyInput";
 
 describe("isValidMoneyAmount", () => {
   it("допускает цифры и точку", () => {
@@ -11,12 +11,17 @@ describe("isValidMoneyAmount", () => {
   it("отклоняет недопустимый символ", () => {
     expect(isValidMoneyAmount("12a")).toBe(false);
     expect(isValidMoneyAmount("-1")).toBe(false);
-    expect(isValidMoneyAmount("1,5")).toBe(false);
+    expect(isValidMoneyAmount("1,5")).toBe(true);
   });
 
   it("отклоняет более одной точки", () => {
     expect(isValidMoneyAmount("1.2.3")).toBe(false);
     expect(isValidMoneyAmount("1..2")).toBe(false);
+  });
+
+  it("отклоняет одновременные точку и запятую", () => {
+    expect(isValidMoneyAmount("1,234.56")).toBe(false);
+    expect(isValidMoneyAmount("1.234,56")).toBe(false);
   });
 
   it("допускает промежуточное состояние ввода без цифр после точки", () => {
@@ -34,6 +39,17 @@ describe("isValidMoneyAmount", () => {
 
   it("без decimalPlaces ограничения на число знаков нет", () => {
     expect(isValidMoneyAmount("12.12345678901234")).toBe(true);
+  });
+});
+
+describe("normalizeMoneyAmount", () => {
+  it("приводит запятую к канонической точке", () => {
+    expect(normalizeMoneyAmount("123,45")).toBe("123.45");
+    expect(normalizeMoneyAmount("123.45")).toBe("123.45");
+  });
+
+  it("не нормализует неоднозначное значение", () => {
+    expect(normalizeMoneyAmount("1,234.56")).toBeUndefined();
   });
 });
 

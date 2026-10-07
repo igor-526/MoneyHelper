@@ -1,6 +1,5 @@
 from collections.abc import Sequence
 from datetime import datetime
-from decimal import Decimal
 from uuid import UUID
 
 from core.entities import CategoryType, LegRecord, TopupLegRecord, Transaction, TransactionLeg
@@ -104,8 +103,6 @@ class InMemoryTransactionRepository:
         workspace_id: UUID,
         *,
         wallet_id: UUID | None,
-        date_from: datetime | None,
-        date_to: datetime | None,
     ) -> list[TopupLegRecord]:
         records = []
         for transaction in await self._filter(
@@ -113,8 +110,8 @@ class InMemoryTransactionRepository:
             wallet_id=wallet_id,
             category_id=None,
             type=CategoryType.INCOME,
-            date_from=date_from,
-            date_to=date_to,
+            date_from=None,
+            date_to=None,
         ):
             for leg in transaction.legs:
                 records.append(
@@ -210,15 +207,3 @@ class InMemoryTransactionRepository:
     async def references_category(self, category_id: UUID) -> bool:
         """Аналогично `references_wallet`, но для `ON DELETE RESTRICT` `transactions.category_id`."""
         return any(transaction.category_id == category_id for transaction in self._transactions.values())
-
-    async def balance_delta(self, wallet_id: UUID, workspace_id: UUID, currency_id: UUID) -> Decimal:
-        total = Decimal("0")
-        for transaction in self._transactions.values():
-            if transaction.workspace_id != workspace_id or transaction.wallet_id != wallet_id:
-                continue
-            category = await self._categories.get_by_id(transaction.category_id, workspace_id)
-            sign = 1 if category is not None and category.type == CategoryType.INCOME else -1
-            for leg in transaction.legs:
-                if leg.currency_id == currency_id:
-                    total += sign * leg.amount
-        return total

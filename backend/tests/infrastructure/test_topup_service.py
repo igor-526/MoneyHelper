@@ -8,18 +8,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.entities import Category, CategoryType, Currency, TransactionLeg, User, Wallet, Workspace
 from core.exceptions import ClientError, NotFoundError
-from core.services.balance import BalanceService
 from core.services.topup import TopupService
 from core.services.topup_legs import CrossCurrencyTopupLegs, SameCurrencyTopupLegs
 from models import transaction_legs as transaction_legs_table
 from repositories.category import CategoryRepository
 from repositories.currency import CurrencyRepository
 from repositories.transaction import TransactionRepository
-from repositories.transfer import TransferRepository
 from repositories.user import UserRepository
 from repositories.wallet import WalletRepository
 from repositories.workspace import WorkspaceRepository
-from tests.fakes import FixedClock, SequentialIdGenerator
+from tests.fakes import FixedClock, FixedOperationClock, SequentialIdGenerator
 
 pytestmark = pytest.mark.infrastructure
 
@@ -43,6 +41,7 @@ class Environment:
             self.workspaces,
             (SameCurrencyTopupLegs(), CrossCurrencyTopupLegs()),
             FixedClock(),
+            FixedOperationClock(),
             SequentialIdGenerator(),
         )
 
@@ -297,20 +296,3 @@ async def test_expense_is_not_a_topup(db_session: AsyncSession) -> None:
             legs=[leg(env.cny, "1")],
             occurred_at=None,
         )
-
-
-async def test_balance_counts_wallet_currency_leg_only(db_session: AsyncSession) -> None:
-    env = await make_env(db_session)
-    await env.service.create_topup(
-        env.workspace.id,
-        wallet_id=env.rub_wallet.id,
-        category_id=env.income.id,
-        legs=[leg(env.cny, "780"), leg(env.rub, "10000")],
-        occurred_at=None,
-    )
-    balance = BalanceService(env.wallets, [env.transactions, TransferRepository(db_session)])
-
-    currency_id, amount = await balance.get_wallet_balance(env.rub_wallet.id, env.workspace.id)
-
-    assert currency_id == env.rub.id
-    assert amount == Decimal("10000")

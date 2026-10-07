@@ -3,13 +3,12 @@ import { useMemo, useState } from "react";
 import { useCategories } from "@/features/categories/useCategories";
 import { useWallets } from "@/features/wallets/useWallets";
 import { WalletRateCard } from "@/features/wallets/WalletRateCard";
-import { EmptyState, useCurrencies, useIsMobile } from "@/shared/ui";
+import { EmptyState, toLocalDateTime, useCurrencies, useIsMobile } from "@/shared/ui";
 import type { Transaction } from "./Transaction";
 import type { OperationFiltersState } from "./operationFilters";
 import type { TransactionKind } from "./operationKinds";
 import { TransactionCard } from "./TransactionCard";
 import { DEFAULT_PAGE_SIZE } from "./useTransactions";
-import { WalletBalanceCard } from "./WalletBalanceCard";
 
 interface FormState {
   open: boolean;
@@ -21,7 +20,7 @@ export interface OperationsTabProps {
   filters: OperationFiltersState;
 }
 
-/** Содержимое одной вкладки: баланс/курс, список, пагинация и форма вида операции; фильтры приходят со страницы. */
+/** Содержимое одной вкладки: курс, список, пагинация и форма вида операции; фильтры приходят со страницы. */
 export function OperationsTab({ kind, filters }: OperationsTabProps) {
   const [page, setPage] = useState(1); // 1-based, antd Pagination
   const [pageFilters, setPageFilters] = useState(filters);
@@ -36,8 +35,10 @@ export function OperationsTab({ kind, filters }: OperationsTabProps) {
   const { data: categories = [] } = useCategories(kind.categoryType);
   const { data: currencies = [] } = useCurrencies();
 
-  const dateFrom = filters.dateRange?.[0].startOf("day").toISOString();
-  const dateTo = filters.dateRange?.[1].endOf("day").toISOString();
+  const dateFrom = filters.dateRange
+    ? toLocalDateTime(filters.dateRange[0].startOf("day"))
+    : undefined;
+  const dateTo = filters.dateRange ? toLocalDateTime(filters.dateRange[1].endOf("day")) : undefined;
 
   const listQuery = kind.useList(
     { walletId: filters.walletId, categoryId: filters.categoryId, dateFrom, dateTo },
@@ -67,9 +68,6 @@ export function OperationsTab({ kind, filters }: OperationsTabProps) {
 
   return (
     <Flex vertical gap={16}>
-      {filters.walletId !== undefined ? (
-        <WalletBalanceCard walletId={filters.walletId} currencyCodeById={currencyCodeById} />
-      ) : null}
       {selectedWallet !== undefined ? (
         <WalletRateCard wallet={selectedWallet} currencyCodeById={currencyCodeById} />
       ) : null}

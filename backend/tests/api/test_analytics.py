@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import datetime
 from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
@@ -21,9 +21,9 @@ from tests.fakes import (
     InMemoryWorkspaceRepository,
 )
 
-DATE_FROM = "2026-01-01T00:00:00Z"
-DATE_TO = "2026-01-31T00:00:00Z"
-IN_RANGE = datetime(2026, 1, 15, tzinfo=UTC)
+DATE_FROM = "2026-01-01T00:00:00"
+DATE_TO = "2026-01-31T00:00:00"
+IN_RANGE = datetime(2026, 1, 15)
 
 
 class Environment:
@@ -269,20 +269,11 @@ async def test_requires_authentication() -> None:
     assert env.get().status_code == 401
 
 
-async def test_groups_by_day_with_timezone() -> None:
+async def test_groups_by_local_day_and_rejects_timezone() -> None:
     env = Environment()
     await env.setup()
     await env.add_operation(env.rub_wallet, env.expense, {env.rub.id: "10"})
 
     utc_body = env.get("day", type="expense").json()
-    tokyo_body = env.get("day", type="expense", timezone="Asia/Tokyo").json()
-
     assert [bucket["group_key"] for bucket in utc_body["buckets"]] == ["2026-01-15"]
-    assert [bucket["group_key"] for bucket in tokyo_body["buckets"]] == ["2026-01-15"]
-
-
-async def test_unknown_timezone_rejected() -> None:
-    env = Environment()
-    await env.setup()
-
-    assert env.get("day", timezone="Mars/Base").status_code == 400
+    assert env.get("day", timezone="Asia/Tokyo").status_code == 400

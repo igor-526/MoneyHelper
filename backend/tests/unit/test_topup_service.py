@@ -10,6 +10,7 @@ from core.services.topup import TopupService
 from core.services.topup_legs import CrossCurrencyTopupLegs, SameCurrencyTopupLegs
 from tests.fakes import (
     FixedClock,
+    FixedOperationClock,
     InMemoryCategoryRepository,
     InMemoryCurrencyRepository,
     InMemoryTransactionRepository,
@@ -35,6 +36,7 @@ class Environment:
             self.workspaces,
             (SameCurrencyTopupLegs(), CrossCurrencyTopupLegs()),
             self.clock,
+            FixedOperationClock(),
             SequentialIdGenerator(),
         )
 
@@ -95,7 +97,7 @@ async def test_create_topup_with_single_leg_when_currencies_match() -> None:
     )
 
     assert topup.legs == (leg(cny, "100"),)
-    assert topup.occurred_at == env.clock.now()
+    assert topup.occurred_at == datetime(2026, 1, 1)
 
 
 async def test_create_topup_with_two_legs_when_currencies_differ() -> None:

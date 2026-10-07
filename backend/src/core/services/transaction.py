@@ -9,6 +9,7 @@ from core.protocols import (
     Clock,
     CurrencyRepository,
     IdGenerator,
+    OperationClock,
     TransactionRepository,
     WalletRepository,
 )
@@ -29,6 +30,7 @@ class TransactionService:
         categories: CategoryRepository,
         currencies: CurrencyRepository,
         clock: Clock,
+        operation_clock: OperationClock,
         ids: IdGenerator,
     ) -> None:
         self._transactions = transactions
@@ -36,6 +38,7 @@ class TransactionService:
         self._categories = categories
         self._currencies = currencies
         self._clock = clock
+        self._operation_clock = operation_clock
         self._ids = ids
 
     async def create_transaction(
@@ -58,7 +61,7 @@ class TransactionService:
             wallet_id=wallet_id,
             category_id=category_id,
             legs=(TransactionLeg(currency_id=wallet.currency_id, amount=amount),),
-            occurred_at=occurred_at if occurred_at is not None else now,
+            occurred_at=occurred_at if occurred_at is not None else self._operation_clock.now(),
             comment=comment,
             created_at=now,
         )
@@ -127,7 +130,7 @@ class TransactionService:
             wallet_id=wallet_id,
             category_id=category_id,
             legs=(TransactionLeg(currency_id=wallet.currency_id, amount=amount),),
-            occurred_at=occurred_at if occurred_at is not None else now,
+            occurred_at=occurred_at if occurred_at is not None else self._operation_clock.now(),
             comment=comment,
             now=now,
         )

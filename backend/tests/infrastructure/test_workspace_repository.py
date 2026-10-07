@@ -13,7 +13,6 @@ from core.entities import (
     Currency,
     Transaction,
     TransactionLeg,
-    Transfer,
     User,
     Wallet,
     Workspace,
@@ -21,12 +20,10 @@ from core.entities import (
 from models import categories as categories_table
 from models import currencies as currencies_table
 from models import transactions as transactions_table
-from models import transfers as transfers_table
 from models import wallets as wallets_table
 from repositories.category import CategoryRepository
 from repositories.currency import CurrencyRepository
 from repositories.transaction import TransactionRepository
-from repositories.transfer import TransferRepository
 from repositories.user import UserRepository
 from repositories.wallet import WalletRepository
 from repositories.workspace import WorkspaceRepository
@@ -35,6 +32,7 @@ from tests.infrastructure.factories import make_workspace_currency
 pytestmark = pytest.mark.infrastructure
 
 DEFAULT_CREATED_AT = datetime(2026, 1, 1, tzinfo=UTC)
+DEFAULT_OCCURRED_AT = datetime(2026, 1, 1)
 
 
 async def make_user(db_session: AsyncSession) -> User:
@@ -293,7 +291,7 @@ class TestWorkspaceIsolationWithinSameUser:
         assert await categories.count(workspace_a.id, type=None) == 1
         assert await categories.count(workspace_b.id, type=None) == 1
 
-    async def test_transactions_and_transfers_are_isolated_between_workspaces(
+    async def test_transactions_are_isolated_between_workspaces(
         self, db_session: AsyncSession, workspace_currency: Currency
     ) -> None:
         user = await make_user(db_session)
@@ -309,16 +307,6 @@ class TestWorkspaceIsolationWithinSameUser:
                 id=uuid4(),
                 workspace_id=workspace_a.id,
                 name="A",
-                icon="wallet",
-                currency_id=rub.id,
-                created_at=DEFAULT_CREATED_AT,
-            )
-        )
-        wallet_a2 = await wallets.add(
-            Wallet(
-                id=uuid4(),
-                workspace_id=workspace_a.id,
-                name="A2",
                 icon="wallet",
                 currency_id=rub.id,
                 created_at=DEFAULT_CREATED_AT,
@@ -343,31 +331,17 @@ class TestWorkspaceIsolationWithinSameUser:
                 wallet_id=wallet_a.id,
                 category_id=category_a.id,
                 legs=(TransactionLeg(currency_id=rub.id, amount=Decimal("10.00")),),
-                occurred_at=DEFAULT_CREATED_AT,
-                created_at=DEFAULT_CREATED_AT,
-            )
-        )
-        transfers = TransferRepository(db_session)
-        transfer = await transfers.add(
-            Transfer(
-                id=uuid4(),
-                workspace_id=workspace_a.id,
-                from_wallet_id=wallet_a.id,
-                to_wallet_id=wallet_a2.id,
-                amount=Decimal("5.00"),
-                occurred_at=DEFAULT_CREATED_AT,
+                occurred_at=DEFAULT_OCCURRED_AT,
                 created_at=DEFAULT_CREATED_AT,
             )
         )
         await db_session.flush()
 
         assert await transactions.get_by_id(transaction.id, workspace_b.id) is None
-        assert await transfers.get_by_id(transfer.id, workspace_b.id) is None
         transaction_count = await transactions.count(
             workspace_b.id, wallet_id=None, category_id=None, type=None, date_from=None, date_to=None
         )
         assert transaction_count == 0
-        assert await transfers.count(workspace_b.id, wallet_id=None, date_from=None, date_to=None) == 0
 
 
 async def test_deleting_workspace_cascades_to_all_owned_data(
@@ -391,16 +365,6 @@ async def test_deleting_workspace_cascades_to_all_owned_data(
             created_at=DEFAULT_CREATED_AT,
         )
     )
-    wallet_b = await wallets.add(
-        Wallet(
-            id=uuid4(),
-            workspace_id=workspace.id,
-            name="B",
-            icon="wallet",
-            currency_id=rub.id,
-            created_at=DEFAULT_CREATED_AT,
-        )
-    )
     categories = CategoryRepository(db_session)
     category = await categories.add(
         Category(
@@ -419,18 +383,7 @@ async def test_deleting_workspace_cascades_to_all_owned_data(
             wallet_id=wallet_a.id,
             category_id=category.id,
             legs=(TransactionLeg(currency_id=rub.id, amount=Decimal("10.00")),),
-            occurred_at=DEFAULT_CREATED_AT,
-            created_at=DEFAULT_CREATED_AT,
-        )
-    )
-    await TransferRepository(db_session).add(
-        Transfer(
-            id=uuid4(),
-            workspace_id=workspace.id,
-            from_wallet_id=wallet_a.id,
-            to_wallet_id=wallet_b.id,
-            amount=Decimal("5.00"),
-            occurred_at=DEFAULT_CREATED_AT,
+            occurred_at=DEFAULT_OCCURRED_AT,
             created_at=DEFAULT_CREATED_AT,
         )
     )
@@ -442,7 +395,7 @@ async def test_deleting_workspace_cascades_to_all_owned_data(
     await db_session.flush()
 
     assert deleted is True
-    for table in (wallets_table, categories_table, transactions_table, transfers_table):
+    for table in (wallets_table, categories_table, transactions_table):
         rows = (await db_session.execute(select(table).where(table.c.workspace_id == workspace.id))).all()
         assert rows == []
 

@@ -26,6 +26,4 @@ export interface AnalyticsFilters extends AnalyticsRange {
   type?: "income" | "expense";
   walletId?: string;
   categoryId?: string;
-  /** IANA-пояс, по суткам которого считается срез `day`. */
-  timezone?: string;
 }

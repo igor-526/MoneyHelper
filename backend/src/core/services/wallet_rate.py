@@ -36,9 +36,7 @@ class WalletRateService:
             raise NotFoundError(WALLET_NOT_FOUND_MESSAGE)
         if wallet.currency_id == workspace_currency_id:
             return WalletRate(workspace_currency_id, wallet.currency_id, Decimal(1).quantize(RATE_QUANTUM))
-        topup_legs = await self._transactions.list_topup_legs_for_rates(
-            workspace_id, wallet_id=wallet_id, date_from=None, date_to=None
-        )
+        topup_legs = await self._transactions.list_topup_legs_for_rates(workspace_id, wallet_id=wallet_id)
         rate = average_rates(topup_legs, workspace_currency_id, {wallet.currency_id}).get(wallet.currency_id)
         if rate is not None:
             rate = rate.quantize(RATE_QUANTUM, rounding=ROUND_HALF_UP)

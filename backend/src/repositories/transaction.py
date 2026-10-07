@@ -1,11 +1,10 @@
 from collections import defaultdict
 from collections.abc import Sequence
 from datetime import datetime
-from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Row, case, func, insert, select
+from sqlalchemy import Row, func, insert, select
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -123,8 +122,6 @@ class TransactionRepository:
         workspace_id: UUID,
         *,
         wallet_id: UUID | None,
-        date_from: datetime | None,
-        date_to: datetime | None,
     ) -> list[TopupLegRecord]:
         query = (
             select(transaction_legs.c.transaction_id, transaction_legs.c.currency_id, transaction_legs.c.amount)
@@ -136,7 +133,7 @@ class TransactionRepository:
             .where(transactions.c.workspace_id == workspace_id, categories.c.type == CategoryType.INCOME)
         )
         query = self._apply_filters(
-            query, wallet_id=wallet_id, category_id=None, type=None, date_from=date_from, date_to=date_to
+            query, wallet_id=wallet_id, category_id=None, type=None, date_from=None, date_to=None
         )
         rows = await self._session.execute(query)
         return [
@@ -230,25 +227,6 @@ class TransactionRepository:
                 select(transactions.c.id).where(transactions.c.wallet_id == wallet_id).limit(1)
             )
         ).first() is not None
-
-    async def balance_delta(self, wallet_id: UUID, workspace_id: UUID, currency_id: UUID) -> Decimal:
-        signed_amount = case(
-            (categories.c.type == CategoryType.INCOME, transaction_legs.c.amount), else_=-transaction_legs.c.amount
-        )
-        query = (
-            select(func.coalesce(func.sum(signed_amount), 0))
-            .select_from(
-                transaction_legs.join(transactions, transactions.c.id == transaction_legs.c.transaction_id).join(
-                    categories, categories.c.id == transactions.c.category_id
-                )
-            )
-            .where(
-                transactions.c.wallet_id == wallet_id,
-                transactions.c.workspace_id == workspace_id,
-                transaction_legs.c.currency_id == currency_id,
-            )
-        )
-        return (await self._session.execute(query)).scalar_one()
 
     async def _insert_legs(self, transaction_id: UUID, legs: Sequence[TransactionLeg]) -> None:
         if not legs:

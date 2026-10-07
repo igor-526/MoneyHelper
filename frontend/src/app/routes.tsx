@@ -37,7 +37,6 @@ export const routes: RouteObject[] = [
       { path: "wallets", element: <WalletsPage /> },
       { path: "categories", element: <CategoriesPage /> },
       { path: "transactions", element: <TransactionsPage /> },
-      { path: "transfers", element: <Navigate to="/transactions?tab=transfer" replace /> },
       { path: "analytics", element: <AnalyticsPage /> },
       { path: "settings", element: <SettingsPage /> },
       { path: "*", element: <NotFoundPage /> },

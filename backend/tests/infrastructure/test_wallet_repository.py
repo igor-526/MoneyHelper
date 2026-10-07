@@ -13,7 +13,6 @@ from core.entities import (
     Currency,
     Transaction,
     TransactionLeg,
-    Transfer,
     User,
     Wallet,
     Workspace,
@@ -23,7 +22,6 @@ from models import currencies as currencies_table
 from repositories.category import CategoryRepository
 from repositories.currency import CurrencyRepository
 from repositories.transaction import TransactionRepository
-from repositories.transfer import TransferRepository
 from repositories.user import UserRepository
 from repositories.wallet import WalletRepository
 from repositories.workspace import WorkspaceRepository
@@ -32,6 +30,7 @@ from tests.infrastructure.factories import make_workspace_currency
 pytestmark = pytest.mark.infrastructure
 
 DEFAULT_CREATED_AT = datetime(2026, 1, 1, tzinfo=UTC)
+DEFAULT_OCCURRED_AT = datetime(2026, 1, 1)
 
 
 async def make_user(db_session: AsyncSession) -> User:
@@ -276,7 +275,7 @@ async def test_delete_wallet_with_transactions_raises_conflict_error(db_session:
             wallet_id=wallet.id,
             category_id=category.id,
             legs=(TransactionLeg(currency_id=rub.id, amount=Decimal("10.00")),),
-            occurred_at=DEFAULT_CREATED_AT,
+            occurred_at=DEFAULT_OCCURRED_AT,
             created_at=DEFAULT_CREATED_AT,
         )
     )
@@ -286,65 +285,13 @@ async def test_delete_wallet_with_transactions_raises_conflict_error(db_session:
         await wallet_repo.delete(wallet.id, user.id)
 
 
-async def test_delete_from_wallet_with_transfer_raises_conflict_error(db_session: AsyncSession) -> None:
-    user = await make_workspace(db_session)
-    rub = await make_currency(db_session, "RUB")
-    wallet_repo = WalletRepository(db_session)
-    wallet_a = make_wallet(user.id, rub.id, name="A")
-    wallet_b = make_wallet(user.id, rub.id, name="B")
-    await wallet_repo.add(wallet_a)
-    await wallet_repo.add(wallet_b)
-    await TransferRepository(db_session).add(
-        Transfer(
-            id=uuid4(),
-            workspace_id=user.id,
-            from_wallet_id=wallet_a.id,
-            to_wallet_id=wallet_b.id,
-            amount=Decimal("10.00"),
-            occurred_at=DEFAULT_CREATED_AT,
-            created_at=DEFAULT_CREATED_AT,
-        )
-    )
-    await db_session.flush()
-
-    with pytest.raises(ConflictError):
-        await wallet_repo.delete(wallet_a.id, user.id)
-
-
-async def test_delete_to_wallet_with_transfer_raises_conflict_error(db_session: AsyncSession) -> None:
-    user = await make_workspace(db_session)
-    rub = await make_currency(db_session, "RUB")
-    wallet_repo = WalletRepository(db_session)
-    wallet_a = make_wallet(user.id, rub.id, name="A")
-    wallet_b = make_wallet(user.id, rub.id, name="B")
-    await wallet_repo.add(wallet_a)
-    await wallet_repo.add(wallet_b)
-    await TransferRepository(db_session).add(
-        Transfer(
-            id=uuid4(),
-            workspace_id=user.id,
-            from_wallet_id=wallet_a.id,
-            to_wallet_id=wallet_b.id,
-            amount=Decimal("10.00"),
-            occurred_at=DEFAULT_CREATED_AT,
-            created_at=DEFAULT_CREATED_AT,
-        )
-    )
-    await db_session.flush()
-
-    with pytest.raises(ConflictError):
-        await wallet_repo.delete(wallet_b.id, user.id)
-
-
-async def test_references_wallet_is_used_by_transactions_and_transfers(db_session: AsyncSession) -> None:
+async def test_references_wallet_is_used_by_transactions(db_session: AsyncSession) -> None:
     user = await make_workspace(db_session)
     rub = await make_currency(db_session, "RUB")
     wallet_repo = WalletRepository(db_session)
     used_by_transaction = make_wallet(user.id, rub.id, name="T")
-    used_by_transfer_from = make_wallet(user.id, rub.id, name="F")
-    used_by_transfer_to = make_wallet(user.id, rub.id, name="To")
     unused = make_wallet(user.id, rub.id, name="U")
-    for wallet in (used_by_transaction, used_by_transfer_from, used_by_transfer_to, unused):
+    for wallet in (used_by_transaction, unused):
         await wallet_repo.add(wallet)
     category = await CategoryRepository(db_session).add(
         Category(
@@ -357,7 +304,6 @@ async def test_references_wallet_is_used_by_transactions_and_transfers(db_sessio
         )
     )
     transactions = TransactionRepository(db_session)
-    transfers = TransferRepository(db_session)
     await transactions.add(
         Transaction(
             id=uuid4(),
@@ -365,18 +311,7 @@ async def test_references_wallet_is_used_by_transactions_and_transfers(db_sessio
             wallet_id=used_by_transaction.id,
             category_id=category.id,
             legs=(TransactionLeg(currency_id=rub.id, amount=Decimal("10.00")),),
-            occurred_at=DEFAULT_CREATED_AT,
-            created_at=DEFAULT_CREATED_AT,
-        )
-    )
-    await transfers.add(
-        Transfer(
-            id=uuid4(),
-            workspace_id=user.id,
-            from_wallet_id=used_by_transfer_from.id,
-            to_wallet_id=used_by_transfer_to.id,
-            amount=Decimal("10.00"),
-            occurred_at=DEFAULT_CREATED_AT,
+            occurred_at=DEFAULT_OCCURRED_AT,
             created_at=DEFAULT_CREATED_AT,
         )
     )
@@ -384,10 +319,6 @@ async def test_references_wallet_is_used_by_transactions_and_transfers(db_sessio
 
     assert await transactions.references_wallet(used_by_transaction.id) is True
     assert await transactions.references_wallet(unused.id) is False
-    assert await transfers.references_wallet(used_by_transfer_from.id) is True
-    assert await transfers.references_wallet(used_by_transfer_to.id) is True
-    assert await transfers.references_wallet(unused.id) is False
-    assert await transfers.references_wallet(used_by_transaction.id) is False
 
 
 async def test_get_currency_id_by_wallet_returns_wallet_to_currency_map_of_workspace(db_session: AsyncSession) -> None:

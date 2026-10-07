@@ -57,6 +57,16 @@ describe("MoneyInput", () => {
     expect(screen.getByRole("textbox")).toHaveValue("1.2");
   });
 
+  it("запятая отображается и передаётся как точка", async () => {
+    const onChange = vi.fn();
+    render(<Harness onChange={onChange} />);
+
+    await userEvent.type(screen.getByRole("textbox"), "12,5");
+
+    expect(screen.getByRole("textbox")).toHaveValue("12.5");
+    expect(onChange).toHaveBeenLastCalledWith("12.5");
+  });
+
   it("превышение decimalPlaces отклоняется", async () => {
     const onChange = vi.fn();
     render(<Harness decimalPlaces={2} onChange={onChange} />);

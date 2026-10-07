@@ -97,7 +97,7 @@ export function TransactionForm({ open, onClose, transaction }: TransactionFormP
     const onSuccess = () => {
       toast.success(transaction ? "Расход обновлён" : "Расход создан");
       if (!transaction && fields.add_another) {
-        form.setFieldsValue({ amount: "", occurred_at: dayjs(), comment: undefined });
+        form.setFieldsValue({ amount: "", comment: undefined });
         return;
       }
       onClose();

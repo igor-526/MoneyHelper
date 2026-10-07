@@ -24,6 +24,7 @@ from tests.infrastructure.factories import make_workspace_currency
 pytestmark = pytest.mark.infrastructure
 
 DEFAULT_CREATED_AT = datetime(2026, 1, 1, tzinfo=UTC)
+DEFAULT_OCCURRED_AT = datetime(2026, 1, 1)
 
 
 async def make_user(db_session: AsyncSession) -> User:
@@ -94,7 +95,7 @@ def make_transaction(
     currency_id: UUID,
     *,
     amount: Decimal = Decimal("100.00"),
-    occurred_at: datetime = DEFAULT_CREATED_AT,
+    occurred_at: datetime = DEFAULT_OCCURRED_AT,
 ) -> Transaction:
     return Transaction(
         id=uuid4(),
@@ -113,7 +114,7 @@ def make_topup(
     category_id: UUID,
     legs: tuple[TransactionLeg, ...],
     *,
-    occurred_at: datetime = DEFAULT_CREATED_AT,
+    occurred_at: datetime = DEFAULT_OCCURRED_AT,
 ) -> Transaction:
     return Transaction(
         id=uuid4(),
@@ -277,10 +278,8 @@ async def test_list_and_count_filter_by_date_range(db_session: AsyncSession) -> 
     wallet = await make_wallet(db_session, user.id, currency.id)
     category = await make_category(db_session, user.id)
     repo = TransactionRepository(db_session)
-    early = make_transaction(
-        user.id, wallet.id, category.id, currency.id, occurred_at=datetime(2026, 1, 1, tzinfo=UTC)
-    )
-    late = make_transaction(user.id, wallet.id, category.id, currency.id, occurred_at=datetime(2026, 6, 1, tzinfo=UTC))
+    early = make_transaction(user.id, wallet.id, category.id, currency.id, occurred_at=datetime(2026, 1, 1))
+    late = make_transaction(user.id, wallet.id, category.id, currency.id, occurred_at=datetime(2026, 6, 1))
     await repo.add(early)
     await repo.add(late)
     await db_session.flush()
@@ -290,8 +289,8 @@ async def test_list_and_count_filter_by_date_range(db_session: AsyncSession) -> 
         wallet_id=None,
         category_id=None,
         type=None,
-        date_from=datetime(2025, 12, 1, tzinfo=UTC),
-        date_to=datetime(2026, 2, 1, tzinfo=UTC),
+        date_from=datetime(2025, 12, 1),
+        date_to=datetime(2026, 2, 1),
         limit=20,
         offset=0,
     )
@@ -300,8 +299,8 @@ async def test_list_and_count_filter_by_date_range(db_session: AsyncSession) -> 
         wallet_id=None,
         category_id=None,
         type=None,
-        date_from=datetime(2025, 12, 1, tzinfo=UTC),
-        date_to=datetime(2026, 2, 1, tzinfo=UTC),
+        date_from=datetime(2025, 12, 1),
+        date_to=datetime(2026, 2, 1),
     )
 
     assert [item.id for item in items] == [early.id]
@@ -315,13 +314,9 @@ async def test_list_combines_filters(db_session: AsyncSession) -> None:
     income = await make_category(db_session, user.id, CategoryType.INCOME)
     expense = await make_category(db_session, user.id, CategoryType.EXPENSE)
     repo = TransactionRepository(db_session)
-    matching = make_transaction(
-        user.id, wallet.id, income.id, currency.id, occurred_at=datetime(2026, 3, 1, tzinfo=UTC)
-    )
+    matching = make_transaction(user.id, wallet.id, income.id, currency.id, occurred_at=datetime(2026, 3, 1))
     await repo.add(matching)
-    await repo.add(
-        make_transaction(user.id, wallet.id, expense.id, currency.id, occurred_at=datetime(2026, 3, 1, tzinfo=UTC))
-    )
+    await repo.add(make_transaction(user.id, wallet.id, expense.id, currency.id, occurred_at=datetime(2026, 3, 1)))
     await db_session.flush()
 
     items = await repo.list(
@@ -329,8 +324,8 @@ async def test_list_combines_filters(db_session: AsyncSession) -> None:
         wallet_id=wallet.id,
         category_id=income.id,
         type=CategoryType.INCOME,
-        date_from=datetime(2026, 1, 1, tzinfo=UTC),
-        date_to=datetime(2026, 12, 1, tzinfo=UTC),
+        date_from=datetime(2026, 1, 1),
+        date_to=datetime(2026, 12, 1),
         limit=20,
         offset=0,
     )
@@ -344,8 +339,8 @@ async def test_list_is_sorted_by_occurred_at_desc_then_id_desc(db_session: Async
     wallet = await make_wallet(db_session, user.id, currency.id)
     category = await make_category(db_session, user.id)
     repo = TransactionRepository(db_session)
-    same_moment = datetime(2026, 1, 1, tzinfo=UTC)
-    later = datetime(2026, 2, 1, tzinfo=UTC)
+    same_moment = datetime(2026, 1, 1)
+    later = datetime(2026, 2, 1)
     first = make_transaction(user.id, wallet.id, category.id, currency.id, occurred_at=later)
     second = make_transaction(user.id, wallet.id, category.id, currency.id, occurred_at=same_moment)
     third = make_transaction(user.id, wallet.id, category.id, currency.id, occurred_at=same_moment)
@@ -415,7 +410,7 @@ async def test_update_replaces_all_fields(db_session: AsyncSession) -> None:
         wallet_id=wallet.id,
         category_id=category_b.id,
         legs=(TransactionLeg(currency_id=cny.id, amount=Decimal("20.00")),),
-        occurred_at=datetime(2026, 5, 1, tzinfo=UTC),
+        occurred_at=datetime(2026, 5, 1),
         comment=None,
         now=datetime(2026, 5, 2, tzinfo=UTC),
     )
@@ -424,7 +419,7 @@ async def test_update_replaces_all_fields(db_session: AsyncSession) -> None:
     assert updated is not None
     assert updated.category_id == category_b.id
     assert updated.legs == (TransactionLeg(currency_id=cny.id, amount=Decimal("20.00")),)
-    assert updated.occurred_at == datetime(2026, 5, 1, tzinfo=UTC)
+    assert updated.occurred_at == datetime(2026, 5, 1)
     assert updated.updated_at == datetime(2026, 5, 2, tzinfo=UTC)
 
 
@@ -453,7 +448,7 @@ async def test_update_replaces_multiple_legs_with_one(db_session: AsyncSession) 
         wallet_id=wallet.id,
         category_id=category.id,
         legs=(TransactionLeg(currency_id=rub.id, amount=Decimal("1.00")),),
-        occurred_at=DEFAULT_CREATED_AT,
+        occurred_at=DEFAULT_OCCURRED_AT,
         comment=None,
         now=DEFAULT_CREATED_AT,
     )
@@ -476,7 +471,7 @@ async def test_update_unknown_returns_none(db_session: AsyncSession) -> None:
         wallet_id=wallet.id,
         category_id=category.id,
         legs=(TransactionLeg(currency_id=currency.id, amount=Decimal("1")),),
-        occurred_at=DEFAULT_CREATED_AT,
+        occurred_at=DEFAULT_OCCURRED_AT,
         comment=None,
         now=DEFAULT_CREATED_AT,
     )
@@ -501,7 +496,7 @@ async def test_update_with_foreign_workspace_id_returns_none(db_session: AsyncSe
         wallet_id=wallet.id,
         category_id=category.id,
         legs=(TransactionLeg(currency_id=currency.id, amount=Decimal("999")),),
-        occurred_at=DEFAULT_CREATED_AT,
+        occurred_at=DEFAULT_OCCURRED_AT,
         comment=None,
         now=DEFAULT_CREATED_AT,
     )
@@ -658,7 +653,7 @@ async def test_check_constraint_rejects_nonpositive_amount(db_session: AsyncSess
             workspace_id=user.id,
             wallet_id=wallet.id,
             category_id=category.id,
-            occurred_at=DEFAULT_CREATED_AT,
+            occurred_at=DEFAULT_OCCURRED_AT,
             created_at=DEFAULT_CREATED_AT,
         )
     )
@@ -671,74 +666,22 @@ async def test_check_constraint_rejects_nonpositive_amount(db_session: AsyncSess
         )
 
 
-async def test_balance_delta_sums_income_and_expense_in_requested_currency(db_session: AsyncSession) -> None:
-    user = await make_workspace(db_session)
-    rub = await make_currency(db_session, "RUB")
-    cny = await make_currency(db_session, "CNY")
-    wallet = await make_wallet(db_session, user.id, rub.id)
-    income = await make_category(db_session, user.id, CategoryType.INCOME)
-    expense = await make_category(db_session, user.id, CategoryType.EXPENSE)
-    repo = TransactionRepository(db_session)
-    await repo.add(make_transaction(user.id, wallet.id, income.id, rub.id, amount=Decimal("100.00")))
-    await repo.add(make_transaction(user.id, wallet.id, expense.id, rub.id, amount=Decimal("30.00")))
-    await repo.add(make_transaction(user.id, wallet.id, income.id, cny.id, amount=Decimal("50.00")))
-    await db_session.flush()
-
-    assert await repo.balance_delta(wallet.id, user.id, rub.id) == Decimal("70.00")
-    assert await repo.balance_delta(wallet.id, user.id, cny.id) == Decimal("50.00")
-
-
-async def test_balance_delta_excludes_other_wallets_and_users(db_session: AsyncSession) -> None:
-    user_a = await make_workspace(db_session)
-    user_b = await make_workspace(db_session)
-    currency = await make_currency(db_session)
-    wallet_a = await make_wallet(db_session, user_a.id, currency.id)
-    wallet_b = await make_wallet(db_session, user_a.id, currency.id)
-    category_a = await make_category(db_session, user_a.id, CategoryType.INCOME)
-    category_b = await make_category(db_session, user_b.id, CategoryType.INCOME)
-    wallet_b_user_b = await make_wallet(db_session, user_b.id, currency.id)
-    repo = TransactionRepository(db_session)
-    await repo.add(make_transaction(user_a.id, wallet_a.id, category_a.id, currency.id, amount=Decimal("10.00")))
-    await repo.add(make_transaction(user_a.id, wallet_b.id, category_a.id, currency.id, amount=Decimal("20.00")))
-    await repo.add(
-        make_transaction(user_b.id, wallet_b_user_b.id, category_b.id, currency.id, amount=Decimal("999.00"))
-    )
-    await db_session.flush()
-
-    balance = await repo.balance_delta(wallet_a.id, user_a.id, currency.id)
-
-    assert balance == Decimal("10.00")
-
-
-async def test_balance_delta_zero_for_wallet_without_transactions(db_session: AsyncSession) -> None:
-    user = await make_workspace(db_session)
-    currency = await make_currency(db_session)
-    wallet = await make_wallet(db_session, user.id, currency.id)
-    repo = TransactionRepository(db_session)
-
-    balance = await repo.balance_delta(wallet.id, user.id, currency.id)
-
-    assert balance == Decimal("0")
-
-
 async def test_list_legs_for_analytics_filters_by_date_range(db_session: AsyncSession) -> None:
     user = await make_workspace(db_session)
     currency = await make_currency(db_session)
     wallet = await make_wallet(db_session, user.id, currency.id)
     category = await make_category(db_session, user.id, CategoryType.INCOME)
     repo = TransactionRepository(db_session)
-    early = make_transaction(
-        user.id, wallet.id, category.id, currency.id, occurred_at=datetime(2026, 1, 1, tzinfo=UTC)
-    )
-    late = make_transaction(user.id, wallet.id, category.id, currency.id, occurred_at=datetime(2026, 6, 1, tzinfo=UTC))
+    early = make_transaction(user.id, wallet.id, category.id, currency.id, occurred_at=datetime(2026, 1, 1))
+    late = make_transaction(user.id, wallet.id, category.id, currency.id, occurred_at=datetime(2026, 6, 1))
     await repo.add(early)
     await repo.add(late)
     await db_session.flush()
 
     legs = await repo.list_legs_for_analytics(
         user.id,
-        date_from=datetime(2025, 12, 1, tzinfo=UTC),
-        date_to=datetime(2026, 2, 1, tzinfo=UTC),
+        date_from=datetime(2025, 12, 1),
+        date_to=datetime(2026, 2, 1),
         wallet_id=None,
         category_id=None,
         currency_id=None,
@@ -771,8 +714,8 @@ async def test_list_legs_for_analytics_filters_by_wallet_category_currency_type(
 
     legs = await repo.list_legs_for_analytics(
         user.id,
-        date_from=datetime(2025, 1, 1, tzinfo=UTC),
-        date_to=datetime(2027, 1, 1, tzinfo=UTC),
+        date_from=datetime(2025, 1, 1),
+        date_to=datetime(2027, 1, 1),
         wallet_id=wallet_a.id,
         category_id=income.id,
         currency_id=rub.id,
@@ -800,8 +743,8 @@ async def test_list_legs_for_analytics_isolated_by_user(db_session: AsyncSession
 
     legs = await repo.list_legs_for_analytics(
         owner.id,
-        date_from=datetime(2025, 1, 1, tzinfo=UTC),
-        date_to=datetime(2027, 1, 1, tzinfo=UTC),
+        date_from=datetime(2025, 1, 1),
+        date_to=datetime(2027, 1, 1),
         wallet_id=None,
         category_id=None,
         currency_id=None,
@@ -834,8 +777,8 @@ async def test_list_legs_for_analytics_includes_all_legs_of_multi_leg_transactio
 
     legs = await repo.list_legs_for_analytics(
         user.id,
-        date_from=datetime(2025, 1, 1, tzinfo=UTC),
-        date_to=datetime(2027, 1, 1, tzinfo=UTC),
+        date_from=datetime(2025, 1, 1),
+        date_to=datetime(2027, 1, 1),
         wallet_id=None,
         category_id=None,
         currency_id=None,
@@ -864,7 +807,7 @@ def make_cross_topup(
     rub: Currency,
     cny: Currency,
     *,
-    occurred_at: datetime = DEFAULT_CREATED_AT,
+    occurred_at: datetime = DEFAULT_OCCURRED_AT,
 ) -> Transaction:
     return make_topup(
         workspace_id,
@@ -889,7 +832,7 @@ async def test_list_topup_legs_for_rates_selects_by_income_category_not_leg_coun
     await repo.add(cross_topup)
     await db_session.flush()
 
-    legs = await repo.list_topup_legs_for_rates(workspace.id, wallet_id=None, date_from=None, date_to=None)
+    legs = await repo.list_topup_legs_for_rates(workspace.id, wallet_id=None)
 
     assert {leg.transaction_id for leg in legs} == {same_currency_topup.id, cross_topup.id}
     cross_amounts = {leg.currency_id: leg.amount for leg in legs if leg.transaction_id == cross_topup.id}
@@ -903,27 +846,22 @@ async def test_list_topup_legs_for_rates_ignores_multi_leg_expense(db_session: A
     await repo.add(make_cross_topup(workspace.id, wallet.id, expense.id, rub, cny))
     await db_session.flush()
 
-    legs = await repo.list_topup_legs_for_rates(workspace.id, wallet_id=None, date_from=None, date_to=None)
+    legs = await repo.list_topup_legs_for_rates(workspace.id, wallet_id=None)
 
     assert legs == []
 
 
-async def test_list_topup_legs_for_rates_filters_by_date_range(db_session: AsyncSession) -> None:
+async def test_list_topup_legs_for_rates_uses_all_workspace_history(db_session: AsyncSession) -> None:
     workspace = await make_workspace(db_session)
     rub, cny, wallet, income, _ = await make_topup_environment(db_session, workspace)
     repo = TransactionRepository(db_session)
-    june = datetime(2026, 6, 1, tzinfo=UTC)
+    june = datetime(2026, 6, 1)
     await repo.add(make_cross_topup(workspace.id, wallet.id, income.id, rub, cny, occurred_at=june))
     await db_session.flush()
 
-    early, late = datetime(2026, 1, 1, tzinfo=UTC), datetime(2026, 12, 1, tzinfo=UTC)
-    outside = await repo.list_topup_legs_for_rates(
-        workspace.id, wallet_id=None, date_from=datetime(2025, 1, 1, tzinfo=UTC), date_to=early
-    )
-    inside = await repo.list_topup_legs_for_rates(workspace.id, wallet_id=None, date_from=early, date_to=late)
+    legs = await repo.list_topup_legs_for_rates(workspace.id, wallet_id=None)
 
-    assert outside == []
-    assert len(inside) == 2
+    assert len(legs) == 2
 
 
 async def test_list_topup_legs_for_rates_filters_by_wallet(db_session: AsyncSession) -> None:
@@ -935,7 +873,7 @@ async def test_list_topup_legs_for_rates_filters_by_wallet(db_session: AsyncSess
     await repo.add(make_cross_topup(workspace.id, other_wallet.id, income.id, rub, cny))
     await db_session.flush()
 
-    legs = await repo.list_topup_legs_for_rates(workspace.id, wallet_id=wallet.id, date_from=None, date_to=None)
+    legs = await repo.list_topup_legs_for_rates(workspace.id, wallet_id=wallet.id)
 
     assert len(legs) == 2
 
@@ -948,5 +886,5 @@ async def test_list_topup_legs_for_rates_isolated_by_workspace(db_session: Async
     await repo.add(make_cross_topup(other.id, wallet_other.id, income_other.id, rub, cny))
     await db_session.flush()
 
-    assert await repo.list_topup_legs_for_rates(owner.id, wallet_id=None, date_from=None, date_to=None) == []
-    assert len(await repo.list_topup_legs_for_rates(other.id, wallet_id=None, date_from=None, date_to=None)) == 2
+    assert await repo.list_topup_legs_for_rates(owner.id, wallet_id=None) == []
+    assert len(await repo.list_topup_legs_for_rates(other.id, wallet_id=None)) == 2

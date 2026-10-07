@@ -1,4 +1,4 @@
-from datetime import date, tzinfo
+from datetime import date
 from uuid import UUID
 
 from core.entities import LegRecord
@@ -6,23 +6,23 @@ from core.protocols import AnalyticsDimension
 
 
 class WalletDimension:
-    def key(self, record: LegRecord, tz: tzinfo) -> UUID:
+    def key(self, record: LegRecord) -> UUID:
         return record.wallet_id
 
 
 class CategoryDimension:
-    def key(self, record: LegRecord, tz: tzinfo) -> UUID:
+    def key(self, record: LegRecord) -> UUID:
         return record.category_id
 
 
 class CurrencyDimension:
-    def key(self, record: LegRecord, tz: tzinfo) -> UUID:
+    def key(self, record: LegRecord) -> UUID:
         return record.currency_id
 
 
 class DayDimension:
-    def key(self, record: LegRecord, tz: tzinfo) -> date:
-        return record.occurred_at.astimezone(tz).date()
+    def key(self, record: LegRecord) -> date:
+        return record.occurred_at.date()
 
 
 DIMENSIONS: dict[str, AnalyticsDimension] = {
