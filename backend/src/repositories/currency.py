@@ -29,6 +29,10 @@ class CurrencyRepository:
         row = (await self._session.execute(select(currencies).where(currencies.c.id == currency_id))).first()
         return _map_row(row) if row is not None else None
 
+    async def get_by_code(self, code: str) -> Currency | None:
+        row = (await self._session.execute(select(currencies).where(currencies.c.code == code))).first()
+        return _map_row(row) if row is not None else None
+
     async def upsert_many(self, currencies_: Sequence[Currency]) -> None:
         if not currencies_:
             return

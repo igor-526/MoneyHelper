@@ -178,6 +178,46 @@ async def test_add_and_get_by_id_with_multiple_legs(db_session: AsyncSession) ->
     )
 
 
+async def test_list_dated_topup_legs_filters_range_type_and_workspace(db_session: AsyncSession) -> None:
+    workspace = await make_workspace(db_session)
+    other_workspace = await make_workspace(db_session)
+    rub = await make_currency(db_session, "RUB")
+    cny = await make_currency(db_session, "CNY")
+    wallet = await make_wallet(db_session, workspace.id, cny.id)
+    other_wallet = await make_wallet(db_session, other_workspace.id, cny.id)
+    income = await make_category(db_session, workspace.id, CategoryType.INCOME)
+    expense = await make_category(db_session, workspace.id, CategoryType.EXPENSE)
+    other_income = await make_category(db_session, other_workspace.id, CategoryType.INCOME)
+    repo = TransactionRepository(db_session)
+    legs = (
+        TransactionLeg(currency_id=rub.id, amount=Decimal("120.00")),
+        TransactionLeg(currency_id=cny.id, amount=Decimal("10.00")),
+    )
+    included = make_topup(workspace.id, wallet.id, income.id, legs, occurred_at=datetime(2026, 1, 15, 12))
+    await repo.add(included)
+    await repo.add(make_topup(workspace.id, wallet.id, income.id, legs, occurred_at=datetime(2025, 12, 31, 12)))
+    await repo.add(make_topup(workspace.id, wallet.id, expense.id, legs, occurred_at=datetime(2026, 1, 15, 12)))
+    await repo.add(
+        make_topup(
+            other_workspace.id,
+            other_wallet.id,
+            other_income.id,
+            legs,
+            occurred_at=datetime(2026, 1, 15, 12),
+        )
+    )
+    await db_session.flush()
+
+    records = await repo.list_dated_topup_legs(
+        workspace.id, date_from=datetime(2026, 1, 1), date_to=datetime(2026, 1, 31, 23, 59, 59)
+    )
+
+    assert {(record.transaction_id, record.currency_id, record.occurred_at) for record in records} == {
+        (included.id, rub.id, included.occurred_at),
+        (included.id, cny.id, included.occurred_at),
+    }
+
+
 async def test_get_by_id_unknown_returns_none(db_session: AsyncSession) -> None:
     repo = TransactionRepository(db_session)
 

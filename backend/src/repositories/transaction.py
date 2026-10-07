@@ -9,7 +9,7 @@ from sqlalchemy import delete as sa_delete
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.entities import CategoryType, LegRecord, TopupLegRecord, Transaction, TransactionLeg
+from core.entities import CategoryType, DatedTopupLegRecord, LegRecord, TopupLegRecord, Transaction, TransactionLeg
 from models import categories, currencies, transaction_legs, transactions
 
 
@@ -138,6 +138,42 @@ class TransactionRepository:
         rows = await self._session.execute(query)
         return [
             TopupLegRecord(transaction_id=row.transaction_id, currency_id=row.currency_id, amount=row.amount)
+            for row in rows
+        ]
+
+    async def list_dated_topup_legs(
+        self,
+        workspace_id: UUID,
+        *,
+        date_from: datetime | None,
+        date_to: datetime | None,
+    ) -> list[DatedTopupLegRecord]:
+        query = (
+            select(
+                transaction_legs.c.transaction_id,
+                transaction_legs.c.currency_id,
+                transaction_legs.c.amount,
+                transactions.c.occurred_at,
+            )
+            .select_from(
+                transaction_legs.join(transactions, transactions.c.id == transaction_legs.c.transaction_id).join(
+                    categories, categories.c.id == transactions.c.category_id
+                )
+            )
+            .where(transactions.c.workspace_id == workspace_id, categories.c.type == CategoryType.INCOME)
+        )
+        if date_from is not None:
+            query = query.where(transactions.c.occurred_at >= date_from)
+        if date_to is not None:
+            query = query.where(transactions.c.occurred_at <= date_to)
+        rows = await self._session.execute(query)
+        return [
+            DatedTopupLegRecord(
+                transaction_id=row.transaction_id,
+                currency_id=row.currency_id,
+                amount=row.amount,
+                occurred_at=row.occurred_at,
+            )
             for row in rows
         ]
 

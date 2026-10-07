@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from uuid import UUID
 
-from core.entities import CategoryType, LegRecord, TopupLegRecord, Transaction, TransactionLeg
+from core.entities import CategoryType, DatedTopupLegRecord, LegRecord, TopupLegRecord, Transaction, TransactionLeg
 from tests.fakes.category_repository import InMemoryCategoryRepository
 
 
@@ -116,6 +116,33 @@ class InMemoryTransactionRepository:
             for leg in transaction.legs:
                 records.append(
                     TopupLegRecord(transaction_id=transaction.id, currency_id=leg.currency_id, amount=leg.amount)
+                )
+        return records
+
+    async def list_dated_topup_legs(
+        self,
+        workspace_id: UUID,
+        *,
+        date_from: datetime | None,
+        date_to: datetime | None,
+    ) -> list[DatedTopupLegRecord]:
+        records = []
+        for transaction in await self._filter(
+            workspace_id,
+            wallet_id=None,
+            category_id=None,
+            type=CategoryType.INCOME,
+            date_from=date_from,
+            date_to=date_to,
+        ):
+            for leg in transaction.legs:
+                records.append(
+                    DatedTopupLegRecord(
+                        transaction_id=transaction.id,
+                        currency_id=leg.currency_id,
+                        amount=leg.amount,
+                        occurred_at=transaction.occurred_at,
+                    )
                 )
         return records
 

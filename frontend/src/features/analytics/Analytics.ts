@@ -27,3 +27,14 @@ export interface AnalyticsFilters extends AnalyticsRange {
   walletId?: string;
   categoryId?: string;
 }
+
+export interface ExchangeRatePoint {
+  date: string;
+  rate: string;
+}
+
+export interface ExchangeRateHistory {
+  base_currency_id: string;
+  quote_currency_id: string;
+  points: ExchangeRatePoint[];
+}

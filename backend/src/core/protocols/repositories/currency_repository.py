@@ -12,6 +12,8 @@ class CurrencyRepository(Protocol):
 
     async def get_by_id(self, currency_id: UUID) -> Currency | None: ...
 
+    async def get_by_code(self, code: str) -> Currency | None: ...
+
     async def upsert_many(self, currencies: Sequence[Currency]) -> None:
         """Добавляет отсутствующие и обновляет code/name/decimal_places у существующих по id.
         Не удаляет записи, которых нет в currencies."""

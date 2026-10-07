@@ -79,7 +79,13 @@ class Environment:
         )
         return (await self.categories.add(category)).id
 
-    async def add_operation(self, wallet_id: UUID, category_id: UUID, legs: dict[UUID, str]) -> None:
+    async def add_operation(
+        self,
+        wallet_id: UUID,
+        category_id: UUID,
+        legs: dict[UUID, str],
+        occurred_at: datetime = IN_RANGE,
+    ) -> None:
         await self.transactions.add(
             Transaction(
                 id=uuid4(),
@@ -87,8 +93,8 @@ class Environment:
                 wallet_id=wallet_id,
                 category_id=category_id,
                 legs=tuple(TransactionLeg(currency_id=c, amount=Decimal(a)) for c, a in legs.items()),
-                occurred_at=IN_RANGE,
-                created_at=IN_RANGE,
+                occurred_at=occurred_at,
+                created_at=occurred_at,
             )
         )
 
@@ -113,6 +119,54 @@ async def test_default_display_currency_is_workspace_currency() -> None:
     assert body["display_currency_id"] == str(env.rub.id)
     assert body["unconverted_currencies"] == []
     assert body["buckets"] == [{"group_key": str(env.cny_wallet), "income": "1000.00", "expense": "300.00"}]
+
+
+async def test_exchange_rate_history_returns_daily_points() -> None:
+    env = Environment()
+    await env.setup()
+    await env.add_operation(
+        env.cny_wallet,
+        env.income,
+        {env.rub.id: "100", env.cny.id: "10"},
+        datetime(2026, 1, 15, 9),
+    )
+    await env.add_operation(
+        env.cny_wallet,
+        env.income,
+        {env.rub.id: "140", env.cny.id: "10"},
+        datetime(2026, 1, 15, 18),
+    )
+
+    response = env.client.get(
+        f"/api/workspaces/{env.workspace_id}/analytics/rates", params={"currency_id": str(env.cny.id)}
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "base_currency_id": str(env.cny.id),
+        "quote_currency_id": str(env.rub.id),
+        "points": [{"date": "2026-01-15", "rate": "12.0000000000"}],
+    }
+
+
+async def test_exchange_rate_history_validates_currency_and_range() -> None:
+    env = Environment()
+    await env.setup()
+    url = f"/api/workspaces/{env.workspace_id}/analytics/rates"
+
+    assert env.client.get(url, params={"currency_id": str(env.rub.id)}).status_code == 400
+    assert env.client.get(url, params={"currency_id": str(env.usd.id)}).status_code == 400
+    inverted = env.client.get(
+        url,
+        params={"currency_id": str(env.cny.id), "date_from": DATE_TO, "date_to": DATE_FROM},
+    )
+    aware = env.client.get(
+        url,
+        params={"currency_id": str(env.cny.id), "date_from": "2026-01-01T00:00:00Z"},
+    )
+
+    assert inverted.status_code == 400
+    assert aware.status_code == 400
 
 
 async def test_wallet_currency_is_allowed_as_display_currency() -> None:

@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, field_validator
 
 from api.schemas.local_datetime import validate_local_datetime
 from core.entities import CategoryType
-from core.schemas import Money
+from core.schemas import Money, Rate
 
 
 class AnalyticsQueryParams(BaseModel):
@@ -37,3 +37,27 @@ class AnalyticsOut(BaseModel):
     display_currency_id: UUID
     buckets: list[AnalyticsBucketOut]
     unconverted_currencies: list[UUID]
+
+
+class ExchangeRateHistoryQueryParams(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    currency_id: UUID
+    date_from: datetime | None = None
+    date_to: datetime | None = None
+
+    @field_validator("date_from", "date_to")
+    @classmethod
+    def ensure_local_range(cls, value: datetime | None) -> datetime | None:
+        return validate_local_datetime(value)
+
+
+class ExchangeRatePointOut(BaseModel):
+    date: date
+    rate: Rate
+
+
+class ExchangeRateHistoryOut(BaseModel):
+    base_currency_id: UUID
+    quote_currency_id: UUID
+    points: list[ExchangeRatePointOut]

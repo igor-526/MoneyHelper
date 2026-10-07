@@ -20,3 +20,7 @@ class TopupLegRecord(BaseModel):
     transaction_id: UUID
     currency_id: UUID
     amount: Decimal
+
+
+class DatedTopupLegRecord(TopupLegRecord):
+    occurred_at: datetime

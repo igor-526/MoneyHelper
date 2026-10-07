@@ -46,6 +46,7 @@ def test_auth_routes_are_registered() -> None:
         "/api/workspaces/{workspace_id}/topups/{topup_id}",
         "/api/workspaces/{workspace_id}/transactions/{transaction_id}",
         "/api/workspaces/{workspace_id}/analytics",
+        "/api/workspaces/{workspace_id}/analytics/rates",
         "/api/workspaces/{workspace_id}/wallets/{wallet_id}/rates",
     ]:
         assert path in paths, path
