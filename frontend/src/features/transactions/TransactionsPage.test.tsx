@@ -188,6 +188,7 @@ async function chooseOption(comboboxName: string, optionLabel: string) {
     optionLabel,
   );
   await userEvent.click(within(dialog).getByRole("button", { name: "Применить" }));
+  await waitFor(() => expect(dialog).not.toBeVisible());
 }
 
 function activePanel(): HTMLElement {
