@@ -1,7 +1,7 @@
 import type { DailySpending } from "./dailySpending";
 
 export interface SpendingStat {
-  label: "Минимум" | "Максимум" | "Средняя" | "Медиана";
+  label: "Сумма" | "Минимум" | "Максимум" | "Средняя" | "Медиана";
   value: string;
 }
 
@@ -36,6 +36,7 @@ export function spendingStats(series: DailySpending[]): SpendingStat[] {
       ? divideRounded(values[middle - 1]! + values[middle]!, 2n)
       : values[middle]!;
   return [
+    { label: "Сумма", value: amountOf(total, scale) },
     { label: "Минимум", value: amountOf(values[0]!, scale) },
     { label: "Максимум", value: amountOf(values.at(-1)!, scale) },
     { label: "Средняя", value: amountOf(divideRounded(total, BigInt(values.length)), scale) },

@@ -66,6 +66,7 @@ class Environment:
         category_id: UUID,
         legs: dict[UUID, str],
         occurred_at: datetime = IN_RANGE,
+        exclude_from_analytics: bool = False,
     ) -> None:
         await self.transactions.add(
             Transaction(
@@ -75,6 +76,7 @@ class Environment:
                 category_id=category_id,
                 legs=tuple(TransactionLeg(currency_id=c, amount=Decimal(a)) for c, a in legs.items()),
                 occurred_at=occurred_at,
+                exclude_from_analytics=exclude_from_analytics,
                 created_at=occurred_at,
             )
         )
@@ -89,6 +91,7 @@ class Environment:
         category_id: UUID | None = None,
         currency_id: UUID | None = None,
         type: CategoryType | None = None,
+        include_excluded: bool = False,
     ) -> tuple[UUID, Buckets, list[UUID]]:
         display_currency_id, buckets, unconverted = await self.service.get_analytics(
             workspace_id,
@@ -100,6 +103,7 @@ class Environment:
             category_id=category_id,
             currency_id=currency_id,
             type=type,
+            include_excluded=include_excluded,
         )
         return display_currency_id, {key: (income, expense) for key, income, expense in buckets}, unconverted
 
@@ -374,3 +378,34 @@ async def test_groups_by_local_day() -> None:
         date(2026, 1, 15): (Decimal("0"), Decimal("10")),
         date(2026, 1, 16): (Decimal("0"), Decimal("20")),
     }
+
+
+async def test_excluded_expenses_and_rate_sources() -> None:
+    scenario = await Scenario.create()
+    env = scenario.env
+    await env.add_operation(
+        scenario.workspace_id,
+        scenario.cny_wallet,
+        scenario.income,
+        {scenario.rub.id: "1000", scenario.cny.id: "100"},
+        exclude_from_analytics=True,
+    )
+    await scenario.spend_cny("5")
+    await env.add_operation(
+        scenario.workspace_id,
+        scenario.rub_wallet,
+        scenario.expense,
+        {scenario.rub.id: "7"},
+        exclude_from_analytics=True,
+    )
+    _, buckets, unconverted = await env.analytics(scenario.workspace_id, type=CategoryType.EXPENSE)
+    assert buckets == {}
+    assert unconverted == [scenario.cny.id]
+    _, buckets, unconverted = await env.analytics(
+        scenario.workspace_id,
+        type=CategoryType.EXPENSE,
+        include_excluded=True,
+    )
+    assert buckets[scenario.cny_wallet][1] == Decimal("50.00")
+    assert buckets[scenario.rub_wallet][1] == Decimal("7.00")
+    assert unconverted == []

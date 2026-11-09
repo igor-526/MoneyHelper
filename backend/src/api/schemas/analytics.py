@@ -13,6 +13,7 @@ class AnalyticsQueryParams(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     display_currency: UUID | None = None
+    include_excluded: bool = False
     date_from: datetime | None = None
     date_to: datetime | None = None
     group_by: Literal["wallet", "category", "currency", "day"]
@@ -43,6 +44,7 @@ class ExchangeRateHistoryQueryParams(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     currency_id: UUID
+    include_excluded: bool = False
     date_from: datetime | None = None
     date_to: datetime | None = None
 

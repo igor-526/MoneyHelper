@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
@@ -50,6 +51,7 @@ class TransactionService:
         amount: Decimal,
         occurred_at: datetime | None,
         comment: str | None = None,
+        exclude_from_analytics: bool = False,
     ) -> Transaction:
         wallet = await self._validate_transaction_input(
             workspace_id, wallet_id=wallet_id, category_id=category_id, amount=amount
@@ -63,6 +65,7 @@ class TransactionService:
             legs=(TransactionLeg(currency_id=wallet.currency_id, amount=amount),),
             occurred_at=occurred_at if occurred_at is not None else self._operation_clock.now(),
             comment=comment,
+            exclude_from_analytics=exclude_from_analytics,
             created_at=now,
         )
         return await self._transactions.add(transaction)
@@ -83,6 +86,9 @@ class TransactionService:
         category_id: UUID | None,
         date_from: datetime | None,
         date_to: datetime | None,
+        wallet_ids: Sequence[UUID] | None = None,
+        category_ids: Sequence[UUID] | None = None,
+        comment_query: str | None = None,
         limit: int,
         offset: int,
     ) -> tuple[list[Transaction], int]:
@@ -94,6 +100,9 @@ class TransactionService:
             category_id=category_id,
             type=CategoryType.EXPENSE,
             date_from=date_from,
+            wallet_ids=wallet_ids,
+            category_ids=category_ids,
+            comment_query=comment_query,
             date_to=date_to,
             limit=limit,
             offset=offset,
@@ -104,6 +113,9 @@ class TransactionService:
             category_id=category_id,
             type=CategoryType.EXPENSE,
             date_from=date_from,
+            wallet_ids=wallet_ids,
+            category_ids=category_ids,
+            comment_query=comment_query,
             date_to=date_to,
         )
         return items, total
@@ -118,6 +130,7 @@ class TransactionService:
         amount: Decimal,
         occurred_at: datetime | None,
         comment: str | None = None,
+        exclude_from_analytics: bool = False,
     ) -> Transaction:
         await self.get_transaction(transaction_id, workspace_id)
         wallet = await self._validate_transaction_input(
@@ -132,6 +145,7 @@ class TransactionService:
             legs=(TransactionLeg(currency_id=wallet.currency_id, amount=amount),),
             occurred_at=occurred_at if occurred_at is not None else self._operation_clock.now(),
             comment=comment,
+            exclude_from_analytics=exclude_from_analytics,
             now=now,
         )
         if transaction is None:

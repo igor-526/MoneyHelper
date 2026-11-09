@@ -125,3 +125,20 @@ def test_analytics_display_currency_and_dates_are_optional() -> None:
 
     assert not {"display_currency", "date_from", "date_to"} & required
     assert "group_by" in required
+
+
+def test_operation_exclusion_and_analytics_filter_contract() -> None:
+    schema = TestClient(app).get("/openapi.json").json()
+    for name in ("TransactionCreate", "TransactionOut", "TopupCreate", "TopupOut"):
+        assert "exclude_from_analytics" in schema["components"]["schemas"][name]["properties"]
+    for suffix in ("analytics", "analytics/rates"):
+        parameters = schema["paths"][f"/api/workspaces/{{workspace_id}}/{suffix}"]["get"]["parameters"]
+        assert any(p["name"] == "include_excluded" and p["schema"]["default"] is False for p in parameters)
+
+
+def test_operation_list_filter_contract() -> None:
+    schema = TestClient(app).get("/openapi.json").json()
+    for suffix in ("transactions", "topups"):
+        parameters = schema["paths"][f"/api/workspaces/{{workspace_id}}/{suffix}"]["get"]["parameters"]
+        names = {parameter["name"] for parameter in parameters}
+        assert {"wallet_ids", "category_ids", "comment_query"} <= names

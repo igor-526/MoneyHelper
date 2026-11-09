@@ -1,5 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import dayjs from "dayjs";
 import type { ReactNode } from "react";
@@ -178,6 +178,11 @@ async function openFilters(): Promise<HTMLElement> {
 /** Один фильтр через окно фильтров: открыть, выбрать значение, «Применить». */
 async function chooseOption(comboboxName: string, optionLabel: string) {
   const dialog = await openFilters();
+  await userEvent.click(
+    within(dialog).getAllByRole("checkbox", { name: "Выбрать всё" })[
+      comboboxName === "Кошелёк" ? 0 : 1
+    ]!,
+  );
   await chooseFromDropdown(
     within(dialog).getByRole("combobox", { name: comboboxName }),
     optionLabel,
@@ -202,7 +207,7 @@ async function openTab(name: "Пополнение" | "Расход") {
 }
 
 async function goToPage(pageNumber: number) {
-  await userEvent.click(within(activePanel()).getByTitle(String(pageNumber)));
+  await userEvent.click(within(activePanel()).getByRole("button", { name: String(pageNumber) }));
 }
 
 async function confirmDeleteInForm() {
@@ -213,6 +218,22 @@ async function confirmDeleteInForm() {
 }
 
 describe("TransactionsPage", () => {
+  it("поиск передаётся вместе с фильтром и сбрасывает страницу", async () => {
+    const { api, wrapper } = setup(defaultHandler({ total: 100 }));
+    render(<TransactionsPage />, { wrapper });
+    await screen.findByText("Зарплата");
+    await chooseOption("Кошелёк", "Карта");
+    await goToPage(2);
+    fireEvent.change(screen.getByRole("textbox", { name: "Поиск по описанию" }), {
+      target: { value: "кофе" },
+    });
+    await waitFor(() =>
+      expect(requestsTo(api, TOPUPS_PATH).at(-1)).toMatchObject({
+        query: { wallet_ids: "w2", comment_query: "кофе", offset: 0 },
+      }),
+    );
+  });
+
   it("по умолчанию открыта вкладка «Расход» со списком расходов", async () => {
     const { api, wrapper } = setup(defaultHandler(), "/transactions");
     render(<TransactionsPage />, { wrapper });
@@ -267,7 +288,7 @@ describe("TransactionsPage", () => {
       return nodes[nodes.length - 1] as HTMLElement;
     });
 
-    expect(within(dropdown).getByText("Все категории")).toBeInTheDocument();
+    expect(within(dropdown).getByText("Зарплата")).toBeInTheDocument();
     expect(within(dropdown).queryByText("Продукты")).not.toBeInTheDocument();
   });
 
@@ -282,8 +303,9 @@ describe("TransactionsPage", () => {
     await openTab("Пополнение");
 
     const dialog = await openFilters();
-    const wallet = within(dialog).getByRole("combobox", { name: "Кошелёк" });
-    expect(wallet.closest(".ant-select-content")).toHaveAttribute("title", "Карта");
+    expect(
+      within(dialog).getAllByRole("checkbox", { name: "Выбрать всё" })[0],
+    ).toBePartiallyChecked();
   });
 
   it("на основном экране фильтров нет, они открываются кнопкой на панели вкладок", async () => {
@@ -297,7 +319,7 @@ describe("TransactionsPage", () => {
     const dialog = await openFilters();
     expect(within(dialog).getByRole("combobox", { name: "Кошелёк" })).toBeInTheDocument();
     expect(within(dialog).getByRole("combobox", { name: "Категория" })).toBeInTheDocument();
-    expect(within(dialog).getByPlaceholderText("Дата от")).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Дата от")).toBeInTheDocument();
   });
 
   it("изменения в окне применяются только по «Применить»", async () => {
@@ -307,13 +329,14 @@ describe("TransactionsPage", () => {
     const before = requestsTo(api, TOPUPS_PATH).length;
 
     const dialog = await openFilters();
+    await userEvent.click(within(dialog).getAllByRole("checkbox", { name: "Выбрать всё" })[0]!);
     await chooseFromDropdown(within(dialog).getByRole("combobox", { name: "Кошелёк" }), "Карта");
     expect(requestsTo(api, TOPUPS_PATH)).toHaveLength(before);
 
     await userEvent.click(within(dialog).getByRole("button", { name: "Применить" }));
 
     await waitFor(() =>
-      expect(requestsTo(api, TOPUPS_PATH).at(-1)).toMatchObject({ query: { wallet_id: "w2" } }),
+      expect(requestsTo(api, TOPUPS_PATH).at(-1)).toMatchObject({ query: { wallet_ids: "w2" } }),
     );
   });
 
@@ -323,10 +346,11 @@ describe("TransactionsPage", () => {
     await screen.findByText("Зарплата");
 
     const dialog = await openFilters();
+    await userEvent.click(within(dialog).getAllByRole("checkbox", { name: "Выбрать всё" })[0]!);
     await chooseFromDropdown(within(dialog).getByRole("combobox", { name: "Кошелёк" }), "Карта");
     await userEvent.click(within(dialog).getByRole("button", { name: /Close|Закрыть/ }));
 
-    expect(requestsTo(api, TOPUPS_PATH).every((r) => r.query?.wallet_id === undefined)).toBe(true);
+    expect(requestsTo(api, TOPUPS_PATH).every((r) => r.query?.wallet_ids === undefined)).toBe(true);
   });
 
   it("«Сбросить» снимает все фильтры вкладки и закрывает окно", async () => {
@@ -335,14 +359,14 @@ describe("TransactionsPage", () => {
     await screen.findByText("Зарплата");
     await chooseOption("Кошелёк", "Карта");
     await waitFor(() =>
-      expect(requestsTo(api, TOPUPS_PATH).at(-1)).toMatchObject({ query: { wallet_id: "w2" } }),
+      expect(requestsTo(api, TOPUPS_PATH).at(-1)).toMatchObject({ query: { wallet_ids: "w2" } }),
     );
 
     const dialog = await openFilters();
     await userEvent.click(within(dialog).getByRole("button", { name: "Сбросить" }));
 
     await waitFor(() =>
-      expect(requestsTo(api, TOPUPS_PATH).at(-1)?.query?.wallet_id).toBeUndefined(),
+      expect(requestsTo(api, TOPUPS_PATH).at(-1)?.query?.wallet_ids).toBeUndefined(),
     );
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
@@ -439,7 +463,7 @@ describe("TransactionsPage", () => {
 
     await waitFor(() =>
       expect(requestsTo(api, TOPUPS_PATH).at(-1)).toMatchObject({
-        query: { wallet_id: "w1", offset: 0 },
+        query: { wallet_ids: "w1", offset: 0 },
       }),
     );
   });
@@ -450,20 +474,21 @@ describe("TransactionsPage", () => {
     await screen.findByText("Продукты");
 
     const dialog = await openFilters();
+    await userEvent.click(within(dialog).getAllByRole("checkbox", { name: "Выбрать всё" })[1]!);
     await chooseFromDropdown(
       within(dialog).getByRole("combobox", { name: "Категория" }),
       "Продукты",
     );
-    await userEvent.type(within(dialog).getByPlaceholderText("Дата от"), "2026-03-01");
+    fireEvent.change(within(dialog).getByLabelText("Дата от"), { target: { value: "2026-03-01" } });
     await userEvent.keyboard("{Enter}");
-    await userEvent.type(within(dialog).getByPlaceholderText("Дата до"), "2026-03-10");
+    fireEvent.change(within(dialog).getByLabelText("Дата до"), { target: { value: "2026-03-10" } });
     await userEvent.keyboard("{Enter}");
     await userEvent.click(within(dialog).getByRole("button", { name: "Применить" }));
 
     await waitFor(() =>
       expect(requestsTo(api, EXPENSES_PATH).at(-1)).toMatchObject({
         query: {
-          category_id: "c2",
+          category_ids: "c2",
           date_from: dayjs("2026-03-01").startOf("day").format("YYYY-MM-DDTHH:mm:ss"),
           date_to: dayjs("2026-03-10").endOf("day").format("YYYY-MM-DDTHH:mm:ss"),
         },

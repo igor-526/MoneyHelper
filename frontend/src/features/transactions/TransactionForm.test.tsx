@@ -132,6 +132,27 @@ async function fillMinimalForm() {
 }
 
 describe("TransactionForm", () => {
+  it("сохраняет и позволяет снять флаг исключения из аналитики", async () => {
+    const { api, wrapper } = setup(() => ({ ...TRANSACTION, exclude_from_analytics: false }));
+    render(
+      <TransactionForm
+        open
+        onClose={vi.fn()}
+        transaction={{ ...TRANSACTION, exclude_from_analytics: true }}
+      />,
+      { wrapper },
+    );
+    const checkbox = await screen.findByRole("checkbox", { name: "Не участвует в аналитике" });
+    expect(checkbox).toBeChecked();
+    await userEvent.click(checkbox);
+    await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+    await waitFor(() =>
+      expect(api.requests.find((request) => request.method === "PUT")?.body).toMatchObject({
+        exclude_from_analytics: false,
+      }),
+    );
+  });
+
   it("создание: тело запроса без валюты и типа", async () => {
     const CREATED = {
       id: "9",

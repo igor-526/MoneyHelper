@@ -10,11 +10,11 @@ describe("countActiveFilters", () => {
   it("считает каждый заданный фильтр", () => {
     expect(
       countActiveFilters({
-        walletId: "w1",
-        categoryId: undefined,
+        walletIds: ["w1"],
+        categoryIds: undefined,
         dateRange: [dayjs("2026-01-01"), dayjs("2026-01-31")],
       }),
     ).toBe(2);
-    expect(countActiveFilters({ walletId: "w1", categoryId: "c1", dateRange: null })).toBe(2);
+    expect(countActiveFilters({ walletIds: ["w1"], categoryIds: ["c1"], dateRange: null })).toBe(2);
   });
 });

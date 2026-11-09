@@ -3,6 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from api.schemas.operation_filter import OperationIds
 from core.schemas import Money, PageParams
 
 COMMENT_MAX_LENGTH = 1000
@@ -22,6 +23,7 @@ class TransactionCreate(BaseModel):
     category_id: UUID
     amount: Money = Field(gt=0)
     occurred_at: datetime | None = None
+    exclude_from_analytics: bool = False
     comment: str | None = Field(default=None, max_length=COMMENT_MAX_LENGTH)
 
     @field_validator("comment")
@@ -55,6 +57,7 @@ class TransactionOut(BaseModel):
     category_id: UUID
     legs: list[TransactionLegOut]
     occurred_at: datetime
+    exclude_from_analytics: bool
     comment: str | None
     created_at: datetime
     updated_at: datetime | None
@@ -69,6 +72,9 @@ class TransactionListParams(PageParams):
 
     wallet_id: UUID | None = None
     category_id: UUID | None = None
+    wallet_ids: OperationIds | None = None
+    category_ids: OperationIds | None = None
+    comment_query: str | None = Field(default=None, max_length=1000)
     date_from: datetime | None = None
     date_to: datetime | None = None
 

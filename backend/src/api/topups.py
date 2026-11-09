@@ -26,6 +26,7 @@ async def create_topup(
         legs=[TransactionLeg(currency_id=leg.currency_id, amount=leg.amount) for leg in body.legs],
         occurred_at=body.occurred_at,
         comment=body.comment,
+        exclude_from_analytics=body.exclude_from_analytics,
     )
     return TopupOut.model_validate(topup)
 
@@ -38,6 +39,9 @@ async def list_topups(
 ) -> Page[TopupOut]:
     items, total = await topup_service.list_topups(
         workspace_id,
+        wallet_ids=params.wallet_ids,
+        category_ids=params.category_ids,
+        comment_query=params.comment_query,
         wallet_id=params.wallet_id,
         category_id=params.category_id,
         date_from=params.date_from,
@@ -78,6 +82,7 @@ async def update_topup(
         legs=[TransactionLeg(currency_id=leg.currency_id, amount=leg.amount) for leg in body.legs],
         occurred_at=body.occurred_at,
         comment=body.comment,
+        exclude_from_analytics=body.exclude_from_analytics,
     )
     return TopupOut.model_validate(topup)
 

@@ -826,3 +826,47 @@ class TestTopupsAreSeparate:
         assert put.status_code == 404
         assert delete.status_code == 404
         assert await transactions.get_by_id(topup.id, workspace_id) is not None
+
+
+async def test_combined_comment_and_multiple_ids_filters() -> None:
+    workspace_id = uuid4()
+    wallets, categories, currencies, wallet, category, _ = await make_environment(workspace_id)
+    client, _ = make_client(wallets=wallets, categories=categories, currencies=currencies, workspace_id=workspace_id)
+    path = transactions_url(workspace_id)
+    for comment in ["Покупка 100%_", "покупка 10000", "Другое"]:
+        response = client.post(
+            path, json=transaction_payload(wallet_id=wallet.id, category_id=category.id, comment=comment)
+        )
+        assert response.status_code == 201
+    params = {
+        "wallet_ids": f"{wallet.id},{uuid4()}",
+        "category_ids": str(category.id),
+        "comment_query": "ПОКУПКА 100%_",
+        "limit": "1",
+    }
+    response = client.get(path, params=params)
+    assert response.status_code == 200
+    assert response.json()["total"] == 1
+    assert response.json()["items"][0]["comment"] == "Покупка 100%_"
+    response = client.get(path, params={**params, "wallet_ids": ""})
+    assert response.status_code == 200
+    assert response.json()["total"] == 0
+    assert client.get(path, params={"wallet_ids": "invalid"}).status_code == 400
+    assert client.get(transactions_url(uuid4()), params=params).status_code == 404
+
+
+async def test_analytics_exclusion_flag_round_trip() -> None:
+    workspace_id = uuid4()
+    wallets, categories, currencies, wallet, category, _ = await make_environment(workspace_id)
+    client, _ = make_client(wallets=wallets, categories=categories, currencies=currencies, workspace_id=workspace_id)
+    path = transactions_url(workspace_id)
+    payload = transaction_payload(wallet_id=wallet.id, category_id=category.id)
+    response = client.post(path, json={**payload, "exclude_from_analytics": True})
+    assert response.status_code == 201
+    assert response.json()["exclude_from_analytics"] is True
+    resource = f"{path}/{response.json()['id']}"
+    assert client.get(resource).json()["exclude_from_analytics"] is True
+    assert client.get(path).json()["total"] == 1
+    response = client.put(resource, json=payload)
+    assert response.status_code == 200
+    assert response.json()["exclude_from_analytics"] is False

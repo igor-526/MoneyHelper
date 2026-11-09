@@ -117,6 +117,23 @@ async function selectOption(labelText: string, optionLabel: string) {
 }
 
 describe("TopupForm", () => {
+  it("сохраняет и позволяет снять флаг исключения из аналитики", async () => {
+    const { api, wrapper } = setup(() => ({ ...TOPUP, exclude_from_analytics: false }));
+    render(
+      <TopupForm open onClose={vi.fn()} transaction={{ ...TOPUP, exclude_from_analytics: true }} />,
+      { wrapper },
+    );
+    const checkbox = await screen.findByRole("checkbox", { name: "Не участвует в аналитике" });
+    expect(checkbox).toBeChecked();
+    await userEvent.click(checkbox);
+    await userEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+    await waitFor(() =>
+      expect(api.requests.find((request) => request.method === "PUT")?.body).toMatchObject({
+        exclude_from_analytics: false,
+      }),
+    );
+  });
+
   it("кошелёк в валюте воркспейса строит одно поле суммы", async () => {
     const { wrapper } = setup(() => ({}));
     render(<TopupForm open onClose={vi.fn()} />, { wrapper });

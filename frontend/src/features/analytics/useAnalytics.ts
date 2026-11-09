@@ -15,6 +15,7 @@ export function useAnalytics(filters: AnalyticsFilters) {
     queryFn: ({ signal }) =>
       api.get<AnalyticsResult>(`/api/workspaces/${workspaceId}/analytics`, {
         query: {
+          include_excluded: filters.includeExcluded || undefined,
           date_from: filters.dateFrom,
           date_to: filters.dateTo,
           group_by: filters.groupBy,

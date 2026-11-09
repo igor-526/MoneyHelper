@@ -56,8 +56,8 @@ describe("useTransactions", () => {
       method: "GET",
       path: `/api/workspaces/${TEST_WORKSPACE_ID}/transactions`,
       query: {
-        wallet_id: undefined,
-        category_id: undefined,
+        wallet_ids: undefined,
+        category_ids: undefined,
         date_from: undefined,
         date_to: undefined,
         limit: DEFAULT_PAGE_SIZE,
@@ -68,19 +68,22 @@ describe("useTransactions", () => {
 
   it("каждый фильтр по отдельности передаётся в query", async () => {
     const { api: walletApi, wrapper: walletWrapper } = setup(() => transactionsPage());
-    renderHook(() => useTransactions({ walletId: "w1" }, { offset: 0, limit: DEFAULT_PAGE_SIZE }), {
-      wrapper: walletWrapper,
-    });
+    renderHook(
+      () => useTransactions({ walletIds: ["w1"] }, { offset: 0, limit: DEFAULT_PAGE_SIZE }),
+      {
+        wrapper: walletWrapper,
+      },
+    );
     await waitFor(() => expect(walletApi.requests).toHaveLength(1));
-    expect(walletApi.requests[0]).toMatchObject({ query: { wallet_id: "w1" } });
+    expect(walletApi.requests[0]).toMatchObject({ query: { wallet_ids: "w1" } });
 
     const { api: categoryApi, wrapper: categoryWrapper } = setup(() => transactionsPage());
     renderHook(
-      () => useTransactions({ categoryId: "c1" }, { offset: 0, limit: DEFAULT_PAGE_SIZE }),
+      () => useTransactions({ categoryIds: ["c1"] }, { offset: 0, limit: DEFAULT_PAGE_SIZE }),
       { wrapper: categoryWrapper },
     );
     await waitFor(() => expect(categoryApi.requests).toHaveLength(1));
-    expect(categoryApi.requests[0]).toMatchObject({ query: { category_id: "c1" } });
+    expect(categoryApi.requests[0]).toMatchObject({ query: { category_ids: "c1" } });
 
     const { api: dateApi, wrapper: dateWrapper } = setup(() => transactionsPage());
     renderHook(
@@ -104,8 +107,8 @@ describe("useTransactions", () => {
       () =>
         useTransactions(
           {
-            walletId: "w1",
-            categoryId: "c1",
+            walletIds: ["w1"],
+            categoryIds: ["c1"],
             dateFrom: "2026-01-01T00:00:00.000Z",
             dateTo: "2026-01-31T23:59:59.999Z",
           },
@@ -117,8 +120,8 @@ describe("useTransactions", () => {
     await waitFor(() => expect(api.requests).toHaveLength(1));
     expect(api.requests[0]).toMatchObject({
       query: {
-        wallet_id: "w1",
-        category_id: "c1",
+        wallet_ids: "w1",
+        category_ids: "c1",
         date_from: "2026-01-01T00:00:00.000Z",
         date_to: "2026-01-31T23:59:59.999Z",
       },

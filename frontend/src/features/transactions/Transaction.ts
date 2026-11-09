@@ -14,6 +14,7 @@ export interface Transaction {
   category_id: string;
   legs: TransactionLeg[];
   occurred_at: string;
+  exclude_from_analytics?: boolean;
   comment: string | null;
   created_at: string;
   updated_at: string | null;
@@ -25,6 +26,7 @@ export interface TransactionFormValues {
   category_id: string;
   amount: string;
   occurred_at?: string;
+  exclude_from_analytics?: boolean;
   comment?: string;
 }
 
@@ -34,5 +36,6 @@ export interface TopupFormValues {
   category_id: string;
   legs: TransactionLeg[];
   occurred_at?: string;
+  exclude_from_analytics?: boolean;
   comment?: string;
 }

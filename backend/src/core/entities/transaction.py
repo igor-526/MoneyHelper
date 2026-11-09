@@ -19,3 +19,4 @@ class Transaction(Entity, TimestampMixin):
     legs: tuple[TransactionLeg, ...]
     occurred_at: datetime
     comment: str | None = None
+    exclude_from_analytics: bool = False

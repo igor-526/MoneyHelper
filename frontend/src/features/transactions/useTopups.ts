@@ -18,8 +18,9 @@ export function useTopups(filters: OperationFilters, pagination: OperationPagina
     queryFn: ({ signal }) =>
       api.get<Page<Transaction>>(`/api/workspaces/${workspaceId}/topups`, {
         query: {
-          wallet_id: filters.walletId,
-          category_id: filters.categoryId,
+          wallet_ids: filters.walletIds?.join(","),
+          category_ids: filters.categoryIds?.join(","),
+          comment_query: filters.commentQuery || undefined,
           date_from: filters.dateFrom,
           date_to: filters.dateTo,
           limit: pagination.limit,

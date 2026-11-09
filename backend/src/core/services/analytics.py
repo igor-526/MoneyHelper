@@ -43,6 +43,7 @@ class AnalyticsService:
         category_id: UUID | None,
         currency_id: UUID | None,
         type: CategoryType | None,
+        include_excluded: bool = False,
     ) -> tuple[UUID, list[tuple[UUID | date, Decimal, Decimal]], list[UUID]]:
         if date_from is not None and date_to is not None and date_from > date_to:
             raise ClientError(INVALID_DATE_RANGE_MESSAGE)
@@ -65,10 +66,13 @@ class AnalyticsService:
             category_id=category_id,
             currency_id=currency_id,
             type=type,
+            include_excluded=include_excluded,
         )
         legs = [leg for leg in legs if currency_id_by_wallet.get(leg.wallet_id) == leg.currency_id]
         needed = {leg.currency_id for leg in legs} - {display_currency_id}
-        rates = await self._average_rates(workspace_id, display_currency_id, needed) if needed else {}
+        rates = (
+            await self._average_rates(workspace_id, display_currency_id, needed, include_excluded) if needed else {}
+        )
 
         dimension = DIMENSIONS[group_by]
         totals: dict[UUID | date, list[Decimal]] = defaultdict(lambda: [Decimal("0"), Decimal("0")])
@@ -95,6 +99,9 @@ class AnalyticsService:
         workspace_id: UUID,
         target_id: UUID,
         source_ids: set[UUID],
+        include_excluded: bool,
     ) -> dict[UUID, Decimal]:
-        topup_legs = await self._transactions.list_topup_legs_for_rates(workspace_id, wallet_id=None)
+        topup_legs = await self._transactions.list_topup_legs_for_rates(
+            workspace_id, wallet_id=None, include_excluded=include_excluded
+        )
         return average_rates(topup_legs, target_id, source_ids)

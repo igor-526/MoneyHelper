@@ -1,4 +1,4 @@
-import { Button, Drawer, Form, Input, Modal, Select } from "antd";
+import { Button, Checkbox, Drawer, Form, Input, Modal, Select } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import { useEffect } from "react";
 import { useCategories } from "@/features/categories/useCategories";
@@ -36,10 +36,17 @@ interface TopupFormFields {
   amounts: Record<string, string>;
   occurred_at?: Dayjs;
   comment?: string;
+  exclude_from_analytics?: boolean;
 }
 
 /** Ошибки по конкретным ногам и текстовые бизнес-правила (набор валют, категория не дохода) попадают в toast. */
-const KNOWN_FIELDS = ["wallet_id", "category_id", "occurred_at", "comment"] as const;
+const KNOWN_FIELDS = [
+  "wallet_id",
+  "category_id",
+  "occurred_at",
+  "comment",
+  "exclude_from_analytics",
+] as const;
 
 /**
  * Форма пополнения (создание и редактирование): суммы в валюте воркспейса и в валюте выбранного кошелька; если
@@ -77,6 +84,7 @@ export function TopupForm({ open, onClose, transaction }: TopupFormProps) {
       category_id: transaction?.category_id,
       occurred_at: dayjs(transaction?.occurred_at),
       comment: transaction?.comment ?? undefined,
+      exclude_from_analytics: transaction?.exclude_from_analytics ?? false,
     });
     form.setFieldValue(
       "amounts",
@@ -103,6 +111,7 @@ export function TopupForm({ open, onClose, transaction }: TopupFormProps) {
       })),
       occurred_at: fields.occurred_at && toOccurredAt(fields.occurred_at, transaction?.occurred_at),
       comment: fields.comment,
+      exclude_from_analytics: fields.exclude_from_analytics ?? false,
     };
 
     const onError = (submitError: unknown) => {
@@ -184,6 +193,11 @@ export function TopupForm({ open, onClose, transaction }: TopupFormProps) {
         rules={[{ max: 1000, message: "Не более 1000 символов" }]}
       >
         <Input.TextArea rows={2} maxLength={1000} showCount />
+      </Form.Item>
+      <Form.Item name="exclude_from_analytics" valuePropName="checked">
+        <Checkbox style={{ minHeight: 44, alignItems: "center" }}>
+          Не участвует в аналитике
+        </Checkbox>
       </Form.Item>
       {transaction ? null : <AddAnotherCheckbox />}
       <Form.Item style={{ marginBottom: 0 }}>

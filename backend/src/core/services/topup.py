@@ -56,6 +56,7 @@ class TopupService:
         legs: Sequence[TransactionLeg],
         occurred_at: datetime | None,
         comment: str | None = None,
+        exclude_from_analytics: bool = False,
     ) -> Transaction:
         await self._validate_topup_input(workspace_id, wallet_id=wallet_id, category_id=category_id, legs=legs)
         now = self._clock.now()
@@ -67,6 +68,7 @@ class TopupService:
             legs=tuple(legs),
             occurred_at=occurred_at if occurred_at is not None else self._operation_clock.now(),
             comment=comment,
+            exclude_from_analytics=exclude_from_analytics,
             created_at=now,
         )
         return await self._transactions.add(topup)
@@ -85,6 +87,9 @@ class TopupService:
         category_id: UUID | None,
         date_from: datetime | None,
         date_to: datetime | None,
+        wallet_ids: Sequence[UUID] | None = None,
+        category_ids: Sequence[UUID] | None = None,
+        comment_query: str | None = None,
         limit: int,
         offset: int,
     ) -> tuple[list[Transaction], int]:
@@ -96,6 +101,9 @@ class TopupService:
             category_id=category_id,
             type=CategoryType.INCOME,
             date_from=date_from,
+            wallet_ids=wallet_ids,
+            category_ids=category_ids,
+            comment_query=comment_query,
             date_to=date_to,
             limit=limit,
             offset=offset,
@@ -106,6 +114,9 @@ class TopupService:
             category_id=category_id,
             type=CategoryType.INCOME,
             date_from=date_from,
+            wallet_ids=wallet_ids,
+            category_ids=category_ids,
+            comment_query=comment_query,
             date_to=date_to,
         )
         return items, total
@@ -120,6 +131,7 @@ class TopupService:
         legs: Sequence[TransactionLeg],
         occurred_at: datetime | None,
         comment: str | None = None,
+        exclude_from_analytics: bool = False,
     ) -> Transaction:
         await self.get_topup(topup_id, workspace_id)
         await self._validate_topup_input(workspace_id, wallet_id=wallet_id, category_id=category_id, legs=legs)
@@ -132,6 +144,7 @@ class TopupService:
             legs=tuple(legs),
             occurred_at=occurred_at if occurred_at is not None else self._operation_clock.now(),
             comment=comment,
+            exclude_from_analytics=exclude_from_analytics,
             now=now,
         )
         if topup is None:

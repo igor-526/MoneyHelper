@@ -48,6 +48,7 @@ class ExchangeRateHistoryService:
         base_currency_id: UUID,
         date_from: datetime | None,
         date_to: datetime | None,
+        include_excluded: bool = False,
     ) -> ExchangeRateHistory:
         if date_from is not None and date_to is not None and date_from > date_to:
             raise ClientError(INVALID_DATE_RANGE_MESSAGE)
@@ -63,7 +64,9 @@ class ExchangeRateHistoryService:
         if base is None or base.id == rub.id or base.id not in allowed_currency_ids:
             raise ClientError(INVALID_BASE_CURRENCY_MESSAGE)
 
-        legs = await self._history.list_dated_topup_legs(workspace_id, date_from=date_from, date_to=date_to)
+        legs = await self._history.list_dated_topup_legs(
+            workspace_id, date_from=date_from, date_to=date_to, include_excluded=include_excluded
+        )
         legs_by_transaction: dict[UUID, dict[UUID, Decimal]] = defaultdict(dict)
         date_by_transaction: dict[UUID, date] = {}
         for leg in legs:

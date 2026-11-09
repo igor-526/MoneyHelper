@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDailySpending, totalSpending } from "./dailySpending";
+import { buildDailySpending, spendingChartSeries, totalSpending } from "./dailySpending";
 
 const bucket = (day: string, expense: string) => ({ group_key: day, income: "0", expense });
 
@@ -40,5 +40,25 @@ describe("totalSpending", () => {
         { day: "2026-01-02", amount: "0.20" },
       ]),
     ).toBe("0.30");
+  });
+});
+
+describe("spendingChartSeries", () => {
+  it("сохраняет только даты операций и не меняет статистику полного диапазона", () => {
+    const buckets = [bucket("2026-01-03", "30.00"), bucket("2026-01-01", "10.00")];
+    expect(spendingChartSeries(buckets)).toEqual([
+      { day: "2026-01-01", amount: "10.00" },
+      { day: "2026-01-03", amount: "30.00" },
+    ]);
+    expect(buildDailySpending(buckets, {}).map((point) => point.amount)).toEqual([
+      "10.00",
+      "0",
+      "30.00",
+    ]);
+  });
+  it("не удаляет дату с нулевым итогом", () => {
+    expect(spendingChartSeries([bucket("2026-01-01", "0")])).toEqual([
+      { day: "2026-01-01", amount: "0" },
+    ]);
   });
 });

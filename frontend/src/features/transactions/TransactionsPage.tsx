@@ -1,4 +1,4 @@
-import { Badge, Button, Flex, Tabs, Typography } from "antd";
+import { Badge, Button, Flex, Input, Tabs, Typography } from "antd";
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Icon } from "@/shared/ui";
@@ -33,19 +33,32 @@ export function TransactionsPage() {
       <Typography.Title level={3} style={{ margin: 0 }}>
         Операции
       </Typography.Title>
+      <Flex gap={8} align="center">
+        <Input
+          aria-label="Поиск по описанию"
+          placeholder="Поиск по описанию"
+          maxLength={1000}
+          allowClear
+          value={filtersOf(kind.key).commentQuery ?? ""}
+          onChange={(event) =>
+            setFiltersByTab((prev) => ({
+              ...prev,
+              [kind.key]: { ...filtersOf(kind.key), commentQuery: event.target.value },
+            }))
+          }
+        />
+        <Badge count={activeCount} size="small">
+          <Button
+            aria-label="Фильтры"
+            icon={<Icon name="funnel" />}
+            onClick={() => setFiltersOpen(true)}
+          />
+        </Badge>
+      </Flex>
       <Tabs
         activeKey={kind.key}
         items={tabItems}
         onChange={(key) => setSearchParams({ [TAB_PARAM]: key }, { replace: true })}
-        tabBarExtraContent={
-          <Badge count={activeCount} size="small">
-            <Button
-              aria-label="Фильтры"
-              icon={<Icon name="funnel" />}
-              onClick={() => setFiltersOpen(true)}
-            />
-          </Badge>
-        }
       />
       <OperationFiltersPopup
         open={filtersOpen}

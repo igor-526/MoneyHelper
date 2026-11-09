@@ -8,8 +8,9 @@ export const DEFAULT_PAGE_SIZE = 20;
 
 /** Фильтры списков расходов и пополнений; тип задаётся самим списком. */
 export interface OperationFilters {
-  walletId?: string;
-  categoryId?: string;
+  walletIds?: string[];
+  categoryIds?: string[];
+  commentQuery?: string;
   dateFrom?: string; // ISO, начало выбранного дня
   dateTo?: string; // ISO, конец выбранного дня
 }
@@ -43,8 +44,9 @@ export function useTransactions(filters: OperationFilters, pagination: Operation
     queryFn: ({ signal }) =>
       api.get<Page<Transaction>>(`/api/workspaces/${workspaceId}/transactions`, {
         query: {
-          wallet_id: filters.walletId,
-          category_id: filters.categoryId,
+          wallet_ids: filters.walletIds?.join(","),
+          category_ids: filters.categoryIds?.join(","),
+          comment_query: filters.commentQuery || undefined,
           date_from: filters.dateFrom,
           date_to: filters.dateTo,
           limit: pagination.limit,

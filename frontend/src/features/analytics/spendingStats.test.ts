@@ -10,6 +10,7 @@ describe("spendingStats", () => {
         { day: "2026-01-03", amount: "20.00" },
       ]),
     ).toEqual([
+      { label: "Сумма", value: "30.00" },
       { label: "Минимум", value: "0.00" },
       { label: "Максимум", value: "20.00" },
       { label: "Средняя", value: "10.00" },
@@ -34,4 +35,13 @@ describe("spendingStats", () => {
   it("для пустой серии возвращает пустой список", () => {
     expect(spendingStats([])).toEqual([]);
   });
+});
+
+it("сумма сохраняет точность десятичных значений", () => {
+  expect(
+    spendingStats([
+      { day: "2026-01-01", amount: "0.10" },
+      { day: "2026-01-02", amount: "0.20" },
+    ]).find((stat) => stat.label === "Сумма")?.value,
+  ).toBe("0.30");
 });

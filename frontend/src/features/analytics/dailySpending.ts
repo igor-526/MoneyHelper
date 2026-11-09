@@ -32,6 +32,13 @@ export function buildDailySpending(
   return series;
 }
 
+/** Только даты, присутствующие в ответе аналитики; нулевой итог операции тоже сохраняет дату. */
+export function spendingChartSeries(buckets: AnalyticsBucket[]): DailySpending[] {
+  return [...buckets]
+    .sort((left, right) => left.group_key.localeCompare(right.group_key))
+    .map((bucket) => ({ day: bucket.group_key, amount: bucket.expense }));
+}
+
 export function totalSpending(series: DailySpending[]): string {
   return sumAmounts(series.map((point) => point.amount));
 }

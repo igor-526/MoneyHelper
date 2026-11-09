@@ -433,3 +433,24 @@ class TestWorkspaceIsolation:
         assert client.get(env.url()).json()["total"] == 0
         cross_wallet = client.post(env.url(), json=payload(other_wallet, env.income, [leg(env.cny, "1")]))
         assert cross_wallet.status_code == 404
+
+
+async def test_exclusion_flag_is_saved_and_reset() -> None:
+    env = Environment()
+    await env.setup()
+    client = env.client()
+    payload = {
+        "wallet_id": str(env.cny_wallet.id),
+        "category_id": str(env.income.id),
+        "legs": [{"currency_id": str(env.cny.id), "amount": "10"}],
+        "exclude_from_analytics": True,
+    }
+    response = client.post(env.url(), json=payload)
+    assert response.status_code == 201
+    assert response.json()["exclude_from_analytics"] is True
+    resource = env.url(f"/{response.json()['id']}")
+    assert client.get(resource).json()["exclude_from_analytics"] is True
+    assert client.get(env.url()).json()["total"] == 1
+    response = client.put(resource, json={**payload, "exclude_from_analytics": False})
+    assert response.status_code == 200
+    assert response.json()["exclude_from_analytics"] is False

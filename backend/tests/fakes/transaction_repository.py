@@ -23,6 +23,9 @@ class InMemoryTransactionRepository:
         type: CategoryType | None,
         date_from: datetime | None,
         date_to: datetime | None,
+        wallet_ids: Sequence[UUID] | None = None,
+        category_ids: Sequence[UUID] | None = None,
+        comment_query: str | None = None,
     ) -> list[Transaction]:
         # Метод объявлен раньше `list`/`count` в теле класса: имя `list` внутри тела класса начинает ссылаться
         # на одноимённый метод сразу после его определения, поэтому аннотация `-> list[Transaction]` ниже
@@ -42,6 +45,12 @@ class InMemoryTransactionRepository:
             if date_from is not None and transaction.occurred_at < date_from:
                 continue
             if date_to is not None and transaction.occurred_at > date_to:
+                continue
+            if wallet_ids is not None and transaction.wallet_id not in wallet_ids:
+                continue
+            if category_ids is not None and transaction.category_id not in category_ids:
+                continue
+            if comment_query and comment_query.lower() not in (transaction.comment or "").lower():
                 continue
             result.append(transaction)
         return result
@@ -65,9 +74,12 @@ class InMemoryTransactionRepository:
         category_id: UUID | None,
         currency_id: UUID | None,
         type: CategoryType | None,
+        include_excluded: bool = False,
     ) -> list[LegRecord]:
         records = []
         for transaction in self._transactions.values():
+            if transaction.exclude_from_analytics and not include_excluded:
+                continue
             if transaction.workspace_id != workspace_id:
                 continue
             if date_from is not None and transaction.occurred_at < date_from:
@@ -103,6 +115,7 @@ class InMemoryTransactionRepository:
         workspace_id: UUID,
         *,
         wallet_id: UUID | None,
+        include_excluded: bool = True,
     ) -> list[TopupLegRecord]:
         records = []
         for transaction in await self._filter(
@@ -113,6 +126,8 @@ class InMemoryTransactionRepository:
             date_from=None,
             date_to=None,
         ):
+            if transaction.exclude_from_analytics and not include_excluded:
+                continue
             for leg in transaction.legs:
                 records.append(
                     TopupLegRecord(transaction_id=transaction.id, currency_id=leg.currency_id, amount=leg.amount)
@@ -125,6 +140,7 @@ class InMemoryTransactionRepository:
         *,
         date_from: datetime | None,
         date_to: datetime | None,
+        include_excluded: bool = False,
     ) -> list[DatedTopupLegRecord]:
         records = []
         for transaction in await self._filter(
@@ -135,6 +151,8 @@ class InMemoryTransactionRepository:
             date_from=date_from,
             date_to=date_to,
         ):
+            if transaction.exclude_from_analytics and not include_excluded:
+                continue
             for leg in transaction.legs:
                 records.append(
                     DatedTopupLegRecord(
@@ -155,6 +173,9 @@ class InMemoryTransactionRepository:
         type: CategoryType | None,
         date_from: datetime | None,
         date_to: datetime | None,
+        wallet_ids: Sequence[UUID] | None = None,
+        category_ids: Sequence[UUID] | None = None,
+        comment_query: str | None = None,
         limit: int,
         offset: int,
     ) -> list[Transaction]:
@@ -165,6 +186,9 @@ class InMemoryTransactionRepository:
                 category_id=category_id,
                 type=type,
                 date_from=date_from,
+                wallet_ids=wallet_ids,
+                category_ids=category_ids,
+                comment_query=comment_query,
                 date_to=date_to,
             ),
             key=lambda transaction: (transaction.occurred_at, transaction.id),
@@ -181,6 +205,9 @@ class InMemoryTransactionRepository:
         type: CategoryType | None,
         date_from: datetime | None,
         date_to: datetime | None,
+        wallet_ids: Sequence[UUID] | None = None,
+        category_ids: Sequence[UUID] | None = None,
+        comment_query: str | None = None,
     ) -> int:
         return len(
             await self._filter(
@@ -189,6 +216,9 @@ class InMemoryTransactionRepository:
                 category_id=category_id,
                 type=type,
                 date_from=date_from,
+                wallet_ids=wallet_ids,
+                category_ids=category_ids,
+                comment_query=comment_query,
                 date_to=date_to,
             )
         )
@@ -204,6 +234,7 @@ class InMemoryTransactionRepository:
         occurred_at: datetime,
         comment: str | None,
         now: datetime,
+        exclude_from_analytics: bool = False,
     ) -> Transaction | None:
         transaction = self._transactions.get(transaction_id)
         if transaction is None or transaction.workspace_id != workspace_id:
@@ -215,6 +246,7 @@ class InMemoryTransactionRepository:
                 "legs": tuple(legs),
                 "occurred_at": occurred_at,
                 "comment": comment,
+                "exclude_from_analytics": exclude_from_analytics,
                 "updated_at": now,
             }
         )

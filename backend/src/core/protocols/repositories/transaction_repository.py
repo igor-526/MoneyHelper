@@ -25,6 +25,7 @@ class TransactionRepository(Protocol):
         category_id: UUID | None,
         currency_id: UUID | None,
         type: CategoryType | None,
+        include_excluded: bool = False,
     ) -> list[LegRecord]: ...
 
     async def list_topup_legs_for_rates(
@@ -32,6 +33,7 @@ class TransactionRepository(Protocol):
         workspace_id: UUID,
         *,
         wallet_id: UUID | None,
+        include_excluded: bool = True,
     ) -> list[TopupLegRecord]: ...
 
     async def list(
@@ -43,6 +45,9 @@ class TransactionRepository(Protocol):
         type: CategoryType | None,
         date_from: datetime | None,
         date_to: datetime | None,
+        wallet_ids: Sequence[UUID] | None = None,
+        category_ids: Sequence[UUID] | None = None,
+        comment_query: str | None = None,
         limit: int,
         offset: int,
     ) -> list[Transaction]: ...
@@ -56,6 +61,9 @@ class TransactionRepository(Protocol):
         type: CategoryType | None,
         date_from: datetime | None,
         date_to: datetime | None,
+        wallet_ids: Sequence[UUID] | None = None,
+        category_ids: Sequence[UUID] | None = None,
+        comment_query: str | None = None,
     ) -> int: ...
 
     async def update(
@@ -69,6 +77,7 @@ class TransactionRepository(Protocol):
         occurred_at: datetime,
         comment: str | None,
         now: datetime,
+        exclude_from_analytics: bool = False,
     ) -> Transaction | None: ...
 
     async def delete(self, transaction_id: UUID, workspace_id: UUID) -> bool: ...

@@ -16,6 +16,7 @@ export interface AnalyticsResult {
 
 /** Диапазон дат в ISO; границы необязательны — без них backend считает весь период воркспейса. */
 export interface AnalyticsRange {
+  includeExcluded?: boolean;
   dateFrom?: string;
   dateTo?: string;
 }

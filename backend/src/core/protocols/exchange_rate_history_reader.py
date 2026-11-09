@@ -12,4 +12,5 @@ class ExchangeRateHistoryReader(Protocol):
         *,
         date_from: datetime | None,
         date_to: datetime | None,
+        include_excluded: bool = False,
     ) -> list[DatedTopupLegRecord]: ...

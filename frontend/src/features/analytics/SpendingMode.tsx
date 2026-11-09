@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { useCurrentWorkspace } from "@/features/workspaces/useCurrentWorkspace";
 import { EmptyState, formatAmount, Icon, useCurrencies } from "@/shared/ui";
 import type { AnalyticsRange } from "./Analytics";
-import { buildDailySpending, totalSpending } from "./dailySpending";
+import { buildDailySpending, spendingChartSeries, totalSpending } from "./dailySpending";
 import { SpendingChart } from "./SpendingChart";
 import { countSpendingFilters, EMPTY_SPENDING_FILTERS } from "./spendingFilters";
 import { SpendingFiltersPopup } from "./SpendingFiltersPopup";
@@ -61,7 +61,10 @@ export function SpendingMode({ range }: { range: AnalyticsRange }) {
         <Spin />
       ) : hasSpending ? (
         <Flex vertical gap={16}>
-          <SpendingChart series={series} currencyCode={currencyCode} />
+          <SpendingChart
+            series={spendingChartSeries(query.data?.buckets ?? [])}
+            currencyCode={currencyCode}
+          />
           <Table
             aria-label="Статистика дневных трат"
             rowKey="label"

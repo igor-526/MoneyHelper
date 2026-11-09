@@ -30,6 +30,7 @@ async def create_transaction(
         amount=body.amount,
         occurred_at=body.occurred_at,
         comment=body.comment,
+        exclude_from_analytics=body.exclude_from_analytics,
     )
     return TransactionOut.model_validate(transaction)
 
@@ -42,6 +43,9 @@ async def list_transactions(
 ) -> Page[TransactionOut]:
     items, total = await transaction_service.list_transactions(
         workspace_id,
+        wallet_ids=params.wallet_ids,
+        category_ids=params.category_ids,
+        comment_query=params.comment_query,
         wallet_id=params.wallet_id,
         category_id=params.category_id,
         date_from=params.date_from,
@@ -82,6 +86,7 @@ async def update_transaction(
         amount=body.amount,
         occurred_at=body.occurred_at,
         comment=body.comment,
+        exclude_from_analytics=body.exclude_from_analytics,
     )
     return TransactionOut.model_validate(transaction)
 

@@ -4,7 +4,7 @@ const RATE_SCALE = 10;
 const RATE_FACTOR = 10n ** BigInt(RATE_SCALE);
 
 export interface RateStat {
-  label: "Минимум" | "Максимум" | "Средняя";
+  label: "Сумма" | "Минимум" | "Максимум" | "Средняя";
   value: string;
 }
 
@@ -32,6 +32,7 @@ export function rateStats(points: ExchangeRatePoint[]): RateStat[] {
     .sort((left, right) => (left < right ? -1 : 1));
   const total = values.reduce((sum, value) => sum + value, 0n);
   return [
+    { label: "Сумма", value: rateOf(total) },
     { label: "Минимум", value: rateOf(values[0]!) },
     { label: "Максимум", value: rateOf(values.at(-1)!) },
     { label: "Средняя", value: rateOf(divideRounded(total, BigInt(values.length))) },

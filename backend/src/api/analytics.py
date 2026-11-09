@@ -30,6 +30,7 @@ async def get_exchange_rate_history(
         base_currency_id=params.currency_id,
         date_from=params.date_from,
         date_to=params.date_to,
+        include_excluded=params.include_excluded,
     )
     return ExchangeRateHistoryOut(
         base_currency_id=history.base_currency_id,
@@ -49,6 +50,7 @@ async def get_analytics(
         display_currency_id=params.display_currency,
         date_from=params.date_from,
         date_to=params.date_to,
+        include_excluded=params.include_excluded,
         group_by=params.group_by,
         wallet_id=params.wallet_id,
         category_id=params.category_id,

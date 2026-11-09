@@ -1,4 +1,5 @@
-import { Button, Flex, Pagination, Spin } from "antd";
+import { CompactPagination } from "./CompactPagination";
+import { Button, Flex, Spin } from "antd";
 import { useMemo, useState } from "react";
 import { useCategories } from "@/features/categories/useCategories";
 import { useWallets } from "@/features/wallets/useWallets";
@@ -41,7 +42,13 @@ export function OperationsTab({ kind, filters }: OperationsTabProps) {
   const dateTo = filters.dateRange ? toLocalDateTime(filters.dateRange[1].endOf("day")) : undefined;
 
   const listQuery = kind.useList(
-    { walletId: filters.walletId, categoryId: filters.categoryId, dateFrom, dateTo },
+    {
+      walletIds: filters.walletIds,
+      categoryIds: filters.categoryIds,
+      commentQuery: filters.commentQuery,
+      dateFrom,
+      dateTo,
+    },
     { offset: (page - 1) * DEFAULT_PAGE_SIZE, limit: DEFAULT_PAGE_SIZE },
   );
 
@@ -57,7 +64,8 @@ export function OperationsTab({ kind, filters }: OperationsTabProps) {
     () => new Map(currencies.map((currency) => [currency.id, currency.code])),
     [currencies],
   );
-  const selectedWallet = wallets.find((wallet) => wallet.id === filters.walletId);
+  const selectedWalletId = filters.walletIds?.length === 1 ? filters.walletIds[0] : undefined;
+  const selectedWallet = wallets.find((wallet) => wallet.id === selectedWalletId);
 
   const openCreate = () => setFormState({ open: true });
   const openEdit = (transaction: Transaction) => setFormState({ open: true, transaction });
@@ -104,12 +112,10 @@ export function OperationsTab({ kind, filters }: OperationsTabProps) {
               );
             })}
           </Flex>
-          <Pagination
+          <CompactPagination
             current={page}
-            pageSize={DEFAULT_PAGE_SIZE}
-            total={total}
+            total={Math.ceil(total / DEFAULT_PAGE_SIZE)}
             onChange={setPage}
-            showSizeChanger={false}
           />
         </>
       )}

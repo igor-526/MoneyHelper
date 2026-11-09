@@ -1,4 +1,5 @@
 import type { QueryClient } from "@tanstack/react-query";
+import { exchangeRateHistoryQueryKey } from "@/features/analytics/useExchangeRateHistory";
 import { analyticsQueryKey } from "@/features/analytics/useAnalytics";
 import { walletRatesQueryKey } from "@/features/wallets/useWalletRates";
 import { topupsQueryKey } from "./useTopups";
@@ -11,6 +12,7 @@ export function invalidateOperationCaches(queryClient: QueryClient, workspaceId:
     topupsQueryKey(workspaceId),
     walletRatesQueryKey(workspaceId),
     analyticsQueryKey(workspaceId),
+    exchangeRateHistoryQueryKey(workspaceId),
   ]) {
     queryClient.invalidateQueries({ queryKey });
   }

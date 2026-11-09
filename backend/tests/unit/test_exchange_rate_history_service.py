@@ -64,7 +64,9 @@ class Environment:
             )
         ).id
 
-    async def add_topup(self, rub: str, cny: str, occurred_at: datetime) -> None:
+    async def add_topup(
+        self, rub: str, cny: str, occurred_at: datetime, *, exclude_from_analytics: bool = False
+    ) -> None:
         await self.transactions.add(
             Transaction(
                 id=uuid4(),
@@ -76,6 +78,7 @@ class Environment:
                     TransactionLeg(currency_id=self.cny.id, amount=Decimal(cny)),
                 ),
                 occurred_at=occurred_at,
+                exclude_from_analytics=exclude_from_analytics,
                 created_at=occurred_at,
             )
         )
@@ -158,3 +161,19 @@ async def test_other_workspace_topups_are_not_used() -> None:
     )
 
     assert history.points == ()
+
+
+async def test_history_excludes_flagged_topups_unless_requested() -> None:
+    env = Environment()
+    await env.setup()
+    await env.add_topup("100", "10", datetime(2026, 1, 1), exclude_from_analytics=True)
+    assert (await env.history()).points == ()
+    history = await env.service.get_history(
+        env.workspace_id,
+        base_currency_id=env.cny.id,
+        date_from=None,
+        date_to=None,
+        include_excluded=True,
+    )
+    assert len(history.points) == 1
+    assert history.points[0].rate == Decimal("10.0000000000")

@@ -1,12 +1,12 @@
-import { Button, DatePicker, Flex, Select } from "antd";
+import { FilterMultiSelect } from "@/shared/ui/FilterMultiSelect";
+import { MobileDateRange } from "@/shared/ui/MobileDateRange";
+import { Button, Flex } from "antd";
 import { useState } from "react";
 import type { CategoryType } from "@/features/categories/Category";
 import { useCategories } from "@/features/categories/useCategories";
 import { useWallets } from "@/features/wallets/useWallets";
 import { FiltersDialog } from "@/shared/ui";
 import { EMPTY_OPERATION_FILTERS, type OperationFiltersState } from "./operationFilters";
-
-const ALL = "all";
 
 export interface OperationFiltersPopupProps {
   open: boolean;
@@ -32,37 +32,23 @@ function FiltersForm({ onClose, value, categoryType, onApply }: FiltersFormProps
 
   return (
     <Flex vertical gap={12}>
-      <Select
-        aria-label="Кошелёк"
-        value={draft.walletId ?? ALL}
-        options={[
-          { value: ALL, label: "Все кошельки" },
-          ...wallets.map((wallet) => ({ value: wallet.id, label: wallet.name })),
-        ]}
-        onChange={(next) => setDraft({ ...draft, walletId: next === ALL ? undefined : next })}
+      <FilterMultiSelect
+        label="Кошелёк"
+        value={draft.walletIds}
+        options={wallets.map((wallet) => ({ value: wallet.id, label: wallet.name }))}
+        onChange={(walletIds) => setDraft({ ...draft, walletIds })}
       />
       {categoryType !== undefined ? (
-        <Select
-          aria-label="Категория"
-          value={draft.categoryId ?? ALL}
-          options={[
-            { value: ALL, label: "Все категории" },
-            ...categories.map((category) => ({ value: category.id, label: category.name })),
-          ]}
-          onChange={(next) => setDraft({ ...draft, categoryId: next === ALL ? undefined : next })}
+        <FilterMultiSelect
+          label="Категория"
+          value={draft.categoryIds}
+          options={categories.map((category) => ({ value: category.id, label: category.name }))}
+          onChange={(categoryIds) => setDraft({ ...draft, categoryIds })}
         />
       ) : null}
-      <DatePicker.RangePicker
-        aria-label="Диапазон дат"
-        placeholder={["Дата от", "Дата до"]}
+      <MobileDateRange
         value={draft.dateRange}
-        onChange={(dates) =>
-          setDraft({
-            ...draft,
-            dateRange: dates && dates[0] && dates[1] ? [dates[0], dates[1]] : null,
-          })
-        }
-        allowClear
+        onChange={(dateRange) => setDraft({ ...draft, dateRange })}
       />
       <Flex gap={8}>
         <Button block onClick={() => apply(EMPTY_OPERATION_FILTERS)}>

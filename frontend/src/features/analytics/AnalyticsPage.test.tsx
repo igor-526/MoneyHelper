@@ -129,6 +129,36 @@ function categoryNames() {
 }
 
 describe("AnalyticsPage", () => {
+  it("переключатель включает исключённые операции во всех режимах", async () => {
+    const { api, wrapper } = setup((request) =>
+      request.path.endsWith("/rates")
+        ? { base_currency_id: "cur3", quote_currency_id: "cur2", points: [] }
+        : analyticsResult(request.query?.group_by === "day" ? [] : BUCKETS),
+    );
+    render(<AnalyticsPage />, { wrapper });
+    await screen.findByText("По всем категориям");
+    const toggle = screen.getByRole("checkbox", {
+      name: "Включать операции «Не участвует в аналитике»",
+    });
+    expect(toggle).not.toBeChecked();
+    await userEvent.click(toggle);
+    await waitFor(() => expect(analyticsRequests(api).at(-1)?.query?.include_excluded).toBe(true));
+    await userEvent.click(screen.getByText("Трата", { exact: true }));
+    await waitFor(() =>
+      expect(analyticsRequests(api).at(-1)?.query).toMatchObject({
+        group_by: "day",
+        include_excluded: true,
+      }),
+    );
+    await userEvent.click(screen.getByText("Курс", { exact: true }));
+    await waitFor(() =>
+      expect(
+        api.requests.filter((request) => request.path.endsWith("/rates")).at(-1)?.query
+          ?.include_excluded,
+      ).toBe(true),
+    );
+  });
+
   it("по умолчанию: режим «Категории», весь период, запрос расходов по категориям без дат", async () => {
     const { api, wrapper } = setup(() => analyticsResult(BUCKETS));
     render(<AnalyticsPage />, { wrapper });

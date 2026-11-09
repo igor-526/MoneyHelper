@@ -22,6 +22,7 @@ def _map_row(row: Row[Any], legs: tuple[TransactionLeg, ...]) -> Transaction:
         legs=legs,
         occurred_at=row.occurred_at,
         comment=row.comment,
+        exclude_from_analytics=row.exclude_from_analytics,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -40,6 +41,7 @@ class TransactionRepository:
                 category_id=transaction.category_id,
                 occurred_at=transaction.occurred_at,
                 comment=transaction.comment,
+                exclude_from_analytics=transaction.exclude_from_analytics,
                 created_at=transaction.created_at,
                 updated_at=transaction.updated_at,
             )
@@ -75,6 +77,7 @@ class TransactionRepository:
         category_id: UUID | None,
         currency_id: UUID | None,
         type: CategoryType | None,
+        include_excluded: bool = False,
     ) -> list[LegRecord]:
         query = (
             select(
@@ -104,6 +107,8 @@ class TransactionRepository:
             query = query.where(transaction_legs.c.currency_id == currency_id)
         if type is not None:
             query = query.where(categories.c.type == type)
+        if not include_excluded:
+            query = query.where(transactions.c.exclude_from_analytics.is_(False))
         rows = await self._session.execute(query)
         return [
             LegRecord(
@@ -122,6 +127,7 @@ class TransactionRepository:
         workspace_id: UUID,
         *,
         wallet_id: UUID | None,
+        include_excluded: bool = True,
     ) -> list[TopupLegRecord]:
         query = (
             select(transaction_legs.c.transaction_id, transaction_legs.c.currency_id, transaction_legs.c.amount)
@@ -135,6 +141,8 @@ class TransactionRepository:
         query = self._apply_filters(
             query, wallet_id=wallet_id, category_id=None, type=None, date_from=None, date_to=None
         )
+        if not include_excluded:
+            query = query.where(transactions.c.exclude_from_analytics.is_(False))
         rows = await self._session.execute(query)
         return [
             TopupLegRecord(transaction_id=row.transaction_id, currency_id=row.currency_id, amount=row.amount)
@@ -147,6 +155,7 @@ class TransactionRepository:
         *,
         date_from: datetime | None,
         date_to: datetime | None,
+        include_excluded: bool = False,
     ) -> list[DatedTopupLegRecord]:
         query = (
             select(
@@ -166,6 +175,8 @@ class TransactionRepository:
             query = query.where(transactions.c.occurred_at >= date_from)
         if date_to is not None:
             query = query.where(transactions.c.occurred_at <= date_to)
+        if not include_excluded:
+            query = query.where(transactions.c.exclude_from_analytics.is_(False))
         rows = await self._session.execute(query)
         return [
             DatedTopupLegRecord(
@@ -186,11 +197,22 @@ class TransactionRepository:
         type: CategoryType | None,
         date_from: datetime | None,
         date_to: datetime | None,
+        wallet_ids: Sequence[UUID] | None = None,
+        category_ids: Sequence[UUID] | None = None,
+        comment_query: str | None = None,
         limit: int,
         offset: int,
     ) -> list[Transaction]:
         query = self._filtered_query(
-            workspace_id, wallet_id=wallet_id, category_id=category_id, type=type, date_from=date_from, date_to=date_to
+            workspace_id,
+            wallet_id=wallet_id,
+            category_id=category_id,
+            type=type,
+            date_from=date_from,
+            wallet_ids=wallet_ids,
+            category_ids=category_ids,
+            comment_query=comment_query,
+            date_to=date_to,
         )
         rows = (
             await self._session.execute(
@@ -211,13 +233,24 @@ class TransactionRepository:
         type: CategoryType | None,
         date_from: datetime | None,
         date_to: datetime | None,
+        wallet_ids: Sequence[UUID] | None = None,
+        category_ids: Sequence[UUID] | None = None,
+        comment_query: str | None = None,
     ) -> int:
         joined: Any = transactions
         if type is not None:
             joined = joined.join(categories, transactions.c.category_id == categories.c.id)
         query = select(func.count()).select_from(joined).where(transactions.c.workspace_id == workspace_id)
         query = self._apply_filters(
-            query, wallet_id=wallet_id, category_id=category_id, type=type, date_from=date_from, date_to=date_to
+            query,
+            wallet_id=wallet_id,
+            category_id=category_id,
+            type=type,
+            date_from=date_from,
+            wallet_ids=wallet_ids,
+            category_ids=category_ids,
+            comment_query=comment_query,
+            date_to=date_to,
         )
         return (await self._session.execute(query)).scalar_one()
 
@@ -232,12 +265,18 @@ class TransactionRepository:
         occurred_at: datetime,
         comment: str | None,
         now: datetime,
+        exclude_from_analytics: bool = False,
     ) -> Transaction | None:
         result = await self._session.execute(
             sa_update(transactions)
             .where(transactions.c.id == transaction_id, transactions.c.workspace_id == workspace_id)
             .values(
-                wallet_id=wallet_id, category_id=category_id, occurred_at=occurred_at, comment=comment, updated_at=now
+                wallet_id=wallet_id,
+                category_id=category_id,
+                occurred_at=occurred_at,
+                comment=comment,
+                updated_at=now,
+                exclude_from_analytics=exclude_from_analytics,
             )
             .returning(transactions.c.id)
         )
@@ -298,13 +337,24 @@ class TransactionRepository:
         type: CategoryType | None,
         date_from: datetime | None,
         date_to: datetime | None,
+        wallet_ids: Sequence[UUID] | None = None,
+        category_ids: Sequence[UUID] | None = None,
+        comment_query: str | None = None,
     ) -> Any:
         joined: Any = transactions
         if type is not None:
             joined = joined.join(categories, transactions.c.category_id == categories.c.id)
         query = select(transactions).select_from(joined).where(transactions.c.workspace_id == workspace_id)
         return self._apply_filters(
-            query, wallet_id=wallet_id, category_id=category_id, type=type, date_from=date_from, date_to=date_to
+            query,
+            wallet_id=wallet_id,
+            category_id=category_id,
+            type=type,
+            date_from=date_from,
+            wallet_ids=wallet_ids,
+            category_ids=category_ids,
+            comment_query=comment_query,
+            date_to=date_to,
         )
 
     def _apply_filters(
@@ -316,6 +366,9 @@ class TransactionRepository:
         type: CategoryType | None,
         date_from: datetime | None,
         date_to: datetime | None,
+        wallet_ids: Sequence[UUID] | None = None,
+        category_ids: Sequence[UUID] | None = None,
+        comment_query: str | None = None,
     ) -> Any:
         if wallet_id is not None:
             query = query.where(transactions.c.wallet_id == wallet_id)
@@ -327,4 +380,10 @@ class TransactionRepository:
             query = query.where(transactions.c.occurred_at >= date_from)
         if date_to is not None:
             query = query.where(transactions.c.occurred_at <= date_to)
+        if wallet_ids is not None:
+            query = query.where(transactions.c.wallet_id.in_(wallet_ids))
+        if category_ids is not None:
+            query = query.where(transactions.c.category_id.in_(category_ids))
+        if comment_query:
+            query = query.where(transactions.c.comment.icontains(comment_query, autoescape=True))
         return query

@@ -35,8 +35,8 @@ describe("useTopups", () => {
       () =>
         useTopups(
           {
-            walletId: "w1",
-            categoryId: "c1",
+            walletIds: ["w1"],
+            categoryIds: ["c1"],
             dateFrom: "2026-01-01T00:00:00.000Z",
             dateTo: "2026-01-31T23:59:59.999Z",
           },
@@ -50,8 +50,8 @@ describe("useTopups", () => {
       method: "GET",
       path: `/api/workspaces/${TEST_WORKSPACE_ID}/topups`,
       query: {
-        wallet_id: "w1",
-        category_id: "c1",
+        wallet_ids: "w1",
+        category_ids: "c1",
         date_from: "2026-01-01T00:00:00.000Z",
         date_to: "2026-01-31T23:59:59.999Z",
         limit: DEFAULT_PAGE_SIZE,

@@ -1,4 +1,4 @@
-import { Button, Drawer, Form, Input, Modal, Select } from "antd";
+import { Button, Checkbox, Drawer, Form, Input, Modal, Select } from "antd";
 import dayjs, { type Dayjs } from "dayjs";
 import { useEffect } from "react";
 import { useCategories } from "@/features/categories/useCategories";
@@ -35,9 +35,17 @@ interface TransactionFormFields {
   amount: string;
   occurred_at?: Dayjs;
   comment?: string;
+  exclude_from_analytics?: boolean;
 }
 
-const KNOWN_FIELDS = ["wallet_id", "category_id", "amount", "occurred_at", "comment"] as const;
+const KNOWN_FIELDS = [
+  "wallet_id",
+  "category_id",
+  "amount",
+  "occurred_at",
+  "comment",
+  "exclude_from_analytics",
+] as const;
 
 /** Один компонент для создания и редактирования расхода: валюта — валюта кошелька, не выбирается. */
 export function TransactionForm({ open, onClose, transaction }: TransactionFormProps) {
@@ -68,6 +76,7 @@ export function TransactionForm({ open, onClose, transaction }: TransactionFormP
       amount: formatAmount(transaction?.legs[0]?.amount ?? ""),
       occurred_at: dayjs(transaction?.occurred_at),
       comment: transaction?.comment ?? undefined,
+      exclude_from_analytics: transaction?.exclude_from_analytics ?? false,
     });
   }, [open, transaction, form]);
 
@@ -78,6 +87,7 @@ export function TransactionForm({ open, onClose, transaction }: TransactionFormP
       amount: fields.amount,
       occurred_at: fields.occurred_at && toOccurredAt(fields.occurred_at, transaction?.occurred_at),
       comment: fields.comment,
+      exclude_from_analytics: fields.exclude_from_analytics ?? false,
     };
 
     const onError = (submitError: unknown) => {
@@ -149,6 +159,11 @@ export function TransactionForm({ open, onClose, transaction }: TransactionFormP
         rules={[{ max: 1000, message: "Не более 1000 символов" }]}
       >
         <Input.TextArea rows={2} maxLength={1000} showCount />
+      </Form.Item>
+      <Form.Item name="exclude_from_analytics" valuePropName="checked">
+        <Checkbox style={{ minHeight: 44, alignItems: "center" }}>
+          Не участвует в аналитике
+        </Checkbox>
       </Form.Item>
       {transaction ? null : <AddAnotherCheckbox />}
       <Form.Item style={{ marginBottom: 0 }}>

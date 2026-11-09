@@ -17,6 +17,7 @@ export function useExchangeRateHistory(currencyId: string | undefined, range: An
       api.get<ExchangeRateHistory>(`/api/workspaces/${workspaceId}/analytics/rates`, {
         query: {
           currency_id: currencyId,
+          include_excluded: range.includeExcluded || undefined,
           date_from: range.dateFrom,
           date_to: range.dateTo,
         },
